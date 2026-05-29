@@ -1,0 +1,22 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  swift:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build CoPartnerKit
+        run: swift build --package-path packages/CoPartnerKit
+      - name: Test CoPartnerKit
+        run: swift test --package-path packages/CoPartnerKit
+  python:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Lint sidecar
+        run: |
+          cd sidecar
+          uvx ruff check .

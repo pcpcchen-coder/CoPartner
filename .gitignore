@@ -1,0 +1,49 @@
+# ── macOS ──
+.DS_Store
+*.swp
+
+# ── Xcode ──
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+*.xcuserstate
+build/
+.swiftpm/
+
+# 由 XcodeGen 產生，不入庫
+apps/CoPartner/CoPartner.xcodeproj/
+
+# ── Swift Package Manager ──
+.build/
+Package.resolved
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.uv/
+*.egg-info/
+dist/
+
+# ── 模型權重（不入庫，太大）──
+*.gguf
+*.safetensors
+*.mlx
+models/
+
+# ── 機密與本地資料 ──
+.env
+.env.*
+!.env.example
+secrets/
+*.sqlite
+*.sqlite-*
+*.db
+audit-log/
+captures/
+
+# ── LiteLLM / Docker ──
+infra/litellm/.litellm_cache/

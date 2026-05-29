@@ -1,0 +1,45 @@
+# XcodeGen 設定：執行 `xcodegen generate` 產生 CoPartner.xcodeproj
+# 安裝：brew install xcodegen
+name: CoPartner
+options:
+  bundleIdPrefix: com.pcpcchen.copartner
+  deploymentTarget:
+    macOS: "15.0"   # 開發目標 26；FoundationModels 於執行期以 #available 守門
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_HARDENED_RUNTIME: YES
+packages:
+  CoPartnerKit:
+    path: ../../packages/CoPartnerKit
+targets:
+  CoPartner:
+    type: application
+    platform: macOS
+    sources: [Sources]
+    dependencies:
+      - package: CoPartnerKit
+        product: CoPartnerCore
+      - package: CoPartnerKit
+        product: CaptureEngine
+      - package: CoPartnerKit
+        product: ScriptNarrator
+      - package: CoPartnerKit
+        product: MemoryStore
+      - package: CoPartnerKit
+        product: CloudRouter
+      - package: CoPartnerKit
+        product: ActionExecutor
+    info:
+      path: Sources/Info.plist
+      properties:
+        LSUIElement: true            # menu bar app，不顯示 Dock 圖示
+        NSScreenCaptureUsageDescription: "CoPartner 觀察螢幕以理解你的操作脈絡。"
+        NSAppleEventsUsageDescription: "CoPartner 透過 AppleScript 自動化你授權的 app。"
+    entitlements:
+      path: Sources/CoPartner.entitlements
+      properties:
+        com.apple.security.app-sandbox: false   # 需跨程序 AX / CGEvent，無法沙箱化
+        com.apple.security.network.client: true

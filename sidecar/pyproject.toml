@@ -1,0 +1,18 @@
+[project]
+name = "copartner-sidecar"
+version = "0.0.1"
+description = "CoPartner 本地推理 sidecar：MLX (Qwen2.5-VL) 視覺語意 + Vision OCR fallback"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+    "mlx-vlm>=0.1.0",       # Apple Silicon 上跑 Qwen2.5-VL
+    "pillow>=11.0",
+    "ocrmac>=1.0.0",        # macOS Vision VNRecognizeTextRequest wrapper（zh-Hant+en）
+]
+
+[project.scripts]
+copartner-sidecar = "copartner_sidecar.server:main"
+
+[tool.ruff]
+line-length = 100

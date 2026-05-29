@@ -1,0 +1,29 @@
+# LiteLLM Gateway — 設計：docs/design/v1_full-design.md §D.3
+model_list:
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: claude-opus
+    litellm_params:
+      model: anthropic/claude-opus-4-7
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: local-qwen-vl
+    litellm_params:
+      model: openai/qwen2.5-vl-7b
+      api_base: http://host.docker.internal:8765   # sidecar
+
+guardrails:
+  - guardrail_name: presidio-pre
+    litellm_params:
+      guardrail: presidio
+      mode: pre_call
+      # PII 遮罩 + 台灣/中國身分證、手機自訂 recognizer（見 docs/privacy）
+
+router_settings:
+  routing_strategy: cost-based-routing
+  fallbacks:
+    - claude-opus: [claude-sonnet, local-qwen-vl]
+
+litellm_settings:
+  max_budget: 5      # USD/day，超過熔斷（V1 §G dead-man's switch）
