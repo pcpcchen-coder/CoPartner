@@ -1,6 +1,6 @@
 # CoPartner
 
-> 一個在 macOS 上持續觀察你的操作、用本地模型把行為寫成「操作劇本」、並在你按下熱鍵時由雲端大模型接手完成任務的 **Ambient AI Assistant**。
+> 一個在 macOS 上持續觀察你的操作、用本地模型把行為寫成「操作劇本」、並在你按下熱鍵時由雲端大模型接手完成任務的 **Ambient AI Assistant**。 (補上全日語音錄音後的文字轉換摘要)
 
 **首要目標平台**：Mac Mini M4 / Apple Silicon，macOS 26 Tahoe（向下相容 Sequoia 15 為次要目標）。
 
