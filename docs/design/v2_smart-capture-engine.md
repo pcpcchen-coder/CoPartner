@@ -110,6 +110,30 @@ Qwen2.5-VL-7B MLX（4-bit ~5–6GB，vision feature caching 多輪快 ~3×）只
 
 ContextEnvelope：focus_image（焦點 L0 2x 小圖）+ overview_thumb（≤1024px）+ dirty_summary（文字）+ attention_heatmap（稀疏權重）+ focused_text（AX ±200 字）。熱圖轉自然語言幫 Claude 聚焦。Computer Use：beta `computer-use-2025-11-24`、`computer_20251124`；Opus 4.7 ~3.75MP；Retina 座標 ÷2；切 tile 分送不提升精度 → 送焦點整圖。LiteLLM + prompt caching：reference/縮圖/系統 prompt 放穩定前綴命中 cache。PIPL guard：含上海個資/敏感畫面 → 強制 local-only。
 
+### E.1 本地↔雲端分層推理階梯與升級觸發（ADR-0007）
+
+本地與雲端模型不是二選一，而是一條**本地優先的推理階梯**：絕大多數「小範圍辨識」留在本地跑，只有「大變動」才把上下文往雲端送。階梯由便宜到貴：
+
+| 階 | 引擎 | 處理 | 何時 |
+|---|---|---|---|
+| `localOCR` | Vision ROI（§B.8） | dirty-tile 文字 | 幾乎沒變 / 低注意力，只要文字 |
+| `localIntent` | FoundationModels 3B（§D） | 意圖分類 / 路由 | 一般操作中 |
+| `localVLM` | Qwen2.5-VL MLX（§D） | 焦點拼接圖視覺語意 | 換版面 / 高注意力焦點需「看懂」 |
+| `cloud` | Claude computer-use（§E） | 複雜推理 + 動作規劃 | **大變動 / 跨視窗多步任務** |
+
+**升級觸發**（任一成立即升 `cloud`，否則留在對應本地階）：
+
+1. **變動規模大**：dHash 聚合的變動 tile 佔畫面比例 ≥ 門檻（§B.2），代表大面積改版 / 換頁——即「有大變動再往雲端送」。
+2. **本地信心不足**：本地模型對「已充分理解當前畫面」的 confidence < 門檻（看不懂就問雲端）。
+3. **跨視窗 / 多步規劃**：任務需橫跨多個 app / 視窗或多步動作，單張焦點圖不足以決策。
+
+**兩道閘門**：
+
+- **隱私優先（最高）**：含上海團隊個資 / 敏感 tile 一律封頂在本地（最多 `localVLM`），即使變動再大也**不出境**（ADR-0005 / §G）。
+- **冷卻 / 防 thrash**：雲端升級之間設最小間隔（預設 ~4s）；冷卻窗內的連續大變動改用最強本地階（`localVLM`）頂著，避免把成本 / 延遲打爆（類比 ADR-0006 連點 coalesce）。
+
+訊號（`RoutingSignal`）與 ADR-0006 的注意力能量 `A`、§B.6 冷熱狀態、§B.2 dHash 變動量同源；門檻為保守起點，M5 真機以「誤升級率 / 漏升級率 / 延遲 / 每日 token」調校。實作見 `CloudRouter` 的 `EscalationPolicy`。
+
 ## F. 觸發與介入流程（V2）
 
 焦點區一直 4–8 FPS 原生解析度被擷取且有最新 OCR/AX（warm cache），熱鍵觸發只需打包，省掉現照與現 OCR。時序：熱鍵 → XPC 取 RAM 熱 envelope（~5–20ms）→ sqlite-vec 撈歷史 → FM 3B 意圖+路由 → 本地/雲端 → tool_use → 高風險 confirm → sandboxed executor。

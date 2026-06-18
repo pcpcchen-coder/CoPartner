@@ -24,6 +24,6 @@ let package = Package(
         .target(name: "MemoryStore", dependencies: ["CoPartnerCore"]),
         .target(name: "CloudRouter", dependencies: ["CoPartnerCore"]),
         .target(name: "ActionExecutor", dependencies: ["CoPartnerCore"]),
-        .testTarget(name: "CoPartnerKitTests", dependencies: ["CoPartnerCore", "ScriptNarrator"]),
+        .testTarget(name: "CoPartnerKitTests", dependencies: ["CoPartnerCore", "ScriptNarrator", "CloudRouter"]),
     ]
 )
