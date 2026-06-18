@@ -54,6 +54,24 @@ V1→V2 差異：擷取單位（整 frame → tile + attention region 多頻率�
 ### B.3 滑鼠驅動 attention region
 CGEventTap 監聽 mouseMoved/leftMouseDown/scrollWheel（global、低延遲、`.listenOnly`）。attention region = 游標中心 600×400pt，內部 tile 升 hot-priority（2x、4–8 FPS）。滑鼠靜止衰減、快速滑動降頻（模擬 saccade vs fixation）。
 
+#### B.3.1 事件加權的注意力能量模型（ADR-0006）
+不只用游標「位置」，更用事件「種類」決定注意力強度——因為**點擊是一個意圖動作的起點**，點擊後 ~300–500ms（UI 反應、彈窗、選取、焦點變更）是整段操作中資訊最密集的時刻；單純移動是滑鼠在路上（ballistic/saccade），靜置則資訊量最低。
+
+以一個注意力能量 `A ∈ [0,1]` 驅動擷取參數（region 半徑 / 解析度 scale / FPS），各事件取 max 後隨時間衰減（half-life ~2s，clicks 重新充能）：
+
+| 事件 | 對 A 的作用 | 理由 |
+|---|---|---|
+| **click（mouseDown）** | `A = 1.0` + **立即強制一次高解析擷取** + 擴大 region | 動作起點，最該細看 |
+| drag（mouseDragged） | `A = max(A, 0.85)` 並追蹤移動中的 region | 選取/拖曳進行中 |
+| keyDown（打字） | `A_focus = max(., 0.8)`，**錨定 focused element（§B.4）非游標** | 打字常不在滑鼠處 |
+| scrollWheel | `A = max(A, 0.6)` | 內容在游標下變動，偏閱讀 |
+| mouseMoved | `A = max(A, 0.3·(1−speed))`，**快速移動更低** | 過渡中，不升級 |
+| idle（N 秒無事件） | 只衰減 → 回 baseline（COLD） | 周邊心跳 0.2 FPS |
+
+`A` 分帶映射到擷取參數（見 `CaptureEngine/AttentionModel`）：`≥0.7` HOT(400pt/2x/8fps)、`0.4–0.7` 升高(300pt/1x/4fps)、`0.15–0.4` WARM(250pt/1x/2fps)、其餘 COLD(0.5x/0.2fps)。
+
+**整合**：click 可把 attention region 內 tile 立即從 WARM→HOT（§B.6）；click 也是 Action Script Narrator（v2.1）天然的 L0 事件邊界 / L1 step 起點。**邊界處理**：連點/雙擊 coalesce 避免 thrash，週期性高頻連點（如遊戲）比照 DYNAMIC；敏感 region 即使 A 高仍不擷取內容（§G）。click 常先於 AX 的 focus/window 變更通知 → 與 `AXObserver` 併用觸發強制照一張。
+
 ### B.4 焦點元件定義重點區域
 `AXUIElementCreateSystemWide()` + `kAXFocusedUIElementAttribute` 取 focused element 的 AXFrame；`AXObserver` 訂閱 focused element/window 變更。滑鼠軸 + 焦點軸取聯集為高優先區；兩者皆閒置 → 退回低頻概覽。能拿 AX 文字的 tile 不必跑 OCR（accessibility-first，OCR fallback，對齊 screenpipe）。
 
