@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import CoPartnerCore
 // 設計：docs/design/v2_smart-capture-engine.md §B
 // TODO(M0): SCStream + SCStreamFrameInfo.dirtyRects 解析（§B.1）
