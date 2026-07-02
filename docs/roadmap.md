@@ -15,3 +15,10 @@
 
 **起步建議**：先做 M0 的 Tier 2 簡化版（滑鼠/焦點 attention region + 周邊定頻 + SCK idle dedup），
 用真機數字決定是否投入完整 tile 狀態機。
+
+**執行順序（見 `docs/planning/implementation-backlog.md`）**：採「可跑骨架優先」——先把 L0 操作劇本
+（只需 Input Monitoring + Accessibility，不需 Screen Recording/Metal）接進既有 menu bar app，
+幾週內產出可 dogfood 的「操作時間機器」，再把螢幕擷取（SCStream/Metal）疊上會跑的東西。
+逐步待辦已展開成 58 個可獨立交付的 step。
+
+**語音（全日轉錄摘要 + 語音交棒）**：README 願景，本輪 M0–M6 不做，延後至 V3（詳見 backlog 文末）。

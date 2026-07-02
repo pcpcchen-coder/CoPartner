@@ -55,6 +55,8 @@ Sonnet 5  →  Opus 4.8  →  Fable 5
 | 安全／隱私關鍵路徑（M5 sandbox、M6 遮罩邏輯）| 架構定案 **Fable 5**／日常迭代 **Opus 4.8** | 犯錯代價高（沙箱逃逸、PII 洩漏） |
 | 全新技術棧、無參考實作的核心演算法（M0 dirty-region + Metal hash）| **Fable 5** 起手／卡關，**Opus 4.8** 日常迭代 | 長時間、高模糊度、無先例可循 |
 | 機械式重構、批次改名、格式化（尤其用 subagent 批次跑）| **Sonnet 5** 或 **Haiku 4.5** | 低推理需求，subagent 用便宜模型可控成本 |
+| 應用外殼 SwiftUI 膠水（menu bar、view-model、事件日誌視窗）| **Sonnet 5** | 標準 SwiftUI/AppKit，模式成熟 |
+| 安全關鍵 UX（緊急停止 kill-switch、接手 HUD 的 Approve/Skip/Stop）| **Opus 4.8** | 人在迴圈的停止/確認路徑，攸關「接手你電腦」的安全與信任，錯不得 |
 
 **額外槓桿——`effort` 參數**：同一模型內也能透過 `output_config.effort`（`low`/`medium`/`high`/`xhigh`/`max`）控制思考深度與花費。Claude Code 內部通常已依任務自動調整；若你手動下 API 呼叫或寫 subagent workflow，可對「例行工作」用 `medium`、「難題」用 `high`/`xhigh`，比整個換模型更細緻地控成本。
 

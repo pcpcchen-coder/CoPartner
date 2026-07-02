@@ -1,49 +1,53 @@
 # CoPartner 實作待辦清單（Step-by-Step TDD Backlog）
 
-> 目的：把 M0–M6 拆成能一個一個交代「完成 step N」的顆粒度，每步都是 TDD（先寫測試、再實作到綠燈）。
+> 目的：把整個專案拆成能一個一個交代「完成 step N」的顆粒度，每步都是 TDD（先寫測試、再實作到綠燈）。
 > 搭配 `docs/planning/dev-execution-plan.md`（模型分工/時程/費用）與 `docs/roadmap.md`（里程碑總覽）一起讀。
+
+## 修訂說明（v3，2026-07-02）
+
+這份清單以「最終成品」為準重新檢視過一次。大目標是一個**類 Siri × ChatGPT × Claude Desktop 的常駐工具**：使用者開啟後它持續理解操作習慣，下達接手命令後由 AI 接手工作，並依任務難易度在本地/雲端模型間路由。對照這個目標，v2 版清單有三個缺口，v3 修正如下：
+
+1. **原清單完全沒碰 `apps/CoPartner/`**。menu bar app 骨架（`CoPartnerApp` / `AppCoordinator` / `MenuBarContentView`）其實已存在，但 `toggleObserving()`、`triggerIntervention()` 都是空殼，`KeyboardShortcuts` 依賴宣告了卻沒有任何 target 使用，緊急停止與接手 HUD 都還沒接。「開啟後就運作」「下達接手命令」這個**產品核心**原本不在計畫裡 → v3 新增 **應用外殼與互動層** 的 step，並讓 CI 真的建置 app target。
+2. **開發順序**：依你的選擇「加入早期可跑骨架」，把 L0 操作劇本（只需 Input Monitoring + Accessibility，**不需** ScreenCaptureKit/Metal）提前到 **Phase A**，接進既有 menu bar app → 幾週內就有一個可 dogfood 的「操作時間機器」；最難、最依賴真機的螢幕擷取（SCStream/Metal）改成疊在「已經會跑的東西」上面。
+3. **語音（Siri 那一面）**：依你的選擇 **延後到 V3**。M0–M6 維持純螢幕範圍；語音全日轉錄摘要 + 語音交棒記在文末「V3 展望」，不進這輪待辦。
+
+編號已重排成單一線性序列（Phase A→G），你可以直接說「完成 step 1」「完成 step 2」。沒有任何 step 已開工，重排零成本。
 
 ## 使用方式
 
 跟我說「**完成 step N**」，我就只做那一步，流程固定：
 
 1. 確認前置 step 都已 ✅（沒有就先說明或停下來問）。
-2. **先寫測試**（TDD red）——本文件已為每個近期 step 列好測試檔案與案例；照著寫。
-3. 實作到測試綠燈（TDD green），必要時小重構（refactor）。
-4. push 到 `claude/loving-darwin-Ka636`，靠 CI（macOS-15 runner）跑 `swift build` + `swift test` 驗證——見下方「重要限制」。
-5. 回來更新本文件：該 step 狀態改 ✅（或 🔒，見下）、更新「進度總覽」表。
-6. Conventional Commit（`feat:`/`test:`/`fix:` 等，依 `CONTRIBUTING.md`）。
+2. **先寫測試**（TDD red）——近期 step 已列好測試檔案與案例；照著寫。
+3. 實作到測試綠燈（TDD green），必要時小重構。
+4. push 到 `claude/loving-darwin-Ka636`，靠 CI（macOS-15 runner）驗證——見「重要限制」。
+5. 回來更新本文件狀態欄 + 進度總覽表。
+6. Conventional Commit，訊息帶 step 編號（如 `test(capture): AttentionModel 回歸測試（step 2）`）。
 7. 簡短回報做了什麼、CI 是否綠、有沒有需要你在真機驗證的部分。
 
-不會跳著做（除非你要求）——依賴關係見每個 step 的「前置」欄。
+不會跳著做（除非你要求）——依賴見每步「前置」欄。
 
 ## 重要限制（誠實說明）
 
-我目前執行環境是 Linux 容器，**無法**：
+我的執行環境是 Linux 容器，**無法**：編譯 Swift / 跑 `swift test`（只能 push 後靠 CI 的 macOS runner）、存取 macOS-only framework 的執行期行為（ScreenCaptureKit 實際擷取、Metal GPU、Accessibility、FoundationModels、TCC 權限彈窗、KeyboardShortcuts 全域熱鍵實際觸發）、量測真機數字（CPU%/延遲/記憶體/漏抓率）。
 
-- 編譯 Swift / 跑 `swift test`（只能 push 後靠 CI 的 macOS runner 驗證綠燈）
-- 存取 macOS-only framework 的**執行期行為**：ScreenCaptureKit 實際擷取、Metal GPU dispatch、Accessibility API、FoundationModels 可用性、TCC 權限彈窗
-- 量測真機數字：CPU%、延遲、記憶體、漏抓率
-
-所以每個 step 的完成定義分兩種，並在標題列標注：
+所以每步的完成定義分兩種，標題會標注：
 
 | 標記 | 意義 |
 |---|---|
-| ⬜ 未開始 |  |
-| 🔄 進行中 |  |
-| ✅ **CI 驗證完成** | 純邏輯/資料結構/演算法，已寫成 XCTest（或 pytest），CI 綠燈即代表完成，我可以自主判定 |
-| 🔒 **需要你在真機驗證** | 牽涉真實螢幕擷取、TCC 權限、GPU、FoundationModels 執行期、UX 觀感——我會把「可測試邏輯」與「平台膠水代碼」分開，邏輯照樣有測試，但膠水代碼跑不跑得動、真機數字如何，需要你在 Mac 上跑過回報 |
+| ⬜ 未開始 / 🔄 進行中 |  |
+| ✅ **CI 驗證完成** | 純邏輯/資料結構/演算法/view-model，寫成 XCTest（或 pytest），CI 綠燈即完成，我可自主判定 |
+| 🔒 **需要你在真機驗證** | 牽涉真實擷取、TCC 權限、GPU、FoundationModels 執行期、全域熱鍵、UX 觀感——我把「可測邏輯」與「平台膠水」拆開，邏輯照樣有測試，但膠水跑不跑得動、真機數字如何，需要你在 Mac 上回報 |
 
-**設計原則**：每個 step 我都會盡量把「膠水代碼」（真的呼叫 SCStream / AXUIElement / FoundationModels 的那幾行）獨立成薄薄一層、行為抽成 protocol，讓「決策邏輯」單獨可測。這樣即使我永遠不能跑真機，專案的正確性核心還是有測試守住。
+**設計原則**：每步都盡量把「膠水代碼」（真的呼叫 SCStream / AXUIElement / FoundationModels / CGEventTap 的那幾行）抽成薄薄一層 + protocol，讓「決策邏輯」單獨可測。即使我永遠不能跑真機，正確性核心仍有測試守住。
 
 ## Rolling-wave 規劃原則
 
-**M0–M2.5 已展開到完整 TDD 顆粒度**（測試檔名、案例、函式簽章都寫好，可以直接開工）。
-**M3–M6 先給清楚的目標/交付物/DoD**，但不提前寫死詳細測試案例——因為 M0/M1 真機驗證結果（SCK dirtyRects 實際可靠性、FoundationModels 實際行為）很可能影響後面設計細節，太早寫死 test case 容易跟現實脫節。**開始某個里程碑的第一個 step 前，我會先做一次「展開」**，把那個里程碑的 step 補到跟 M0–M2.5 一樣詳細，再開工。這不是偷懶，是避免現在花力氣寫五個月後可能要改的規格。
+**Phase A–C 已展開到完整 TDD 顆粒度**（測試檔名、案例、簽章都寫好，可直接開工）。**Phase D–G 先給清楚的目標/交付物/DoD**，但不提前寫死詳細測試案例——因為 Phase A/B 真機驗證結果（SCK dirtyRects 實際可靠性、FoundationModels 實際行為）很可能影響後面細節。**每個 rolling-wave 階段的第一個 step 是「展開」**，開工前先把該階段 step 補到跟 Phase A 一樣詳細再動手。
 
 ## 分支與 commit
 
-沿用目前工作分支 `claude/loving-darwin-Ka636`（不開新分支，依 session 既有指示）。每個 step 完成後至少一個 commit，訊息帶上 step 編號，例如：`test(capture): AttentionModel 回歸測試（step 1）`。
+沿用工作分支 `claude/loving-darwin-Ka636`（不開新分支）。每步至少一個 commit，訊息帶 step 編號。
 
 ---
 
@@ -51,378 +55,297 @@
 
 | # | Step | 里程碑 | 建議模型 | 狀態 | 前置 |
 |---|---|---|---|---|---|
-| 1 | AttentionModel 回歸測試 + 時鐘注入 | M0 | Sonnet 5 | ⬜ | — |
-| 2 | Tile 座標與幾何工具 | M0 | Sonnet 5 | ⬜ | — |
-| 3 | Metal dHash 差異比對邏輯（純 Swift）+ shader 骨架 | M0 | Sonnet 5 / 🔮Fable 5(shader) | ⬜ | 2 |
-| 4 | SCStream dirtyRects 解析與可靠性防禦 | M0 | Opus 4.8 | ⬜ | 2, 3 |
-| 5 | CaptureEngine.start()/stop() 串接 | M0 | Sonnet 5 | ⬜ | 1, 4 |
-| 6 | CGEventTap → AttentionModel 事件橋接 | M0 | Sonnet 5 | ⬜ | 1 |
-| 7 | AXUIElement 焦點區域擷取 | M0 | Sonnet 5 | ⬜ | 2 |
-| 8 | 多解析度金字塔參數 | M0 | Sonnet 5 | ⬜ | 1 |
-| 9 | 量測工具（CPU/延遲/漏抓率 harness） | M0 | Sonnet 5 | ⬜ | 5 |
-| 10 | 🔒 M0 真機驗收 | M0 | — | ⬜ | 5, 6, 7, 8, 9 |
-| 11 | Tile 狀態機核心（COLD/WARM/HOT/DYNAMIC） | M1 | Sonnet 5 / Opus 4.8 | ⬜ | 3, 4 |
-| 12 | DYNAMIC 週期性偵測 | M1 | Opus 4.8 | ⬜ | 11 |
-| 13 | 每 app override 清單 | M1 | Sonnet 5 | ⬜ | 11 |
-| 14 | OCR/持久化節流串接 | M1 | Sonnet 5 | ⬜ | 11 |
-| 15 | CaptureEngine 全狀態機整合 | M1 | Sonnet 5 | ⬜ | 5, 11 |
-| 16 | 🔒 M1 真機驗收 | M1 | — | ⬜ | 12, 13, 14, 15 |
-| 17 | Vision OCR wrapper（ROI） | M2 | Sonnet 5 | ⬜ | 2 |
-| 18 | AX-text-first fallback 邏輯 | M2 | Sonnet 5 | ⬜ | 7 |
-| 19 | sidecar `/ocr` 接線（ocrmac） | M2 | Sonnet 5 | ⬜ | — |
-| 20 | CI 補 Python pytest job | M2 | Sonnet 5 | ⬜ | 19 |
-| 21 | 🔒 M2 真機驗收 | M2 | — | ⬜ | 17, 18, 19 |
-| 22 | L0 事件模板格式化器 | M2.5 | Sonnet 5 | ⬜ | — |
-| 23 | 合併規則（打字合併/scroll 節流） | M2.5 | Sonnet 5 | ⬜ | 22 |
-| 24 | PII 遮罩（貼上/剪下前置遮罩） | M2.5 | Opus 4.8 | ⬜ | 22 |
-| 25 | L0 完整性驗收（劇本重現操作） | M2.5 | Sonnet 5 | ⬜ | 22, 23, 24 |
-| 26 | 【展開】M3 詳細 step 規劃 | M3 | Opus 4.8 | ⬜ | 10, 16 |
-| 27 | Reference+delta 重建演算法 | M3 | Sonnet 5 / Opus 4.8審 | ⬜ | 26 |
-| 28 | L1 RAM ring buffer | M3 | Sonnet 5 | ⬜ | 26 |
-| 29 | sqlite-vec schema + KNN wrapper | M3 | Opus 4.8 | ⬜ | 26 |
-| 30 | Re-baseline 觸發邏輯 | M3 | Sonnet 5 | ⬜ | 27 |
-| 31 | 注意力熱圖（衰減式） | M3 | Sonnet 5 | ⬜ | 26 |
-| 32 | 🔒 M3 真機驗收 | M3 | — | ⬜ | 27–31 |
-| 33 | 【展開】M4 詳細 step 規劃 | M4 | Opus 4.8 | ⬜ | 32 |
-| 34 | FoundationModels L1 Narrator 接線 | M4 | Opus 4.8 | ⬜ | 33 |
-| 35 | Availability + fallback 階梯 | M4 | Opus 4.8 | ⬜ | 34 |
-| 36 | L2 Summarizer | M4 | Sonnet 5 | ⬜ | 34 |
-| 37 | sidecar `/vlm` 接 mlx-vlm | M4 | Opus 4.8 | ⬜ | 33 |
-| 38 | 🔒 M4 真機驗收 | M4 | — | ⬜ | 34–37 |
-| 39 | 【展開】M5 詳細 step 規劃 | M5 | Fable 5 | ⬜ | 38 |
-| 40 | ContextEnvelope 打包邏輯 | M5 | Sonnet 5 | ⬜ | 39 |
-| 41 | PII 出境閘門整合 | M5 | Opus 4.8 | ⬜ | 24, 40 |
-| 42 | LiteLLM Gateway 設定 | M5 | Sonnet 5 | ⬜ | 39 |
-| 43 | CloudRouter.handoff() 接 Claude computer-use | M5 | Fable 5 | ⬜ | 40, 41, 42 |
-| 44 | 風險分級 + 危險指令偵測 | M5 | Opus 4.8 | ⬜ | 39 |
-| 45 | ActionExecutor 沙箱（XPC + sandbox-exec） | M5 | Fable 5 | ⬜ | 44 |
-| 46 | Undo stack | M5 | Sonnet 5 | ⬜ | 45 |
-| 47 | 🔒 M5 真機驗收 | M5 | — | ⬜ | 43, 45, 46 |
-| 48 | 【展開】M6 詳細 step 規劃 | M6 | Opus 4.8 | ⬜ | 47 |
-| 49 | tile 級遮罩（PII regex + AX secure field） | M6 | Opus 4.8 | ⬜ | 48 |
-| 50 | SCContentFilter 黑名單 | M6 | Sonnet 5 | ⬜ | 48 |
-| 51 | 熱圖隱私串接 | M6 | Sonnet 5 | ⬜ | 31, 49 |
-| 52 | 🔒 M6 真機驗收（PIPL 最終審查） | M6 | — | ⬜ | 49–51 |
+| **A. 可跑骨架 — 操作時間機器（先讓它能開來用）** ||||||
+| 1 | CI 建置 app target（xcodegen + xcodebuild） | 基建 | Sonnet 5 | ⬜ | — |
+| 2 | AttentionModel 回歸測試 + 時鐘注入 | M0 | Sonnet 5 | ⬜ | — |
+| 3 | CGEventTap → Signal 映射器（+ 🔒 真 tap 膠水） | M0 | Sonnet 5 | ⬜ | 2 |
+| 4 | AX 焦點區域解析（+ 🔒 真 AX 膠水） | M0 | Sonnet 5 | ⬜ | — |
+| 5 | L0 事件模板格式化器 | M2.5 | Sonnet 5 | ⬜ | — |
+| 6 | L0 合併規則（打字合併 / scroll 節流） | M2.5 | Sonnet 5 | ⬜ | 5 |
+| 7 | L0 PII 遮罩（貼上/剪下前置遮罩） | M2.5 | Opus 4.8 | ⬜ | 5 |
+| 8 | 即時事件日誌 view-model + 接進 menu bar | 應用層 | Sonnet 5 | ⬜ | 3,4,6,7 |
+| 9 | 緊急停止（⌃⌥⌘.）+ 觀察開關（⌃⌥⌘O）真接線 | 應用層 | Opus 4.8 | ⬜ | 8 |
+| 10 | 🔒 可跑骨架 dogfood 驗收（操作時間機器） | M2.5 | — | ⬜ | 8,9 |
+| **B. 智慧擷取引擎（把螢幕視覺疊上會跑的東西）** ||||||
+| 11 | Tile 座標與幾何工具 | M0 | Sonnet 5 | ⬜ | — |
+| 12 | Metal dHash 差異比對邏輯 + 🔒 shader 骨架 | M0 | Sonnet 5 /🔮Fable(shader) | ⬜ | 11 |
+| 13 | SCStream dirtyRects 解析與可靠性防禦 | M0 | Opus 4.8 | ⬜ | 11,12 |
+| 14 | ScreenCaptureSource 膠水 + CaptureEngine 串接 | M0 | Sonnet 5 | ⬜ | 2,13 |
+| 15 | 多解析度金字塔參數 | M0 | Sonnet 5 | ⬜ | 2 |
+| 16 | 擷取接進 app（視覺脈絡疊加事件日誌） | 應用層 | Sonnet 5 | ⬜ | 8,14 |
+| 17 | 量測 harness（CPU/延遲/漏抓率） | M0 | Sonnet 5 | ⬜ | 14 |
+| 18 | 🔒 M0 真機驗收（V1 vs V2 對照） | M0 | — | ⬜ | 14,15,16,17 |
+| 19 | Tile 狀態機（COLD/WARM/HOT/DYNAMIC） | M1 | Sonnet 5 / Opus 審 | ⬜ | 12,13 |
+| 20 | DYNAMIC 週期性偵測 | M1 | Opus 4.8 | ⬜ | 19 |
+| 21 | 每 app override 清單 | M1 | Sonnet 5 | ⬜ | 19 |
+| 22 | OCR/持久化節流串接 | M1 | Sonnet 5 | ⬜ | 19 |
+| 23 | CaptureEngine 全狀態機整合 | M1 | Sonnet 5 | ⬜ | 14,19 |
+| 24 | 🔒 M1 真機驗收（1080p 影片 CPU） | M1 | — | ⬜ | 20,21,22,23 |
+| **C. 局部 OCR + AX 文字** ||||||
+| 25 | Vision OCR ROI 映射器（+ 🔒 真 OCR） | M2 | Sonnet 5 | ⬜ | 11 |
+| 26 | AX-text-first fallback 邏輯 | M2 | Sonnet 5 | ⬜ | 4 |
+| 27 | sidecar `/ocr` 接線（ocrmac） | M2 | Sonnet 5 | ⬜ | — |
+| 28 | CI 補 Python pytest job | 基建 | Sonnet 5 | ⬜ | 27 |
+| 29 | 🔒 M2 真機驗收（OCR 吞吐 ≤ V1 20%） | M2 | — | ⬜ | 25,26,27 |
+| **D. 記憶系統（rolling-wave）** ||||||
+| 30 | 【展開】D 階段詳細 step 規劃 | M3 | Opus 4.8 | ⬜ | 18,24 |
+| 31 | Reference+delta 重建演算法 | M3 | Sonnet 5 / Opus 審 | ⬜ | 30 |
+| 32 | L1 RAM ring buffer | M3 | Sonnet 5 | ⬜ | 30 |
+| 33 | sqlite-vec schema + KNN wrapper | M3 | Opus 4.8 | ⬜ | 30 |
+| 34 | Re-baseline 觸發邏輯 | M3 | Sonnet 5 | ⬜ | 31 |
+| 35 | 注意力熱圖（衰減式） | M3 | Sonnet 5 | ⬜ | 30 |
+| 36 | 🔒 M3 真機驗收（8hr ≤ ~400MB） | M3 | — | ⬜ | 31–35 |
+| **E. 本地推理 + L1/L2 敘事（rolling-wave）** ||||||
+| 37 | 【展開】E 階段詳細 step 規劃 | M4 | Opus 4.8 | ⬜ | 36 |
+| 38 | FoundationModels L1 Narrator 接線 | M4 | Opus 4.8 | ⬜ | 37 |
+| 39 | Availability + fallback 階梯 | M4 | Opus 4.8 | ⬜ | 38 |
+| 40 | L2 Summarizer | M4 | Sonnet 5 | ⬜ | 38 |
+| 41 | sidecar `/vlm` 接 mlx-vlm | M4 | Opus 4.8 | ⬜ | 37 |
+| 42 | 🔒 M4 真機驗收（本地 sub-second） | M4 | — | ⬜ | 38–41 |
+| **F. 雲端 + 動作 + 接手互動（rolling-wave，第二高風險）** ||||||
+| 43 | 【展開】F 階段詳細 step + 沙箱威脅模型 | M5 | Fable 5 | ⬜ | 42 |
+| 44 | ContextEnvelope 打包邏輯 | M5 | Sonnet 5 | ⬜ | 43 |
+| 45 | PII 出境閘門整合 | M5 | Opus 4.8 | ⬜ | 7,44 |
+| 46 | LiteLLM Gateway 設定 + PIPL 路由 | M5 | Sonnet 5 | ⬜ | 43 |
+| 47 | CloudRouter.handoff() 接 Claude computer-use | M5 | Fable 5 | ⬜ | 44,45,46 |
+| 48 | 接手 HUD（推測任務/下一步/信心 + Approve/Skip/Stop） | 應用層 | Opus 4.8 | ⬜ | 43 |
+| 49 | 熱鍵 ⌃⌥⌘Space → triggerIntervention 真接線 | 應用層 | Sonnet 5 | ⬜ | 9,47,48 |
+| 50 | 風險分級 + 危險指令偵測 | M5 | Opus 4.8 | ⬜ | 43 |
+| 51 | ActionExecutor 沙箱（XPC + sandbox-exec） | M5 | Fable 5 | ⬜ | 50 |
+| 52 | Undo stack | M5 | Sonnet 5 | ⬜ | 51 |
+| 53 | 🔒 M5 真機驗收（熱鍵後 Claude 正確接續 open loop） | M5 | — | ⬜ | 47,48,49,51,52 |
+| **G. 隱私 + 黑名單（rolling-wave）** ||||||
+| 54 | 【展開】G 階段詳細 step 規劃 | M6 | Opus 4.8 | ⬜ | 53 |
+| 55 | tile 級遮罩（PII regex + AX secure field） | M6 | Opus 4.8 | ⬜ | 54 |
+| 56 | SCContentFilter 黑名單 | M6 | Sonnet 5 | ⬜ | 54 |
+| 57 | 熱圖隱私串接 | M6 | Sonnet 5 | ⬜ | 35,55 |
+| 58 | 🔒 M6 真機驗收（PIPL 最終審查） | M6 | — | ⬜ | 55,56,57 |
 
 ---
 
-## M0 — 擷取引擎原型
+## Phase A — 可跑骨架：操作時間機器
 
-延續設計：`docs/design/v2_smart-capture-engine.md §B`，採 §M 建議的 **Tier 2 簡化路徑**（滑鼠/焦點 attention region 高頻高解析 + 周邊定頻縮圖，先不做完整 tile 狀態機——那是 M1）。
+**階段目標**：幾週內產出第一個可在你 Mac 上實際開來用的 CoPartner——一個常駐 menu bar app，開啟觀察後把你的操作即時寫成 human-readable 劇本顯示出來（＝一台「操作時間機器」）。這一階段**只需 Input Monitoring + Accessibility 權限，不需 Screen Recording**，也不碰 Metal，因此絕大多數可用 CI 驗證，真機門檻最低。它同時提早打通全案最容易出錯的接縫：app 外殼 ↔ CoPartnerKit ↔ 全域熱鍵 ↔ 緊急停止。
 
-#### Step 1 — AttentionModel 回歸測試 + 時鐘注入
-- **背景**：`AttentionModel`（ADR-0006）已實作但**零測試**。它內部用 `Date()` 算衰減，無法決定性測試——先做和 `EscalationPolicy.decide(_:now:)` 一樣的 `now:` 參數注入（小重構），再補測試。
-- **修改檔案**：`packages/CoPartnerKit/Sources/CaptureEngine/CaptureEngine.swift`（`update`/`captureParams`/`decay` 加 `now: Date = Date()` 參數）；`packages/CoPartnerKit/Package.swift`（`CoPartnerKitTests` 依賴加入 `"CaptureEngine"`，目前沒有這條，測試會過不了 import）
-- **新增測試**（`Tests/CoPartnerKitTests/AttentionModelTests.swift`）：
-  - `testClickSetsEnergyToPeakAndReturnsTrue`
-  - `testIdleReturnsFalseAndDoesNotForceCapture`
-  - `testHighSpeedMoveStaysBelowHotBand`
-  - `testDragMaintainsAtLeast085Energy` / `testScrollMaintainsAtLeast06Energy`
-  - `testEnergyDecaysAcrossHalfLife`（用注入的 `now` 前進 2s，斷言能量約略減半）
-  - `testEnergyBandThresholds`（0.7 / 0.4 / 0.15 邊界各測一次）
-  - `testPointUpdatesCenterRegardlessOfSignal`
+#### Step 1 — CI 建置 app target（xcodegen + xcodebuild）✅
+- **背景**：目前 `.github/workflows/ci.yml` 只 `swift build/test` 了 `packages/CoPartnerKit` 與 sidecar 的 ruff，**完全沒有建置 `apps/CoPartner/`**。那個 app 是 XcodeGen 專案（`project.yml`），是所有子系統唯一的組裝點——不建置就無法在 CI 抓到「app 連結不起來」。
+- **修改檔案**：`.github/workflows/ci.yml`（新增步驟：`brew install xcodegen` → `cd apps/CoPartner && xcodegen generate` → `xcodebuild -project CoPartner.xcodeproj -scheme CoPartner build`）；視需要補 `apps/CoPartner/Sources/Info.plist`、`Sources/CoPartner.entitlements`（`project.yml` 有引用，若缺會建置失敗——順手補上）。
+- **DoD**：✅ CI 綠燈（app 能被建置）。這步無新測試，但讓後續所有應用層 step 有 CI 守門。
 - **建議模型**：Sonnet 5
+
+#### Step 2 — AttentionModel 回歸測試 + 時鐘注入 ✅
+- **背景**：`AttentionModel`（ADR-0006）已實作但**零測試**，且內部用 `Date()` 算衰減無法決定性測試。先做和 `EscalationPolicy.decide(_:now:)` 一致的 `now:` 參數注入（小重構），再補測試。
+- **修改檔案**：`Sources/CaptureEngine/CaptureEngine.swift`（`update`/`captureParams`/`decay` 加 `now: Date = Date()`）；`packages/CoPartnerKit/Package.swift`（`CoPartnerKitTests` 依賴**加入 `"CaptureEngine"`**，目前沒有這條，測試會 import 失敗）。
+- **新增測試**（`Tests/CoPartnerKitTests/AttentionModelTests.swift`）：`testClickSetsEnergyToPeakAndReturnsTrue`、`testIdleReturnsFalseAndDoesNotForceCapture`、`testHighSpeedMoveStaysBelowHotBand`、`testDragMaintainsAtLeast085Energy`、`testScrollMaintainsAtLeast06Energy`、`testEnergyDecaysAcrossHalfLife`（注入 `now` 前進 2s，斷言能量約減半）、`testEnergyBandThresholds`（0.7/0.4/0.15 邊界）、`testPointUpdatesCenter`。
 - **DoD**：✅ CI 綠燈
-
-#### Step 2 — Tile 座標與幾何工具
-- **目標**：tile-grid 純數學（螢幕座標↔tile 索引、rect↔tile 範圍），供 dirty-rect 對應與 Metal hash 定址共用。
-- **新增檔案**：`Sources/CaptureEngine/TileGrid.swift`（`struct TileGrid`：`tileSize`(預設 128px)/`cols`/`rows`，`tileIndex(for:)`、`tiles(overlapping:)`、`rect(forTileX:y:)`）
-- **新增測試**（`TileGridTests.swift`）：
-  - `testTileIndexAtOrigin` / `testTileIndexAtExactBoundary`
-  - `testTilesOverlappingRectSpanningMultipleTiles`
-  - `testTilesOverlappingRectClampsToGridBounds`（超出螢幕邊界的 rect）
-  - `testRectForTileRoundTrip`
 - **建議模型**：Sonnet 5
-- **DoD**：✅ CI 綠燈（純邏輯，無平台依賴）
 
-#### Step 3 — Metal dHash 差異比對邏輯 + shader 骨架
-- **目標**：把「可測」與「不可測」拆乾淨。可測部分：兩組 hash 的 Hamming distance 與變動分級；不可測部分：真正的 GPU shader。
-- **新增檔案**：
-  - `Sources/CaptureEngine/TileHashDiff.swift`（`func hammingDistance(_:_:) -> Int`；`enum ChangeMagnitude { none, small, large }`；`func classify(distance:thresholds:) -> ChangeMagnitude`）
-  - `Sources/CaptureEngine/Resources/TileHash.metal`（🔒 shader 骨架，per-threadgroup 輸出 uint64，無法在 CI 跑，僅手動審閱正確性）
-- **新增測試**（`TileHashDiffTests.swift`）：
-  - `testIdenticalHashesZeroDistance`
-  - `testHammingDistanceKnownBitPatterns`
-  - `testSmallDistanceClassifiedAsCursorResidue` / `testLargeDistanceClassifiedAsRealChange`
-  - `testClassifyThresholdBoundaries`
-- **建議模型**：Sonnet 5 寫 Swift 邏輯；`.metal` shader 本身無先例可抄、無法用 CI 迭代除錯，**建議 Fable 5** 起草（一次把邏輯想清楚，比事後在真機慢慢除錯划算）
-- **DoD**：Swift 部分 ✅ CI 綠燈；`.metal` 🔒 留待 Step 10 真機驗收時檢查
-
-#### Step 4 — SCStream dirtyRects 解析與可靠性防禦
-- **目標**：對抗 §B.1 已知陷阱（status 常回 idle、dirtyRects 可能空、Sequoia 15.6.1 contentRect X=48 bug）。用 protocol 抽象 SCK，讓決策邏輯可測。
-- **新增檔案**：
-  - `Sources/CaptureEngine/DirtyRegionResolver.swift`：`protocol FrameInfoProviding { dirtyRects, status, contentRect }`、`enum FrameStatus`、`struct DirtyRegionResolver`（融合 SCK 訊號 + Metal hash，任一方回報變動就採信——「Metal hash 永遠當 ground truth」）
-  - `Sources/CaptureEngine/ScreenCaptureSource.swift`（🔒 真正 `SCStream` 包裝，adapt 成 `FrameInfoProviding`）
-- **新增測試**（`DirtyRegionResolverTests.swift`）：
-  - `testDirtyRectsMapToCorrectTiles`
-  - `testIdleStatusFallsBackToHashDiffOnly`（status=idle 但 hash 有差異 → 仍回報變動，防 SCK 說謊）
-  - `testEmptyDirtyRectsWithUnchangedHashesReportsNoChange`
-  - `testEmptyDirtyRectsButHashChangedStillReportsChange`
-  - `testMultipleDirtyRectsAggregateOverlappingTiles`
-- **建議模型**：**Opus 4.8**（全 M0 邏輯最容易藏 bug 的一段——對抗已知平台陷阱）
-- **DoD**：resolver 邏輯 ✅ CI 綠燈（用假 `FrameInfoProviding`）；`ScreenCaptureSource` 🔒 真機驗收
-
-#### Step 5 — CaptureEngine.start()/stop() 串接
-- **目標**：把 `AttentionModel` + `TileGrid` + `DirtyRegionResolver` 接進 `CaptureEngine` actor，`start()` 開始產生 `TileEvent` 串流（`AsyncStream<TileEvent>`），`stop()` 停止。
-- **修改檔案**：`Sources/CaptureEngine/CaptureEngine.swift`
-- **新增測試**（`CaptureEngineTests.swift`）：用假的 frame 來源驅動 `start()`，斷言吐出的 `TileEvent` 符合預期；`stop()` 後不再吐新事件。
+#### Step 3 — CGEventTap → Signal 映射器（+ 🔒 真 tap 膠水）
+- **目標**：把 `CGEventType`（`.leftMouseDown`/`.mouseMoved`/`.leftMouseDragged`/`.scrollWheel`/`.keyDown`）映射成 `AttentionModel.Signal`。膠水（`CGEvent.tapCreate`，需 Input Monitoring）與映射邏輯分開。
+- **新增檔案**：`Sources/CaptureEngine/EventTapMapper.swift`（純函式 `func signal(for:mouseDelta:) -> AttentionModel.Signal?`）+ 🔒 `Sources/CaptureEngine/InputEventTap.swift`（真 tap，含 `kCGEventTapDisabledByTimeout` 處理）。
+- **新增測試**（`EventTapMapperTests.swift`）：每個 `CGEventType` 對應正確 `Signal`；未知類型回 `nil`；快速移動 `speed` 映射較低能量。
+- **DoD**：mapper ✅ CI 綠燈；tap 🔒（隨 Step 10 真機驗）
 - **建議模型**：Sonnet 5
-- **DoD**：✅ CI 綠燈（假來源）；真正接 `ScreenCaptureSource` 🔒 隨 Step 10
 
-#### Step 6 — CGEventTap → AttentionModel 事件橋接
-- **目標**：把 `CGEventType`（`.leftMouseDown`/`.mouseMoved`/`.leftMouseDragged`/`.scrollWheel`/`.keyDown`）映射成 `AttentionModel.Signal`。膠水（`CGEvent.tapCreate`，需 Input Monitoring 權限）與映射邏輯分開。
-- **新增檔案**：`Sources/CaptureEngine/EventTapMapper.swift`（純函式 `func signal(for:mouseDelta:) -> AttentionModel.Signal?`）+ 🔒 `Sources/CaptureEngine/InputEventTap.swift`（真正 tap）
-- **新增測試**（`EventTapMapperTests.swift`）：每個 `CGEventType` 對應正確 `Signal`；未知類型回 `nil`。
+#### Step 4 — AX 焦點區域解析（+ 🔒 真 AX 膠水）
+- **目標**：§B.4 焦點元件定義重點區域。抽 `protocol AXFocusProviding`（回傳 focused element 的 role/value/frame），純邏輯算焦點區 `CGRect` 與「打字時錨定 focused element 而非游標」的判斷。
+- **新增檔案**：`Sources/CaptureEngine/FocusRegionResolver.swift` + 🔒 `Sources/CaptureEngine/SystemAXFocusProvider.swift`（`AXUIElementCreateSystemWide` + `kAXFocusedUIElementAttribute` + `AXObserver`）。
+- **新增測試**（`FocusRegionResolverTests.swift`）：假 provider 給不同 AXFrame → 驗證區域計算；無焦點時的 fallback。
+- **DoD**：✅ CI 綠燈（假 provider）；真 AX 🔒
 - **建議模型**：Sonnet 5
-- **DoD**：mapper ✅ CI 綠燈；tap 本身 🔒
 
-#### Step 7 — AXUIElement 焦點區域擷取
-- **目標**：§B.4 焦點元件定義重點區域。抽 `protocol AXFocusProviding`，可測「給定 AX 屬性 → 算出焦點區 CGRect」。
-- **新增檔案**：`Sources/CaptureEngine/FocusRegionResolver.swift` + 🔒 `Sources/CaptureEngine/SystemAXFocusProvider.swift`
-- **新增測試**：`FocusRegionResolverTests.swift`（假 provider 給不同 AXFrame，驗證區域計算）
-- **建議模型**：Sonnet 5
-- **DoD**：✅ CI 綠燈（假 provider）；真 AX 呼叫 🔒
-
-#### Step 8 — 多解析度金字塔參數
-- **目標**：§B.5 三層（L0 焦點原生 2x / L1 周邊 1x-0.5x / L2 概覽 ≤1024px）參數化，擴充 `AttentionModel.captureParams()` 的輸出或新增 `struct CapturePyramid`。
-- **新增測試**：各能量帶對應正確的三層參數組合。
-- **建議模型**：Sonnet 5
+#### Step 5 — L0 事件模板格式化器 ✅
+- **目標**：依 `docs/design/v2.1_action-script-narrator.md §2` 行格式（`[HH:mm:ss.SSS] FOCUS app=... win=...` 等）寫格式化器。`ScriptNarrator.swift` 已有 `EventLog` 骨架（只有 `append`）。
+- **新增檔案**：`Sources/ScriptNarrator/EventFormatter.swift`；`Package.swift` 測試依賴已含 `ScriptNarrator`（免改）。
+- **新增測試**（`EventFormatterTests.swift`）：6 種事件（FOCUS/TYPE/PASTE/SWITCH/SCROLL/WATCH）格式正確；時間戳精度到毫秒。
 - **DoD**：✅ CI 綠燈
-
-#### Step 9 — 量測工具（CPU/延遲/漏抓率 harness）
-- **目標**：寫一個可在真機執行的量測工具（CLI 或內建 debug flag），把 CPU%、每幀延遲、tile 變動計數 dump 成 log，讓 Step 10 的真機驗收有數字可報。
 - **建議模型**：Sonnet 5
-- **DoD**：✅ 工具碼本身可 CI 編譯檢查；實際量測結果屬 🔒
 
-#### Step 10 — 🔒 M0 真機驗收
-- 打包簽章 `.app`（`scripts/permissions-check.sh` 先跑一次）、授權 Screen Recording/Accessibility/Input Monitoring、跑 Step 9 harness，量 CPU%/漏抓率/延遲，產出 V1 vs V2 對照數字（roadmap 驗收標準）。**這步要你在你的 Mac 上執行**，數字回報給我後我會記錄進本文件。
+#### Step 6 — L0 合併規則（打字合併 / scroll 節流）✅
+- **目標**：同欄位 2s 內文字輸入合併成一句；scroll 1s 視窗聚合方向+距離。用注入 `now:` clock 做決定性測試。
+- **修改檔案**：`Sources/ScriptNarrator/ScriptNarrator.swift`（`EventLog.append` 擴充合併邏輯）。
+- **新增測試**（`EventLogMergeTests.swift`）：連續打字合併成一行；跨欄位不合併；scroll 節流；超過視窗不合併。
+- **DoD**：✅ CI 綠燈
+- **建議模型**：Sonnet 5
+
+#### Step 7 — L0 PII 遮罩（貼上/剪下前置遮罩）✅
+- **目標**：套 `docs/privacy/data-classification.md` regex（TW 身分證 `[A-Z][12]\d{8}`、TW 手機 `09\d{8}`、CN 身分證 `\b\d{17}[\dXx]\b`）在**進入 L0 之前**遮罩貼上/剪下，如 `[貼上疑似卡號，已遮罩]`。
+- **新增檔案**：`Sources/ScriptNarrator/PIIMasker.swift`。
+- **新增測試**（`PIIMaskerTests.swift`）：各 PII pattern 必遮；非 PII 不誤傷；preview 截斷長度正確；密碼欄輸入標 `[在密碼欄輸入]`。
+- **DoD**：✅ CI 綠燈
+- **建議模型**：**Opus 4.8**（隱私關鍵，漏遮＝PII 進劇本）
+
+#### Step 8 — 即時事件日誌 view-model + 接進 menu bar
+- **目標**：把 Step 3/4/5/6/7 串成一條 pipeline，餵給一個可觀察的 view-model；`AppCoordinator.toggleObserving()` 真的啟動/停止這條 pipeline；menu bar 新增一個視窗即時顯示最近 L0 劇本行。這就是「操作時間機器」的畫面。
+- **修改/新增檔案**：`apps/CoPartner/Sources/AppCoordinator.swift`（`toggleObserving` 真接線；`lastStepSummary` 改由 pipeline 更新）、新增 `apps/CoPartner/Sources/EventLogViewModel.swift` + `EventLogWindow.swift`。**把可測邏輯放進 CoPartnerKit**（新增 `Sources/ScriptNarrator/EventLogFeed.swift`：ring buffer + 對外 `AsyncStream`），app 只做顯示。
+- **新增測試**（`EventLogFeedTests.swift`）：餵事件序列 → feed 吐出對應格式化行；容量上限；停止後不再吐。
+- **DoD**：`EventLogFeed` 邏輯 ✅ CI 綠燈；SwiftUI 視窗實際顯示 🔒（隨 Step 10）
+- **建議模型**：Sonnet 5
+
+#### Step 9 — 緊急停止（⌃⌥⌘.）+ 觀察開關（⌃⌥⌘O）真接線
+- **目標**：接上 `KeyboardShortcuts`（目前宣告了卻無 target 使用）。⌃⌥⌘O 切換觀察、⌃⌥⌘. **立即停止所有 pipeline 並回 idle**（kill-switch，安全關鍵）。menu bar 圖示反映 `mode`（eye.slash/eye/wand）。這是常駐工具「信任感」與安全的基石。
+- **修改檔案**：`Package.swift`（新增一個小 target 或讓 app 依賴 `KeyboardShortcuts`——因熱鍵屬 app 層，建議在 `apps/CoPartner` 的 `project.yml` 加 `KeyboardShortcuts` package 依賴，而非塞進函式庫）；`AppCoordinator.swift`（`stopAll()` 冪等停止）；`MenuBarContentView.swift`（緊急停止鈕已存在，接真行為）。
+- **新增測試**（`AppCoordinatorTests.swift`，放 app 的測試 target 或抽邏輯進 kit）：`stopAll()` 從任一 mode 都回 idle 且冪等；observe toggle 狀態機正確。
+- **DoD**：狀態機邏輯 ✅ CI 綠燈；全域熱鍵實際觸發 🔒
+- **建議模型**：**Opus 4.8**（kill-switch 是「接手你電腦的工具」最重要的安全控制，停止路徑要一次對）
+
+#### Step 10 — 🔒 可跑骨架 dogfood 驗收（操作時間機器）
+- **你在你的 Mac 上執行**：`scripts/bootstrap.sh`（產生 Xcode 專案）→ Xcode 跑 app → 授權 **Input Monitoring + Accessibility**（這階段**還不需要 Screen Recording**）→ 開啟觀察 → 操作一段 → 確認事件日誌視窗即時、正確地把你的操作寫成劇本；⌃⌥⌘. 能立即停止。回報體感與任何漏記/誤記。
+- **對應 roadmap 驗收**：M2.5「劇本完整重現一段操作（時間機器）」。**這是第一個 dogfoodable 里程碑**，達成後你就有一個每天能開著用的東西，後面所有功能都疊在它上面。
 
 ---
 
-## M1 — 冷熱狀態機 + DYNAMIC
+## Phase B — 智慧擷取引擎
 
-延續 `docs/design/v2_smart-capture-engine.md §B.6`。`TileEvent.State`（cold/warm/hot/dynamic）已在 `CoPartnerCore/Models.swift` 定義好，這個里程碑要做出真正驅動它的狀態機。
+**階段目標**：把螢幕視覺擷取（foveated / dirty-region / tile）疊到「已經會跑」的事件日誌上。延續 `docs/design/v2_smart-capture-engine.md §B`，採 §M 的 **Tier 2 簡化路徑**先驗證收益（Step 11–18＝原 M0），再做完整 tile 狀態機（Step 19–24＝原 M1）。這一階段真機依賴最重（SCStream/Metal/Screen Recording 權限），也是我最幫不上手動除錯的地方——所以邏輯全抽出來測，膠水獨立薄層。
 
-#### Step 11 — Tile 狀態機核心
-- **目標**：純狀態轉換邏輯，輸入是「隨時間推進的 tile 變動分級序列」（吃 Step 3 的 `ChangeMagnitude`），輸出 `TileEvent.State` 轉換，規則見 §B.6 表格。
-- **新增檔案**：`Sources/CaptureEngine/TileStateMachine.swift`
-- **測試重點**：COLD 持續無變化維持 COLD；單次變化→WARM；持續變化→HOT；規律高頻大面積→DYNAMIC；**AX 可得文字的 tile 不套 DYNAMIC**（§L override，重要邊界案例）。
-- **建議模型**：Sonnet 5 實作，**Opus 4.8** 審 DYNAMIC 誤判閾值（false positive/negative 取捨判斷重）
-- **DoD**：✅ CI 綠燈
+#### Step 11 — Tile 座標與幾何工具 ✅
+- **新增檔案**：`Sources/CaptureEngine/TileGrid.swift`（`tileSize`(128)/`cols`/`rows`、`tileIndex(for:)`、`tiles(overlapping:)`、`rect(forTileX:y:)`）。
+- **新增測試**（`TileGridTests.swift`）：`testTileIndexAtOrigin`、`testTileIndexAtExactBoundary`、`testTilesOverlappingRectSpanningMultipleTiles`、`testTilesOverlappingRectClampsToGridBounds`、`testRectForTileRoundTrip`。
+- **DoD**：✅ CI 綠燈 ・ **模型**：Sonnet 5
 
-#### Step 12 — DYNAMIC 週期性偵測
-- **目標**：偵測 tile 變動時間戳是否呈規律間隔（30/60fps 倍數），純邏輯可測（合成時間序列）。
-- **建議模型**：Opus 4.8
-- **DoD**：✅ CI 綠燈
+#### Step 12 — Metal dHash 差異比對邏輯 + 🔒 shader 骨架
+- **新增檔案**：`Sources/CaptureEngine/TileHashDiff.swift`（`hammingDistance`、`enum ChangeMagnitude {none,small,large}`、`classify(distance:thresholds:)`）+ 🔒 `Sources/CaptureEngine/Resources/TileHash.metal`（per-threadgroup uint64，無法 CI 跑）。
+- **新增測試**（`TileHashDiffTests.swift`）：`testIdenticalHashesZeroDistance`、`testHammingDistanceKnownBitPatterns`、`testSmallDistanceIsCursorResidue`、`testLargeDistanceIsRealChange`、`testClassifyThresholdBoundaries`。
+- **DoD**：Swift ✅ CI；`.metal` 🔒（Step 18 驗）・ **模型**：Sonnet 5 寫 Swift；`.metal` 無先例可抄、無法 CI 迭代除錯，**建議 Fable 5** 起草。
 
-#### Step 13 — 每 app override 清單
-- **目標**：§L 風險緩解——允許 per-app 排除 DYNAMIC 判定（如股價 ticker 合法一直變但不是影片）。簡單設定結構 + 查詢邏輯。
-- **建議模型**：Sonnet 5
-- **DoD**：✅ CI 綠燈
+#### Step 13 — SCStream dirtyRects 解析與可靠性防禦
+- **目標**：對抗 §B.1 已知陷阱（status 常回 idle、dirtyRects 可能空、Sequoia 15.6.1 contentRect X=48 bug）。protocol 抽象 SCK，Metal hash 永遠當 ground truth。
+- **新增檔案**：`Sources/CaptureEngine/DirtyRegionResolver.swift`（`protocol FrameInfoProviding`、`enum FrameStatus`、`struct DirtyRegionResolver`）+ 🔒 `Sources/CaptureEngine/ScreenCaptureSource.swift`（真 `SCStream` adapter）。
+- **新增測試**（`DirtyRegionResolverTests.swift`）：`testDirtyRectsMapToCorrectTiles`、`testIdleStatusFallsBackToHashDiff`（status=idle 但 hash 有差 → 仍報變動）、`testEmptyRectsUnchangedHashesReportsNoChange`、`testEmptyRectsButHashChangedStillReportsChange`、`testMultipleRectsAggregate`。
+- **DoD**：resolver ✅ CI（假 provider）；`ScreenCaptureSource` 🔒 ・ **模型**：**Opus 4.8**（全 B 階最易藏 bug——對抗平台陷阱）
 
-#### Step 14 — OCR/持久化節流串接
-- **目標**：狀態機輸出接到「該不該跑 OCR / 該不該存 delta」的節流決策（§B.6 表格：COLD 否/WARM dirty時/HOT 節流/DYNAMIC 否）。用假 OCR/persistence spy 驗證呼叫次數。
-- **建議模型**：Sonnet 5
-- **DoD**：✅ CI 綠燈
+#### Step 14 — ScreenCaptureSource 膠水 + CaptureEngine 串接
+- **目標**：把 `AttentionModel`+`TileGrid`+`DirtyRegionResolver` 接進 `CaptureEngine` actor，`start()` 產生 `AsyncStream<TileEvent>`，`stop()` 停止。
+- **修改檔案**：`Sources/CaptureEngine/CaptureEngine.swift`。
+- **新增測試**（`CaptureEngineTests.swift`）：假 frame 來源驅動 `start()` → 斷言吐出的 `TileEvent` 正確；`stop()` 後不再吐。
+- **DoD**：✅ CI（假來源）；真 `ScreenCaptureSource` 🔒 ・ **模型**：Sonnet 5
 
-#### Step 15 — CaptureEngine 全狀態機整合
-- **目標**：把 M0 的簡化 Tier 2 邏輯換成完整 per-tile 狀態機驅動擷取頻率/解析度。
-- **建議模型**：Sonnet 5
-- **DoD**：✅ CI 綠燈（假來源）；真機整合 🔒 隨 Step 16
+#### Step 15 — 多解析度金字塔參數 ✅
+- **目標**：§B.5 三層（L0 焦點 2x / L1 周邊 1x-0.5x / L2 概覽 ≤1024px）參數化（`struct CapturePyramid` 或擴充 `captureParams()`）。
+- **新增測試**：各能量帶 → 正確三層參數。**DoD**：✅ CI ・ **模型**：Sonnet 5
 
-#### Step 16 — 🔒 M1 真機驗收
-- 播 1080p 影片，CPU 不超 baseline；影片正確標 DYNAMIC。你在真機跑，回報數字。
+#### Step 16 — 擷取接進 app（視覺脈絡疊加事件日誌）
+- **目標**：`toggleObserving()` 除了事件日誌，也啟動 `CaptureEngine`；menu bar 反映擷取狀態。Screen Recording 權限在此才需要。
+- **DoD**：協調邏輯 ✅ CI；真擷取顯示 🔒 ・ **模型**：Sonnet 5
 
----
+#### Step 17 — 量測 harness（CPU/延遲/漏抓率）
+- **目標**：可在真機執行的量測工具（CLI 或 debug flag），dump CPU%/每幀延遲/tile 變動計數，供 Step 18 產數字。
+- **DoD**：工具碼 ✅ CI 可編譯；量測結果 🔒 ・ **模型**：Sonnet 5
 
-## M2 — 局部 OCR + AX 文字
+#### Step 18 — 🔒 M0 真機驗收
+- 打包簽章 app（`scripts/permissions-check.sh` 先跑）、授權三權限、跑 harness，量 CPU%/漏抓率/延遲，產 V1 vs V2 對照數字（roadmap M0 驗收）。你在 Mac 上執行、回報。
 
-#### Step 17 — Vision OCR wrapper（ROI）
-- **目標**：`VNRecognizeTextRequest`（`.accurate`、zh-Hant+en-US、`regionOfInterest`）包裝。可測部分：給定 dirty tiles 列表 → 算出正確的 normalized ROI rect。
-- **新增檔案**：`Sources/CaptureEngine/OCRRegionMapper.swift`（純邏輯）+ 🔒 真正 Vision 呼叫
-- **建議模型**：Sonnet 5
-- **DoD**：✅ CI 綠燈（ROI 計算）；真 OCR 準確度 🔒
+#### Step 19 — Tile 狀態機（COLD/WARM/HOT/DYNAMIC）
+- **目標**：純狀態轉換（吃 Step 12 的 `ChangeMagnitude` 時間序列）→ `TileEvent.State`，規則見 §B.6。
+- **測試重點**：COLD 維持；單次變化→WARM；持續→HOT；規律高頻大面積→DYNAMIC；**AX 可得文字的 tile 不套 DYNAMIC**（§L override）。
+- **DoD**：✅ CI ・ **模型**：Sonnet 5 實作，**Opus 4.8** 審 DYNAMIC 誤判閾值
 
-#### Step 18 — AX-text-first fallback 邏輯
-- **目標**：「能拿 AX 文字的 tile 不必跑 OCR」決策邏輯，用假 AX text provider 測試。
-- **建議模型**：Sonnet 5
-- **DoD**：✅ CI 綠燈
+#### Step 20 — DYNAMIC 週期性偵測
+- 偵測變動時間戳是否規律（30/60fps 倍數），合成時間序列可測。**DoD**：✅ CI ・ **模型**：Opus 4.8
 
-#### Step 19 — sidecar `/ocr` 接線（ocrmac）
-- **目標**：把 `sidecar/copartner_sidecar/server.py` 已 stub 的 `/ocr` endpoint 接上 `ocrmac`。
-- **建議模型**：Sonnet 5
-- **DoD**：✅（需 Step 20 的 pytest 才能在 CI 驗證邏輯；ocrmac 實際辨識品質 🔒）
+#### Step 21 — 每 app override 清單
+- §L：允許 per-app 排除 DYNAMIC 判定（股價 ticker 等）。**DoD**：✅ CI ・ **模型**：Sonnet 5
 
-#### Step 20 — CI 補 Python pytest job
-- **背景**：目前 `.github/workflows/ci.yml` 的 `python` job **只有 `ruff check`，完全沒有測試**。這是現有落差，這步順手補上。
-- **修改檔案**：`sidecar/pyproject.toml`（加 `pytest` dev dependency）、新增 `sidecar/tests/`、`.github/workflows/ci.yml`（加 `uvx pytest` 步驟）
-- **建議模型**：Sonnet 5
-- **DoD**：✅ CI 綠燈
+#### Step 22 — OCR/持久化節流串接
+- 狀態機輸出 → 「該不該 OCR / 存 delta」節流（§B.6 表），假 spy 驗呼叫次數。**DoD**：✅ CI ・ **模型**：Sonnet 5
 
-#### Step 21 — 🔒 M2 真機驗收
-- OCR 像素吞吐 ≤ V1 的 20%。你在真機跑，回報數字。
+#### Step 23 — CaptureEngine 全狀態機整合
+- 把 Tier 2 換成完整 per-tile 狀態機驅動頻率/解析度。**DoD**：✅ CI（假來源）；真機 🔒 ・ **模型**：Sonnet 5
+
+#### Step 24 — 🔒 M1 真機驗收
+- 播 1080p 影片 CPU 不超 baseline；影片正確標 DYNAMIC。你在 Mac 上執行、回報。
 
 ---
 
-## M2.5 — L0 EventLog
+## Phase C — 局部 OCR + AX 文字
 
-延續 `docs/design/v2.1_action-script-narrator.md §2`（格式範例、合併規則表已在該文件寫死，直接照抄）。`ScriptNarrator.swift` 目前已有 `EventLog` 骨架（只有 `append`）。
+延續 §B.8。（原 M2.5 的 L0 已在 Phase A 完成。）
 
-#### Step 22 — L0 事件模板格式化器
-- **目標**：依 v2.1 §2 的行格式（`[HH:mm:ss.SSS] FOCUS app=... win=...` 等 6 種事件類型）寫格式化器。
-- **新增檔案**：`Sources/ScriptNarrator/EventFormatter.swift`
-- **測試重點**：6 種事件類型（FOCUS/TYPE/PASTE/SWITCH/SCROLL/WATCH）各自格式正確；時間戳精度到毫秒。
-- **建議模型**：Sonnet 5
-- **DoD**：✅ CI 綠燈
+#### Step 25 — Vision OCR ROI 映射器（+ 🔒 真 OCR）
+- 可測：dirty tiles → normalized ROI rect。新增 `Sources/CaptureEngine/OCRRegionMapper.swift` + 🔒 真 `VNRecognizeTextRequest`（`.accurate`、zh-Hant+en）。**DoD**：ROI ✅ CI；辨識品質 🔒 ・ **模型**：Sonnet 5
 
-#### Step 23 — 合併規則（打字合併/scroll 節流）
-- **目標**：同欄位 2 秒內文字輸入合併成一句；scroll 1 秒視窗聚合方向+距離。用注入 `now:` 的 clock（同 Step 1 模式）做決定性測試。
-- **修改檔案**：`Sources/ScriptNarrator/ScriptNarrator.swift`（`EventLog.append` 擴充合併邏輯）
-- **建議模型**：Sonnet 5
-- **DoD**：✅ CI 綠燈
+#### Step 26 — AX-text-first fallback 邏輯
+- 「能拿 AX 文字的 tile 不跑 OCR」決策，假 AX text provider 測。**DoD**：✅ CI ・ **模型**：Sonnet 5
 
-#### Step 24 — PII 遮罩（貼上/剪下前置遮罩）
-- **目標**：套用 `docs/privacy/data-classification.md` 的 regex（TW 身分證/手機、CN 身分證）在**進入 L0 之前**遮罩貼上/剪下內容，例如 `[貼上疑似卡號，已遮罩]`。
-- **測試重點**：已知 PII pattern 必須被遮；非 PII 內容不誤傷；preview 截斷長度正確。
-- **建議模型**：**Opus 4.8**（隱私關鍵路徑，漏遮 = PII 進劇本）
-- **DoD**：✅ CI 綠燈
+#### Step 27 — sidecar `/ocr` 接線（ocrmac）
+- 把 `sidecar/.../server.py` 已 stub 的 `/ocr` 接上 `ocrmac`。**DoD**：邏輯待 Step 28 pytest 驗；辨識品質 🔒 ・ **模型**：Sonnet 5
 
-#### Step 25 — L0 完整性驗收（劇本重現操作）
-- **目標**：整合測試——餵一段模擬操作序列（focus/type/paste/switch/scroll）進 L0 pipeline，斷言輸出的 log 讓人能重建操作過程。對應 roadmap 驗收「劇本完整重現一段操作（時間機器）」。
-- **建議模型**：Sonnet 5
-- **DoD**：✅ CI 綠燈——**這是 M2.5 唯一不需要 🔒 真機驗收的里程碑**（L0 全是本地確定性邏輯，無 GPU/AX/FoundationModels 依賴）
+#### Step 28 — CI 補 Python pytest job ✅
+- **背景**：CI 的 `python` job **只有 `ruff check`，沒有測試**。補上。
+- **修改檔案**：`sidecar/pyproject.toml`（加 `pytest` dev dep）、新增 `sidecar/tests/`、`.github/workflows/ci.yml`（加 `uvx pytest`）。**DoD**：✅ CI ・ **模型**：Sonnet 5
+
+#### Step 29 — 🔒 M2 真機驗收
+- OCR 像素吞吐 ≤ V1 的 20%。你在 Mac 上執行、回報。
 
 ---
 
-## M3 — 記憶系統（rolling-wave：先列目標，開工前 Step 26 展開細節）
+## Phase D — 記憶系統（rolling-wave）
 
-延續 §C（三層記憶）+ v2.1 §3（劇本=檢索主幹）。`MemoryStore.swift` 已有 `insert`/`search` 空殼。
+延續 §C + v2.1 §3（劇本＝檢索主幹）。`MemoryStore.swift` 已有 `insert`/`search` 空殼。
 
-#### Step 26 — 【展開】M3 詳細 step 規劃
-- 開始 M3 前，先根據 M0/M1 真機驗證結果（尤其 tile hash 產出的實際資料量），把下面 5 個 step 展開成跟 M0 一樣的完整測試案例清單。
-- **建議模型**：Opus 4.8
-
-#### Step 27 — Reference+delta 重建演算法
-- **目標**：I-frame/P-frame 模型（§B.7）——維護 reference + 一串 delta，能重建任一時間點畫面。**資料正確性風險最高的一步**（重建錯 = 靜默資料損毀），純演算法可測。
-- **建議模型**：Sonnet 5 實作，**Opus 4.8 審查**重建正確性
-- **DoD**：✅ CI 綠燈（先於 Step 26 展開時補齊 test case）
-
-#### Step 28 — L1 RAM ring buffer
-- **目標**：時間窗限制的記憶體暫存（最近 5–15 分鐘熱劇本，v2.1 §3）。
-- **建議模型**：Sonnet 5
-
-#### Step 29 — sqlite-vec schema + KNN wrapper
-- **目標**：`vec0` 虛擬表（float[768]）+ `MemoryStore.insert`/`search` 真正實作。膠水（載入 sqlite-vec extension）🔒，query/ranking 邏輯可測。
-- **修改檔案**：`packages/CoPartnerKit/Package.swift`（`CoPartnerKitTests` 依賴需加入 `"MemoryStore"`）
-- **建議模型**：Opus 4.8（schema 設計 + extension 載入容易踩坑）
-
-#### Step 30 — Re-baseline 觸發邏輯
-- **目標**：每 T 秒或累積 delta 超過畫面 X% 時觸發 re-baseline，純邏輯可測。
-- **建議模型**：Sonnet 5
-
-#### Step 31 — 注意力熱圖（衰減式）
-- **目標**：tile grid 衰減式 heatmap，只存聚合權重（§G 隱私要求：不存原始座標時序）。
-- **建議模型**：Sonnet 5
-
-#### Step 32 — 🔒 M3 真機驗收
-- 8hr 磁碟 ≤ ~400MB；語意檢索可用。你在真機跑，回報數字。
+- **Step 30 【展開】**：依 Phase A/B 真機結果（尤其 tile hash 實際資料量）把 D 階 step 展開成完整測試案例清單。**模型**：Opus 4.8
+- **Step 31 Reference+delta 重建**：I/P-frame（§B.7），**資料正確性風險最高**（重建錯＝靜默損毀）。**模型**：Sonnet 5 實作 + **Opus 4.8 審查**
+- **Step 32 L1 RAM ring buffer**：最近 5–15 min 熱劇本。**模型**：Sonnet 5
+- **Step 33 sqlite-vec schema + KNN**：`vec0` float[768] + `MemoryStore.insert/search` 實作；extension 載入 🔒，query/ranking 可測；`Package.swift` 測試依賴**加入 `"MemoryStore"`**。**模型**：Opus 4.8
+- **Step 34 Re-baseline 觸發**：每 T 秒或 delta > 畫面 X% → re-baseline。**模型**：Sonnet 5
+- **Step 35 注意力熱圖**：衰減式 heatmap，只存聚合權重（§G：不存原始座標時序）。**模型**：Sonnet 5
+- **Step 36 🔒 M3 真機驗收**：8hr 磁碟 ≤ ~400MB；語意檢索可用。
 
 ---
 
-## M4 — 本地推理（rolling-wave）
+## Phase E — 本地推理 + L1/L2 敘事（rolling-wave）
 
-`ScriptNarrator.swift` 的 `Narrator.narrate()` 目前回傳固定 `nil`——這裡要真正接上。
+`Narrator.narrate()` 目前回固定 `nil`，這裡真正接上。
 
-#### Step 33 — 【展開】M4 詳細 step 規劃
-- **建議模型**：Opus 4.8
-
-#### Step 34 — FoundationModels L1 Narrator 接線
-- **目標**：接 `LanguageModelSession` + `@Generable ActionStep` + `prewarm()`（v2.1 §2 已有完整程式碼範例可直接參考改寫）。
-- **建議模型**：Opus 4.8（新 API，容易踩 availability/型別坑）
-
-#### Step 35 — Availability + fallback 階梯
-- **目標**：FoundationModels 不可用 → Qwen MLX → 規則式模板（§5 三階 fallback）。可測：給定假 availability 狀態，斷言選對 fallback 路徑。
-- **建議模型**：Opus 4.8
-
-#### Step 36 — L2 Summarizer
-- **目標**：切 app / 數分鐘 rollup 成段落摘要。
-- **建議模型**：Sonnet 5
-
-#### Step 37 — sidecar `/vlm` 接 mlx-vlm
-- **目標**：真正載入 `mlx-community/Qwen2.5-VL-7B-Instruct-4bit` 並 generate。
-- **建議模型**：Opus 4.8
-
-#### Step 38 — 🔒 M4 真機驗收
-- 本地路徑 sub-second；L1 意圖準確率主觀評估；FoundationModels 實際 availability 行為（新 API，只有真機能驗）。
+- **Step 37 【展開】**。**模型**：Opus 4.8
+- **Step 38 FoundationModels L1 Narrator**：接 `LanguageModelSession` + `@Generable ActionStep` + `prewarm()`（v2.1 §2 有完整程式碼可改寫）。**模型**：Opus 4.8
+- **Step 39 Availability + fallback 階梯**：FoundationModels 不可用 → Qwen MLX → 規則模板（§5）；假 availability 狀態驗證選對路徑。**模型**：Opus 4.8
+- **Step 40 L2 Summarizer**：切 app / 數分鐘 rollup。**模型**：Sonnet 5
+- **Step 41 sidecar `/vlm` 接 mlx-vlm**：載入 `Qwen2.5-VL-7B-Instruct-4bit` generate。**模型**：Opus 4.8
+- **Step 42 🔒 M4 真機驗收**：本地路徑 sub-second；L1 意圖準確率；FoundationModels 實際 availability（只有真機能驗）。
 
 ---
 
-## M5 — 雲端 + 動作 + 交棒（rolling-wave，全案第二高風險）
+## Phase F — 雲端 + 動作 + 接手互動（rolling-wave，第二高風險）
 
-`CloudRouter.handoff()`、`ActionExecutor.execute()` 目前都是空殼。
+這是**「下達接手命令」的完整體驗**所在：把劇本交給 Claude、顯示接手 HUD、熱鍵觸發、沙箱執行。`CloudRouter.handoff()`、`ActionExecutor.execute()` 目前是空殼。
 
-#### Step 39 — 【展開】M5 詳細 step 規劃
-- 這是全專案風險第二高的里程碑（AI 發指令、sandbox 執行），展開時建議先寫一份沙箱威脅模型草稿再拆 step。
-- **建議模型**：**Fable 5**
-
-#### Step 40 — ContextEnvelope 打包邏輯
-- **目標**：v2.1 §4.1 已有完整 JSON 範例，照結構打包（劇本為主體 + 焦點小圖 + AX + 剪貼簿 + takeover contract）。
-- **建議模型**：Sonnet 5
-
-#### Step 41 — PII 出境閘門整合
-- **目標**：Presidio + 資料分類表規則，出境前最後一道檢查（接 Step 24 的遮罩邏輯）。
-- **建議模型**：Opus 4.8（隱私關鍵）
-
-#### Step 42 — LiteLLM Gateway 設定
-- **目標**：Docker 化 LiteLLM，PIPL guard 路由規則（含上海個資 → local-only 強制不出境）。
-- **建議模型**：Sonnet 5
-
-#### Step 43 — CloudRouter.handoff() 接 Claude computer-use
-- **目標**：beta header `computer-use-2025-11-24`、tool `computer_20251124`、Retina 座標 ÷2、prompt caching 穩定前綴。
-- **建議模型**：**Fable 5**（新協定整合，細節多且一次要對）
-
-#### Step 44 — 風險分級 + 危險指令偵測
-- **目標**：`rm -rf`/`sudo`/`git push -f`/`dd`/`curl|sh` 等 pattern 偵測，強制 confirm-each。純字串/pattern 邏輯可測。
-- **建議模型**：Opus 4.8
-
-#### Step 45 — ActionExecutor 沙箱（XPC + sandbox-exec）
-- **目標**：`_ambient` unprivileged user + sandbox-exec sbpl profile（限 network/exec/file write）。
-- **修改檔案**：`packages/CoPartnerKit/Package.swift`（`CoPartnerKitTests` 依賴需加入 `"ActionExecutor"`）
-- **建議模型**：**Fable 5**（安全邊界設計錯了就是真的漏洞）
-
-#### Step 46 — Undo stack
-- **目標**：git stash / APFS snapshot / AX tree snapshot 三種 undo 機制。
-- **建議模型**：Sonnet 5
-
-#### Step 47 — 🔒 M5 真機驗收
-- 熱鍵後 Claude 正確接續 open loop；高風險動作強制確認。
+- **Step 43 【展開】+ 沙箱威脅模型**：全案風險第二高（AI 發指令、sandbox 執行）；展開前先寫沙箱威脅模型草稿。**模型**：**Fable 5**
+- **Step 44 ContextEnvelope 打包**：v2.1 §4.1 有完整 JSON 範例（劇本主體 + 焦點小圖 + AX + 剪貼簿 + takeover contract）。**模型**：Sonnet 5
+- **Step 45 PII 出境閘門整合**：Presidio + 分類表，出境前最後檢查（接 Step 7 遮罩）。**模型**：Opus 4.8
+- **Step 46 LiteLLM Gateway 設定 + PIPL 路由**：`infra/litellm/config.yaml` 已有雛形（cost-based routing、presidio、$5/day 熔斷）；補 PIPL guard（含上海個資 → local-only 強制不出境）。**註**：config 內雲端模型 id（目前 `claude-sonnet-4-6`/`claude-opus-4-7`）指的是「執行 computer-use 的雲端模型」，開工時對齊當時 computer-use 支援清單。**模型**：Sonnet 5
+- **Step 47 CloudRouter.handoff() 接 Claude computer-use**：beta header `computer-use-2025-11-24`、tool `computer_20251124`、Retina 座標 ÷2、prompt caching 穩定前綴。**模型**：**Fable 5**
+- **Step 48 接手 HUD（Approve/Skip/Stop）**：design §F 的介入 HUD——顯示推測任務 + 下一步 + 信心度 + Approve/Skip/Stop 的**常駐浮層**（非 menu）。這是使用者「看到 AI 接手」的畫面。HUD 狀態邏輯（該顯示什麼、按鈕導致什麼狀態轉換）抽進可測 view-model。**模型**：Opus 4.8（人在迴圈的確認 UX，攸關安全與信任）
+- **Step 49 熱鍵 ⌃⌥⌘Space → triggerIntervention 真接線**：把 `AppCoordinator.triggerIntervention()` 接上「打包 ContextEnvelope → PII 閘門 → CloudRouter.handoff → 顯示 HUD」。**修正 `AppCoordinator.swift` 內 `TODO(M3)` 的錯誤標記**（熱鍵交棒屬 M5/此 step，非 M3 記憶系統）。建於 Step 9 的 KeyboardShortcuts 基礎上。**模型**：Sonnet 5
+- **Step 50 風險分級 + 危險指令偵測**：`rm -rf`/`sudo`/`git push -f`/`dd`/`curl|sh` pattern → 強制 confirm-each，純 pattern 可測。**模型**：Opus 4.8
+- **Step 51 ActionExecutor 沙箱（XPC + sandbox-exec）**：`_ambient` unprivileged user + sbpl profile（限 network/exec/file write）；`Package.swift` 測試依賴**加入 `"ActionExecutor"`**。**模型**：**Fable 5**（安全邊界錯＝真漏洞）
+- **Step 52 Undo stack**：git stash / APFS snapshot / AX tree snapshot。**模型**：Sonnet 5
+- **Step 53 🔒 M5 真機驗收**：不貼說明，熱鍵後 Claude 正確接續 open loop；高風險動作強制確認；⌃⌥⌘. 能中止接手。
 
 ---
 
-## M6 — 隱私 + 黑名單（rolling-wave）
+## Phase G — 隱私 + 黑名單（rolling-wave）
 
-#### Step 48 — 【展開】M6 詳細 step 規劃
-- **建議模型**：Opus 4.8
-
-#### Step 49 — tile 級遮罩（PII regex + AX secure field）
-- **目標**：`kAXSecureTextField` + URL/標題啟發式 + OCR 正則（卡號/身分證/API key）。
-- **建議模型**：Opus 4.8（漏遮 = PII 外洩）
-
-#### Step 50 — SCContentFilter 黑名單
-- **目標**：白名單 `includingApplications` 實作（避開空陣列 bug）、排除自身 app。
-- **建議模型**：Sonnet 5
-
-#### Step 51 — 熱圖隱私串接
-- **目標**：串接 Step 31 熱圖與遮罩規則，確保聚合權重也不洩漏敏感區域。
-- **建議模型**：Sonnet 5
-
-#### Step 52 — 🔒 M6 真機驗收（PIPL 最終審查）
-- 密碼欄/銀行頁 100% 被遮；黑名單 app 0 frame。全案完整跑一輪隱私稽核。
+- **Step 54 【展開】**。**模型**：Opus 4.8
+- **Step 55 tile 級遮罩**：`kAXSecureTextField` + URL/標題啟發式 + OCR 正則（卡號/身分證/API key）。**模型**：Opus 4.8（漏遮＝PII 外洩）
+- **Step 56 SCContentFilter 黑名單**：白名單 `includingApplications`（避空陣列 bug）、排除自身 app（避錄製迴圈）。**模型**：Sonnet 5
+- **Step 57 熱圖隱私串接**：串 Step 35 熱圖與遮罩，確保聚合權重也不洩漏敏感區。**模型**：Sonnet 5
+- **Step 58 🔒 M6 真機驗收（PIPL 最終審查）**：密碼欄/銀行頁 100% 被遮；黑名單 app 0 frame；全案跑一輪隱私稽核。
 
 ---
 
-## 完成後
+## 完成後 = 你描述的成品
 
-52 步做完 = M0–M6 全部落地，對應 `docs/roadmap.md` 的完整 V2 願景。到時候再一起看要不要規劃 V3（例如 App Store 上架、多人協作等），不在本文件範圍內。
+58 步做完，對照你的大目標：
 
-現在可以說「**完成 step 1**」開始。
+- **「開啟後持續理解操作習慣」** → Phase A（操作時間機器，開著就在記）+ Phase C/D/E（OCR/記憶/L1-L2 敘事把「記錄」升級成「理解」）。
+- **「下達接手命令就接手」** → Phase F（熱鍵/語音*→ 接手 HUD → Claude computer-use → 沙箱執行 → 可中止）。
+- **「依難易度調用本地/雲端」** → 已由 ADR-0007 `EscalationPolicy` 落地，Phase B/E 產生它需要的訊號，Phase F 執行雲端那一端。
+
+## V3 展望（本輪不做，依決策延後）
+
+- **語音交棒 & 全日語音轉錄摘要**（README 願景，`* 上面「語音」即指此）**：push-to-talk / 喚醒詞 → 本地 STT → 併入 takeover 指令；背景全日音訊 → 轉錄 → 摘要進記憶。這會在螢幕擷取之外多一條音訊管線（含隱私/儲存考量），適合 M0–M6 站穩後再開 V3 規劃。
+- 其他候選：App Store / Developer ID 分發、多裝置同步、團隊協作。
+
+現在可以說「**完成 step 1**」開始（step 1＝讓 CI 真的建置 app，替後面的可跑骨架架好安全網）。
