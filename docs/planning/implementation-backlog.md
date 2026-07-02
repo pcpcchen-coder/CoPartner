@@ -60,7 +60,7 @@
 | 2 | AttentionModel 回歸測試 + 時鐘注入 | M0 | Sonnet 5 | ✅ | — |
 | 3 | CGEventTap → Signal 映射器（+ 🔒 真 tap 膠水） | M0 | Sonnet 5 | ✅ | 2 |
 | 4 | AX 焦點區域解析（+ 🔒 真 AX 膠水） | M0 | Sonnet 5 | ✅ | — |
-| 5 | L0 事件模板格式化器 | M2.5 | Sonnet 5 | ⬜ | — |
+| 5 | L0 事件模板格式化器 | M2.5 | Sonnet 5 | ✅ | — |
 | 6 | L0 合併規則（打字合併 / scroll 節流） | M2.5 | Sonnet 5 | ⬜ | 5 |
 | 7 | L0 PII 遮罩（貼上/剪下前置遮罩） | M2.5 | Opus 4.8 | ⬜ | 5 |
 | 8 | 即時事件日誌 view-model + 接進 menu bar | 應用層 | Sonnet 5 | ⬜ | 3,4,6,7 |
