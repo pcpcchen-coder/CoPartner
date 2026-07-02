@@ -56,7 +56,7 @@
 | # | Step | 里程碑 | 建議模型 | 狀態 | 前置 |
 |---|---|---|---|---|---|
 | **A. 可跑骨架 — 操作時間機器（先讓它能開來用）** ||||||
-| 1 | CI 建置 app target（xcodegen + xcodebuild） | 基建 | Sonnet 5 | ⬜ | — |
+| 1 | CI 建置 app target（xcodegen + xcodebuild） | 基建 | Sonnet 5 | 🔄 | — |
 | 2 | AttentionModel 回歸測試 + 時鐘注入 | M0 | Sonnet 5 | ⬜ | — |
 | 3 | CGEventTap → Signal 映射器（+ 🔒 真 tap 膠水） | M0 | Sonnet 5 | ⬜ | 2 |
 | 4 | AX 焦點區域解析（+ 🔒 真 AX 膠水） | M0 | Sonnet 5 | ⬜ | — |

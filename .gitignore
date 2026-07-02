@@ -12,8 +12,10 @@ DerivedData/
 build/
 .swiftpm/
 
-# 由 XcodeGen 產生，不入庫
+# 由 XcodeGen 產生，不入庫（.xcodeproj、Info.plist、entitlements 皆從 project.yml 生成）
 apps/CoPartner/CoPartner.xcodeproj/
+apps/CoPartner/Sources/Info.plist
+apps/CoPartner/Sources/CoPartner.entitlements
 
 # ── Swift Package Manager ──
 .build/

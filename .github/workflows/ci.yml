@@ -20,3 +20,25 @@ jobs:
         run: |
           cd sidecar
           uvx ruff check .
+  app:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: cd apps/CoPartner && xcodegen generate
+      - name: Resolve Swift package dependencies
+        run: cd apps/CoPartner && xcodebuild -project CoPartner.xcodeproj -resolvePackageDependencies
+      - name: Build app (no signing)
+        run: |
+          cd apps/CoPartner
+          xcodebuild \
+            -project CoPartner.xcodeproj \
+            -scheme CoPartner \
+            -configuration Debug \
+            -destination 'generic/platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
