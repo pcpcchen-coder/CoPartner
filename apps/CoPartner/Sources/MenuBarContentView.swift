@@ -29,7 +29,7 @@ struct MenuBarContentView: View {
             }
             Divider()
 
-            Button(coordinator.mode == .idle ? "開始觀察" : "停止觀察") {
+            Button(coordinator.isIdle ? "開始觀察" : "停止觀察") {
                 coordinator.toggleObserving()
             }
             Button("立即介入（⌃⌥⌘Space）") { coordinator.triggerIntervention() }

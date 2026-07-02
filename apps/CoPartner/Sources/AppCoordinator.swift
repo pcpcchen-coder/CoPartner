@@ -1,46 +1,82 @@
 import SwiftUI
 import Combine
 import AppKit
+import KeyboardShortcuts
+import CoPartnerCore
 import CaptureEngine
 import ScriptNarrator
-// 串接各子系統的協調者（🔒 真機膠水：實際觀察行為於 step 10 dogfood 驗收）。
-// 可測邏輯放在 CoPartnerKit（EventLogFeed / FocusChangeTracker），此處只做接線與顯示。
+// 串接各子系統的協調者（🔒 真機膠水：實際觀察 / 熱鍵行為於 step 10 dogfood 驗收）。
+// 可測邏輯放在 CoPartnerKit（CaptureSessionState / EventLogFeed / FocusChangeTracker）。
+
+extension KeyboardShortcuts.Name {
+    static let toggleObserve = Self("toggleObserve", default: .init(.o, modifiers: [.control, .option, .command]))
+    static let emergencyStop = Self("emergencyStop", default: .init(.period, modifiers: [.control, .option, .command]))
+}
 
 @MainActor
 final class AppCoordinator: ObservableObject {
-    enum Mode { case idle, observing, intervening }
-    @Published private(set) var mode: Mode = .idle
+    @Published private var session = CaptureSessionState()
     @Published var lastStepSummary: String = "尚未開始觀察"
     @Published private(set) var recentLines: [String] = []
 
-    private let feed = EventLogFeed(capacity: 300)
-    private var focusTracker = FocusChangeTracker()
-    private let axProvider = SystemAXFocusProvider()
-    private var inputTap: InputEventTap?
-    private var workspaceObserver: NSObjectProtocol?
-    private var streamTask: Task<Void, Never>?
-
+    var isIdle: Bool { session.mode == .idle }
     var statusIcon: String {
-        switch mode {
+        switch session.mode {
         case .idle: return "eye.slash"
         case .observing: return "eye"
         case .intervening: return "wand.and.stars"
         }
     }
 
-    func toggleObserving() {
-        mode == .idle ? startObserving() : stopAll()
+    private var feed = EventLogFeed(capacity: 300)
+    private var focusTracker = FocusChangeTracker()
+    private let axProvider = SystemAXFocusProvider()
+    private var inputTap: InputEventTap?
+    private var workspaceObserver: NSObjectProtocol?
+    private var streamTask: Task<Void, Never>?
+
+    init() { registerHotkeys() }
+
+    /// ⌃⌥⌘O 切換觀察、⌃⌥⌘. 緊急停止（全域熱鍵；實際觸發需真機驗收）。
+    private func registerHotkeys() {
+        KeyboardShortcuts.onKeyUp(for: .toggleObserve) { [weak self] in
+            MainActor.assumeIsolated { self?.toggleObserving() }
+        }
+        KeyboardShortcuts.onKeyUp(for: .emergencyStop) { [weak self] in
+            MainActor.assumeIsolated { self?.stopAll() }
+        }
     }
 
-    private func startObserving() {
-        guard mode == .idle else { return }
-        mode = .observing
+    func toggleObserving() {
+        if session.mode == .idle {
+            session.toggleObserve()   // → observing
+            startPipeline()
+        } else {
+            stopAll()
+        }
+    }
+
+    /// 緊急停止：任何狀態 → idle，拆掉所有觀察來源。冪等。
+    func stopAll() {
+        guard session.mode != .idle else { return }
+        session.stopAll()
+        teardownPipeline()
+        lastStepSummary = "已停止觀察"
+    }
+
+    func triggerIntervention() { /* step 49：打包 ContextEnvelope → CloudRouter.handoff */ }
+
+    // MARK: - Pipeline（🔒 真機膠水）
+
+    private func startPipeline() {
+        feed = EventLogFeed(capacity: 300)   // 每次觀察用全新 feed
+        focusTracker = FocusChangeTracker()  // 重置焦點基準
         lastStepSummary = "觀察中…"
 
-        // 訂閱 feed 即時快照（Task 繼承 MainActor）→ 更新 UI。
+        let currentFeed = feed
         streamTask = Task { [weak self] in
-            guard let self else { return }
-            for await lines in self.feed.updates {
+            for await lines in currentFeed.updates {
+                guard let self else { return }
                 self.recentLines = lines
                 if let last = lines.last { self.lastStepSummary = last }
             }
@@ -65,18 +101,14 @@ final class AppCoordinator: ObservableObject {
         inputTap = tap
     }
 
-    /// 讀當前焦點，交給 FocusChangeTracker 決定是否產生一個 L0 事件。
     private func observeFocus(app: String) {
         let window = axProvider.focusedElement()?.value ?? ""
-        if let event = focusTracker.event(app: app, window: window) {
-            Task { await feed.record(event) }
-        }
+        guard let event = focusTracker.event(app: app, window: window) else { return }
+        let currentFeed = feed
+        Task { await currentFeed.record(event) }
     }
 
-    /// 緊急停止 / 停止觀察：拆掉所有觀察來源並結束串流（step 9 併入介入中止）。
-    func stopAll() {
-        guard mode != .idle else { return }
-        mode = .idle
+    private func teardownPipeline() {
         inputTap?.stop()
         inputTap = nil
         if let observer = workspaceObserver {
@@ -85,9 +117,7 @@ final class AppCoordinator: ObservableObject {
         }
         streamTask?.cancel()
         streamTask = nil
-        Task { await feed.stop() }
-        lastStepSummary = "已停止觀察"
+        let dying = feed
+        Task { await dying.stop() }
     }
-
-    func triggerIntervention() { /* step 49：打包 ContextEnvelope → CloudRouter.handoff */ }
 }

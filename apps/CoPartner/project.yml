@@ -14,6 +14,9 @@ settings:
 packages:
   CoPartnerKit:
     path: ../../packages/CoPartnerKit
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: 2.0.0
 targets:
   CoPartner:
     type: application
@@ -32,6 +35,7 @@ targets:
         product: CloudRouter
       - package: CoPartnerKit
         product: ActionExecutor
+      - package: KeyboardShortcuts
     info:
       path: Sources/Info.plist
       properties:
