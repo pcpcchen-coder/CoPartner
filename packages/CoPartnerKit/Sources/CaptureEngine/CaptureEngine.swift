@@ -18,7 +18,7 @@ public actor CaptureEngine {
 /// 注意力能量 A∈[0,1] 驅動 attention region 的大小、解析度與 FPS。
 /// 點擊 = 動作起點 → 拉到峰值並立即強制高解析擷取；移動/靜置 → 隨時間衰減。
 public actor AttentionModel {
-    public enum Signal { case click, drag, scroll, keyDown, move(speed: Double), idle }
+    public enum Signal: Sendable, Equatable { case click, drag, scroll, keyDown, move(speed: Double), idle }
 
     private var energy: Double = 0          // A ∈ [0,1]
     public private(set) var center: CGPoint = .zero
