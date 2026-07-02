@@ -8,7 +8,7 @@ import CoreGraphics
 /// 用 `EventTapMapper` 映射成 `AttentionModel.Signal` 後交給 `handler`。
 /// `.listenOnly`（不改事件流），並處理 OS 逾時 / 使用者輸入導致的停用（重新啟用）。
 public final class InputEventTap {
-    public typealias Handler = (AttentionModel.Signal) -> Void
+    public typealias Handler = @Sendable (AttentionModel.Signal) -> Void
 
     private let handler: Handler
     private var tap: CFMachPort?

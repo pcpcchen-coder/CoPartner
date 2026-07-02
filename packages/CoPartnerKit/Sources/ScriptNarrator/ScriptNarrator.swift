@@ -16,6 +16,8 @@ public struct EventLog: Sendable {
     public var scrollAggregateWindow: TimeInterval = 1.0
     /// 格式化用時區（測試可注入 UTC）。
     public var timeZone: TimeZone = .current
+    /// ring buffer 上限；超過丟最舊（避免長時間執行記憶體無限成長）。
+    public var capacity: Int = 500
 
     /// 最近一個「可續接」的事件：其顯示起始時間 startAt 與最後更新時間 lastAt。
     private var pending: (event: L0Event, startAt: Date, lastAt: Date)?
@@ -32,6 +34,9 @@ public struct EventLog: Sendable {
             return
         }
         lines.append(EventFormatter.line(event, at: now, timeZone: timeZone))
+        if capacity >= 1 && lines.count > capacity {
+            lines.removeFirst(lines.count - capacity)
+        }
         pending = (event: event, startAt: now, lastAt: now)
     }
 
