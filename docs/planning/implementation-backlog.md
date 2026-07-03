@@ -343,9 +343,12 @@
 - **「下達接手命令就接手」** → Phase F（熱鍵/語音*→ 接手 HUD → Claude computer-use → 沙箱執行 → 可中止）。
 - **「依難易度調用本地/雲端」** → 已由 ADR-0007 `EscalationPolicy` 落地，Phase B/E 產生它需要的訊號，Phase F 執行雲端那一端。
 
-## V3 展望（本輪不做，依決策延後）
+## 本輪之後 → 版本演化總規劃
 
-- **語音交棒 & 全日語音轉錄摘要**（README 願景，`* 上面「語音」即指此）**：push-to-talk / 喚醒詞 → 本地 STT → 併入 takeover 指令；背景全日音訊 → 轉錄 → 摘要進記憶。這會在螢幕擷取之外多一條音訊管線（含隱私/儲存考量），適合 M0–M6 站穩後再開 V3 規劃。
-- 其他候選：App Store / Developer ID 分發、多裝置同步、團隊協作。
+V1（本文件的 58 步）之後的完整版本階梯已展開為獨立規劃：**`docs/planning/assistant-evolution-plan.md`**——
+**V2 Listen**（全日音訊→生活劇本 + Telegram 訊息閘道 + 語音交棒；原本此處「V3 展望」的語音項目全數併入 V2）→
+**V3 Agent**（TopAppSkills 技能引擎 + heartbeat 主動性 + 手機/手錶衛星 + 信任階梯）→
+**V4 Omni**（穿戴優先的最終全能助理形態）。該文件同樣採 step-by-step TDD 方法論，可用「完成 V2 step N」交辦。
+其餘候選（App Store / Developer ID 分發、團隊協作）視 V2 後需求再排。
 
 現在可以說「**完成 step 1**」開始（step 1＝讓 CI 真的建置 app，替後面的可跑骨架架好安全網）。

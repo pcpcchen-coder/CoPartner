@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 ### Added
+- 版本演化總規劃 `docs/planning/assistant-evolution-plan.md`：V2 Listen（全日音訊＋訊息閘道）→ V3 Agent（TopAppSkills 技能引擎＋主動性＋隨身衛星）→ V4 Omni（穿戴優先最終形態）；Hub-and-Satellites 架構、生活劇本資料模型、隱私/法律原則、V2 完整 36 步 TDD backlog、V3 22 步、成本與時程估算。
 - 開發執行計畫 `docs/planning/dev-execution-plan.md`：模型分工（Sonnet 5 / Opus 4.8 / Fable 5）、時程與訂閱費用評估。
 - 實作待辦清單 `docs/planning/implementation-backlog.md`：58 個 step 的 TDD backlog，採「可跑骨架優先」順序，區分 CI 可驗證（✅）與需真機驗證（🔒）。
 - ADR-0007：本地優先的分層推理階梯與雲端升級（小範圍辨識留本地、大變動才送雲端；RoutingSignal / InferenceTier / EscalationPolicy + 單元測試）。
