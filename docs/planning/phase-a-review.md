@@ -34,9 +34,9 @@
 - **安全關鍵路徑抽出來測**：PII 遮罩（漏遮＝個資外洩）與 kill-switch（接管工具最重要的停止鍵）都做成純值邏輯 + 測試，不埋在 UI 裡。
 - **真的能跑**：不是一堆漂亮但沒接起來的函式庫——app target 進了 CI，menu bar app 把子系統接成一條會動的管線。
 
-**誠實的技術債 / 限制（Phase A 期間發現，需後續處理）：**
+**誠實的技術債 / 限制（Phase A 期間發現）：**
 
-1. **骨架目前只產生 FOCUS/SWITCH 事件**（app/視窗焦點時間軸），透過 NSWorkspace 應用切換 + AX 焦點讀取。**TYPE / PASTE / SCROLL 事件雖然 EventFormatter/EventLog/PIIMasker 都已完整支援且測試過，但還沒從真實輸入接起來**——因為從 InputEventTap 的 `Signal` 重建「打字的實際文字 / 貼上的剪貼簿內容」需要比目前 `Signal` 抽象更豐富的事件資料。也就是說：打字合併、貼上 PII 遮罩、scroll 聚合這些能力**存在且有單元測試，但骨架還沒端到端跑到它們**。這是明確要補的洞。
+1. ~~**骨架目前只產生 FOCUS/SWITCH 事件**~~ → **✅ 已補（2026-07-03，CI 綠燈）**。新增 `InputEventTranslator`（純邏輯 14 測試）+ `CapturedInput`：`InputEventTap` 現在真的從 CGEvent 抽出捲動位移、`keyboardGetUnicodeString` 打字字元、⌘V 貼上偵測，`AppCoordinator.handleInput` 讀焦點欄位後翻成 TYPE/PASTE/SCROLL 進 feed。**安全性質有測試守住**：控制/功能鍵過濾、密碼欄（AXSecureTextField，加讀 subrole）一律占位永不記錄實際字元、貼上經 PIIMasker 遮罩且原始剪貼簿不落地。打字逐字進 feed 由 EventLog 合併成句。端到端行為仍待 step 10 dogfood 驗證（🔒）。
 2. **「視窗」欄位是近似值**：目前用 `focusedElement()?.value`（焦點元件的 AX value）當視窗字串，不是真正的視窗標題（視窗的 `kAXTitleAttribute`）。FOCUS/SWITCH 行的 window 欄可能顯示元件內容而非視窗名。小事，之後修。
 3. **AXObserver 尚未實作**：SystemAXFocusProvider 目前是 on-demand 讀取，反應式焦點通知留待後續（靠事件觸發時去讀就夠 Phase A 用）。
 4. **InputEventTap 掛在主 run loop**：callback 假設在主執行緒，能動但不是型別層級強制。
@@ -47,7 +47,7 @@
 Phase A 完成後，對照大目標（類 Siri×ChatGPT×Claude Desktop，開了就持續理解、下令就接手）：
 
 - ✅ **「開啟後」** 有了：一個真的 menu bar app，開了就在記你的操作。
-- 🟡 **「持續理解操作習慣」** 起步了：目前記的是 app/視窗焦點時間軸（＝一台好用的「你今天在哪些 app 之間切換」時間機器）；更細的打字/貼上內容與語意理解在 Phase B–E 疊上。
+- 🟡 **「持續理解操作習慣」** 起步了：記 app/視窗焦點時間軸 + 打字/貼上/捲動（授權 Input Monitoring + 輔助使用後）；語意理解（把記錄升級成理解）在 Phase B–E 疊上。
 - ⏳ **「下令就接手」** 尚未開始：接手 HUD / 熱鍵交棒 / 雲端 computer-use 是 Phase F（step 43–49）。
 - ✅ **「依難易度調用本地/雲端」** 的決策核心（ADR-0007 EscalationPolicy）在骨架前就已落地並測試。
 
@@ -70,10 +70,10 @@ open apps/CoPartner/CoPartner.xcodeproj
 **操作與觀察：**
 
 1. 點選單列圖示 → **「開始觀察」**（圖示應變 eye）。
-2. 在 **Xcode ↔ Safari ↔ Finder** 之間切換幾次。
-3. 看選單列面板的 **「操作劇本」** 是否即時出現 `[時間] SWITCH app=… ` / `FOCUS …` 行。
-4. **測 kill-switch**：按 **⌃⌥⌘.** → 觀察應立即停止（圖示回 eye.slash、顯示「已停止觀察」）。
-5. 按 **⌃⌥⌘O** → 應切回觀察。
+2. 在 **Xcode ↔ Safari ↔ Finder** 之間切換幾次 → 應出現 `SWITCH` / `FOCUS` 行。
+3. **授權 輸入監控 + 輔助使用 後**：打幾個字（→ `TYPE`，逐字合併成句）、捲動頁面（→ `SCROLL`，同向聚合距離）、貼上一段文字（→ `PASTE`，預覽已遮罩）。試貼一個假卡號（如 `4111 1111 1111 1111`）確認顯示 `[貼上疑似卡號，已遮罩]`；在密碼欄打字確認顯示 `[在密碼欄輸入]` 而非實際字元。
+4. 看選單列面板「操作劇本」是否即時更新。
+5. **測 kill-switch**：按 **⌃⌥⌘.** → 觀察應立即停止（圖示回 eye.slash）。按 **⌃⌥⌘O** → 應切回觀察。
 
 **權限說明（重要）：**
 
@@ -81,9 +81,9 @@ open apps/CoPartner/CoPartner.xcodeproj
 - 若要更細的焦點（AX）或輸入驅動：到「系統設定 → 隱私權與安全性」授予 **輸入監控** 與 **輔助使用** 給 CoPartner。
 - ⚠️ 注意 `CONTRIBUTING.md` / `permissions-check.sh` 提到的陷阱：**未以 Developer ID 簽章的開發版 .app 在 macOS 26.1+ 可能不會乾淨地出現在權限清單**。若權限授不上去，**NSWorkspace 的 app 切換追蹤仍可運作**——骨架就是為此刻意設計成「免權限也有東西看」。
 
-**驗收（roadmap M2.5「劇本完整重現一段操作」）：** 骨架版＝app/視窗焦點時間軸能忠實反映你的切換過程。
+**驗收（roadmap M2.5「劇本完整重現一段操作」）：** 焦點時間軸 + 打字/捲動/貼上能忠實反映你的操作過程（授權後）。
 
-**請回報：** 劇本有沒有跑出來？熱鍵有沒有觸發？有沒有 crash？CPU（活動監視器）大概多少？這些會決定我下一步先補打字/貼上內容（§2 洞 1）還是直接進 Phase B 螢幕擷取。
+**請回報：** 劇本有沒有跑出來（FOCUS/SWITCH/TYPE/SCROLL/PASTE 各是否正確）？密碼欄/假卡號有沒有正確遮罩？熱鍵有沒有觸發？有沒有 crash？CPU（活動監視器）大概多少？打字延遲體感？這些會決定 Phase B 起點與是否需先調 §2 其餘技術債（視窗欄近似、AXObserver）。
 
 ## 5. 下一步
 
