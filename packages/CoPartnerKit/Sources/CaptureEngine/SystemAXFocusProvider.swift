@@ -13,9 +13,10 @@ public final class SystemAXFocusProvider: AXFocusProviding {
     public func focusedElement() -> AXFocusedElement? {
         guard let focused = copyElement(systemWide, kAXFocusedUIElementAttribute as CFString) else { return nil }
         let role = copyString(focused, kAXRoleAttribute as CFString) ?? "AXUnknown"
+        let subrole = copyString(focused, kAXSubroleAttribute as CFString)
         let value = copyString(focused, kAXValueAttribute as CFString)
         let frame = copyFrame(focused) ?? .zero
-        return AXFocusedElement(role: role, frame: frame, value: value)
+        return AXFocusedElement(role: role, subrole: subrole, frame: frame, value: value)
     }
 
     // TODO(step 10+): AXObserver 訂閱 focused element / window 變更以反應式觸發（§B.3.1）。

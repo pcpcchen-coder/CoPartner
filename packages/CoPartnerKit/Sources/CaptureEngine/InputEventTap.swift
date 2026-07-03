@@ -4,11 +4,19 @@ import CoreGraphics
 // 🔒 真機膠水：實際攔截行為需 Input Monitoring 權限 + run loop，於 step 10 真機驗收；
 //    CI 只保證「編譯得過」。映射邏輯本身在 EventTapMapper（已由 CI 測試覆蓋）。
 
+/// 從一次輸入事件抽出的原始觀測（供注意力/焦點與 L0 劇本共用）。
+public enum CapturedInput: Sendable {
+    case scroll(deltaX: Int, deltaY: Int)     // 捲動位移
+    case keyDown(characters: String)          // 打字的 unicode 字元
+    case pasteShortcut                        // ⌘V（呼叫端讀剪貼簿）
+    case pointer(AttentionModel.Signal)       // click/drag/move（給注意力/焦點）
+}
+
 /// 全域輸入事件 tap：監聽 mouseDown / mouseMoved / dragged / scroll / keyDown，
-/// 用 `EventTapMapper` 映射成 `AttentionModel.Signal` 後交給 `handler`。
+/// 抽出 `CapturedInput`（捲動位移 / 打字字元 / ⌘V / 指標訊號）交給 `handler`。
 /// `.listenOnly`（不改事件流），並處理 OS 逾時 / 使用者輸入導致的停用（重新啟用）。
 public final class InputEventTap {
-    public typealias Handler = @Sendable (AttentionModel.Signal) -> Void
+    public typealias Handler = @Sendable (CapturedInput) -> Void
 
     private let handler: Handler
     private var tap: CFMachPort?
@@ -69,10 +77,34 @@ public final class InputEventTap {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return
         }
-        let delta = CGVector(dx: Double(event.getIntegerValueField(.mouseEventDeltaX)),
-                             dy: Double(event.getIntegerValueField(.mouseEventDeltaY)))
-        if let signal = EventTapMapper.signal(for: type, mouseDelta: delta) {
-            handler(signal)
+        let captured: CapturedInput?
+        switch type {
+        case .scrollWheel:
+            captured = .scroll(deltaX: Int(event.getIntegerValueField(.scrollWheelEventDeltaAxis2)),
+                               deltaY: Int(event.getIntegerValueField(.scrollWheelEventDeltaAxis1)))
+        case .keyDown:
+            if event.flags.contains(.maskCommand) {
+                // ⌘V → 貼上；其他 ⌘ 快捷鍵不算打字。
+                captured = event.getIntegerValueField(.keyboardEventKeycode) == 9 ? CapturedInput.pasteShortcut : nil
+            } else {
+                let chars = Self.unicodeString(from: event)
+                captured = chars.isEmpty ? nil : CapturedInput.keyDown(characters: chars)
+            }
+        default:
+            let delta = CGVector(dx: Double(event.getIntegerValueField(.mouseEventDeltaX)),
+                                 dy: Double(event.getIntegerValueField(.mouseEventDeltaY)))
+            captured = EventTapMapper.signal(for: type, mouseDelta: delta).map(CapturedInput.pointer)
         }
+        if let captured { handler(captured) }
+    }
+
+    /// 從 keyDown 事件取當前鍵盤配置下的 unicode 字元（可能空，如純修飾鍵）。
+    private static func unicodeString(from event: CGEvent) -> String {
+        var length = 0
+        var buffer = [UniChar](repeating: 0, count: 8)
+        event.keyboardGetUnicodeString(maxStringLength: buffer.count,
+                                       actualStringLength: &length, unicodeString: &buffer)
+        guard length > 0 else { return "" }
+        return String(utf16CodeUnits: buffer, count: length)
     }
 }

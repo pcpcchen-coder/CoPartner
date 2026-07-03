@@ -87,25 +87,48 @@ final class AppCoordinator: ObservableObject {
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] note in
             let name = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.localizedName ?? "?"
-            Task { @MainActor in self?.observeFocus(app: name) }
+            Task { @MainActor in self?.pollFocus(app: name) }
         }
 
         // 輸入事件 tap：需 Input Monitoring；失敗（缺權限）則僅靠 NSWorkspace。
-        let tap = InputEventTap { [weak self] _ in
-            Task { @MainActor in
-                let name = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
-                self?.observeFocus(app: name)
-            }
+        let tap = InputEventTap { [weak self] captured in
+            Task { @MainActor in self?.handleInput(captured) }
         }
         _ = tap.start()
         inputTap = tap
     }
 
-    private func observeFocus(app: String) {
-        let window = axProvider.focusedElement()?.value ?? ""
-        guard let event = focusTracker.event(app: app, window: window) else { return }
-        let currentFeed = feed
-        Task { await currentFeed.record(event) }
+    /// 讀一次焦點、更新 FOCUS/SWITCH，回傳目前焦點元件（供 TYPE 判斷欄位與安全性）。
+    @discardableResult
+    private func pollFocus(app: String) -> AXFocusedElement? {
+        let element = axProvider.focusedElement()
+        if let event = focusTracker.event(app: app, window: element?.value ?? "") {
+            let currentFeed = feed
+            Task { await currentFeed.record(event) }
+        }
+        return element
+    }
+
+    /// 輸入事件 → 焦點更新 + TYPE/PASTE/SCROLL 劇本事件（純翻譯在 InputEventTranslator）。
+    private func handleInput(_ captured: CapturedInput) {
+        let app = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
+        let element = pollFocus(app: app)
+        let l0: L0Event?
+        switch captured {
+        case let .scroll(dx, dy):
+            l0 = InputEventTranslator.scroll(app: app, deltaX: dx, deltaY: dy)
+        case let .keyDown(chars):
+            let secure = InputEventTranslator.isSecure(role: element?.role, subrole: element?.subrole)
+            l0 = InputEventTranslator.type(field: element?.role ?? "?", character: chars, isSecureField: secure)
+        case .pasteShortcut:
+            l0 = InputEventTranslator.paste(clipboard: NSPasteboard.general.string(forType: .string) ?? "")
+        case .pointer:
+            l0 = nil   // 只驅動焦點/注意力，不直接產 L0
+        }
+        if let l0 {
+            let currentFeed = feed
+            Task { await currentFeed.record(l0) }
+        }
     }
 
     private func teardownPipeline() {

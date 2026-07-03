@@ -5,10 +5,11 @@ import CoreGraphics
 /// 焦點元件的精要資訊（由 AX 讀出，或測試餵入）。
 public struct AXFocusedElement: Sendable, Equatable {
     public var role: String        // AXTextArea / AXTextField / AXButton…
+    public var subrole: String?    // 如 AXSecureTextField（密碼欄）——用來確保永不記錄密碼
     public var frame: CGRect       // 螢幕座標
     public var value: String?      // AX value / 選取文字（可能為 nil）
-    public init(role: String, frame: CGRect, value: String? = nil) {
-        self.role = role; self.frame = frame; self.value = value
+    public init(role: String, subrole: String? = nil, frame: CGRect, value: String? = nil) {
+        self.role = role; self.subrole = subrole; self.frame = frame; self.value = value
     }
 }
 
