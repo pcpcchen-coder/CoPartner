@@ -74,13 +74,13 @@
 | 14 | ScreenCaptureSource 膠水 + CaptureEngine 串接 | M0 | Sonnet 5 | ✅ | 2,13 |
 | 15 | 多解析度金字塔參數 | M0 | Sonnet 5 | ✅ | 2 |
 | 16 | 擷取接進 app（視覺脈絡疊加事件日誌） | 應用層 | Sonnet 5 | ✅ 協調邏輯（真擷取 🔒 step 18） | 8,14 |
-| 17 | 量測 harness（CPU/延遲/漏抓率） | M0 | Sonnet 5 | ⬜ | 14 |
+| 17 | 量測 harness（CPU/延遲/漏抓率） | M0 | Opus 4.8 | ✅ | 14 |
 | 18 | 🔒 M0 真機驗收（V1 vs V2 對照） | M0 | — | ⬜ | 14,15,16,17 |
-| 19 | Tile 狀態機（COLD/WARM/HOT/DYNAMIC） | M1 | Sonnet 5 / Opus 審 | ⬜ | 12,13 |
-| 20 | DYNAMIC 週期性偵測 | M1 | Opus 4.8 | ⬜ | 19 |
-| 21 | 每 app override 清單 | M1 | Sonnet 5 | ⬜ | 19 |
-| 22 | OCR/持久化節流串接 | M1 | Sonnet 5 | ⬜ | 19 |
-| 23 | CaptureEngine 全狀態機整合 | M1 | Sonnet 5 | ⬜ | 14,19 |
+| 19 | Tile 狀態機（COLD/WARM/HOT/DYNAMIC） | M1 | Opus 4.8 | ✅ | 12,13 |
+| 20 | DYNAMIC 週期性偵測 | M1 | Opus 4.8 | ✅ | 19 |
+| 21 | 每 app override 清單 | M1 | Opus 4.8 | ✅ | 19 |
+| 22 | OCR/持久化節流串接 | M1 | Opus 4.8 | ✅ | 19 |
+| 23 | CaptureEngine 全狀態機整合 | M1 | Opus 4.8 | ✅ | 14,19 |
 | 24 | 🔒 M1 真機驗收（1080p 影片 CPU） | M1 | — | ⬜ | 20,21,22,23 |
 | **C. 局部 OCR + AX 文字** ||||||
 | 25 | Vision OCR ROI 映射器（+ 🔒 真 OCR） | M2 | Sonnet 5 | ⬜ | 11 |
