@@ -9,16 +9,19 @@ public struct TileFrame: FrameInfoProviding, Sendable {
     public var status: FrameStatus
     public var dirtyRects: [CGRect]
     public var contentRect: CGRect
+    public var app: String?          // 該幀前景 app（供 per-app override 判 DYNAMIC）
     public var hashes: [UInt64]
     public var timestamp: Date
     public init(status: FrameStatus = .complete,
                 dirtyRects: [CGRect] = [],
                 contentRect: CGRect = .zero,
+                app: String? = nil,
                 hashes: [UInt64],
                 timestamp: Date) {
         self.status = status
         self.dirtyRects = dirtyRects
         self.contentRect = contentRect
+        self.app = app
         self.hashes = hashes
         self.timestamp = timestamp
     }

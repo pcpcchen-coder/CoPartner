@@ -2,23 +2,35 @@ import Foundation
 import CoreGraphics
 import CoPartnerCore
 // 設計：docs/design/v2_smart-capture-engine.md §B
-// TODO(M1): tile 冷熱狀態機 + DYNAMIC 影片降頻（§B.6，step 19 取代目前的 .warm 佔位）
 // TODO(M3): reference frame + delta 重建（§B.7）
 
 /// 擷取引擎：吃 FrameProducer 的每幀（SCK 觀測 + per-tile hash），
-/// 以 DirtyRegionResolver 融合出「這幀哪些 tile 髒了」，逐一吐成 TileEvent 串流。
+/// 以 DirtyRegionResolver 融合出「這幀哪些 tile 髒了」，經 per-tile 冷熱狀態機（§B.6）
+/// 賦予 COLD/WARM/HOT/DYNAMIC 狀態，逐一吐成 TileEvent 串流。
 /// 真幀來源（SCStream + Metal hash）為 🔒（step 18）；此處管線用假來源即可 CI 全測。
 public actor CaptureEngine {
     public let grid: TileGrid
+    public private(set) var overrides: CaptureOverrides
     private let resolver: DirtyRegionResolver
+    private let stateConfig: TileStateMachine.Config
     private var previousHashes: [UInt64]?
+    private var tileStates: [TileXY: TileStateMachine] = [:]
+    private var tilePeriodicity: [TileXY: PeriodicityDetector] = [:]
     private var task: Task<Void, Never>?
     private var continuation: AsyncStream<TileEvent>.Continuation?
 
-    public init(grid: TileGrid, thresholds: ChangeThresholds = ChangeThresholds()) {
+    public init(grid: TileGrid,
+                thresholds: ChangeThresholds = ChangeThresholds(),
+                overrides: CaptureOverrides = CaptureOverrides(),
+                stateConfig: TileStateMachine.Config = .init()) {
         self.grid = grid
         self.resolver = DirtyRegionResolver(grid: grid, thresholds: thresholds)
+        self.overrides = overrides
+        self.stateConfig = stateConfig
     }
+
+    /// 更新 per-app override（如把某 app 標為 neverDynamic）。
+    public func setOverrides(_ overrides: CaptureOverrides) { self.overrides = overrides }
 
     /// 開始消費幀來源，回傳 dirty-tile 事件串流。stop() 或來源結束時串流 finish。
     public func start(from producer: FrameProducer) -> AsyncStream<TileEvent> {
@@ -40,20 +52,52 @@ public actor CaptureEngine {
     // MARK: - 內部
 
     private func process(_ frame: TileFrame) {
+        let previous = previousHashes
         let dirty: Set<TileXY>
-        if let previous = previousHashes {
+        if let previous {
             dirty = resolver.resolve(frame, oldHashes: previous, newHashes: frame.hashes)
         } else {
             dirty = resolver.tiles(forDirtyRects: frame.dirtyRects)   // 首幀無前一幀可比 → 只採 dirtyRects
         }
-        previousHashes = frame.hashes
+        let allowDynamic = overrides.allowsDynamic(app: frame.app ?? "")
+
         for tile in dirty {
             let index = tile.y * grid.cols + tile.x
+            let magnitude = changeMagnitude(at: index, previous: previous, current: frame.hashes)
+            var periodicity = tilePeriodicity[tile] ?? PeriodicityDetector()
+            let periodic = periodicity.record(frame.timestamp)
+            tilePeriodicity[tile] = periodicity
+            var machine = tileStates[tile] ?? TileStateMachine(config: stateConfig)
+            let state = machine.update(change: magnitude, at: frame.timestamp,
+                                       periodic: periodic && allowDynamic, hasAXText: false)
+            tileStates[tile] = machine
             let dhash = frame.hashes.indices.contains(index) ? frame.hashes[index] : 0
-            continuation?.yield(TileEvent(tileX: tile.x, tileY: tile.y,
-                                          state: .warm,          // 佔位；真冷熱狀態機於 step 19
+            continuation?.yield(TileEvent(tileX: tile.x, tileY: tile.y, state: state,
                                           dhash: dhash, timestamp: frame.timestamp))
         }
+
+        // 冷卻未變動的已追蹤 tile；轉冷即移除（bounded 記憶體）。
+        for tile in Array(tileStates.keys) where !dirty.contains(tile) {
+            var machine = tileStates[tile]!
+            _ = machine.update(change: .none, at: frame.timestamp, periodic: false, hasAXText: false)
+            if machine.state == .cold {
+                tileStates[tile] = nil
+                tilePeriodicity[tile] = nil
+            } else {
+                tileStates[tile] = machine
+            }
+        }
+        previousHashes = frame.hashes
+    }
+
+    /// 某 tile 這幀的變動幅度。首幀 / 索引缺 → large；在 dirty set 但 hash 未變（rect 觸發）→ small。
+    private func changeMagnitude(at index: Int, previous: [UInt64]?, current: [UInt64]) -> ChangeMagnitude {
+        guard let previous, previous.indices.contains(index), current.indices.contains(index) else {
+            return .large
+        }
+        let magnitude = TileHashDiff.classify(old: previous[index], new: current[index],
+                                              thresholds: resolver.thresholds)
+        return magnitude == .none ? .small : magnitude
     }
 
     private func finish() {
@@ -67,6 +111,8 @@ public actor CaptureEngine {
         continuation?.finish()
         continuation = nil
         previousHashes = nil
+        tileStates.removeAll()
+        tilePeriodicity.removeAll()
     }
 }
 
