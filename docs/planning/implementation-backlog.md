@@ -66,9 +66,9 @@
 | 8 | 即時事件日誌 view-model + 接進 menu bar | 應用層 | Sonnet 5 | ✅ | 3,4,6,7 |
 | 9 | 緊急停止（⌃⌥⌘.）+ 觀察開關（⌃⌥⌘O）真接線 | 應用層 | Opus 4.8 | ✅ | 8 |
 | 10 | 🔒 可跑骨架 dogfood 驗收（操作時間機器） | M2.5 | — | ✅ 真機通過 | 8,9 |
-| 10.5 | 使用者可設定熱鍵（KeyboardShortcuts.Recorder 設定視窗）+ 放大操作劇本區 | 應用層 | Sonnet 5 | ✅ 編譯綠燈（真機待確認） | 9,10 |
+| 10.5 | 使用者可設定熱鍵（KeyboardShortcuts.Recorder 設定視窗）+ 放大操作劇本區 | 應用層 | Sonnet 5 | ✅ 真機通過 | 9,10 |
 | **B. 智慧擷取引擎（把螢幕視覺疊上會跑的東西）** ||||||
-| 11 | Tile 座標與幾何工具 | M0 | Sonnet 5 | ⬜ | — |
+| 11 | Tile 座標與幾何工具 | M0 | Sonnet 5 | ✅ | — |
 | 12 | Metal dHash 差異比對邏輯 + 🔒 shader 骨架 | M0 | Sonnet 5 /🔮Fable(shader) | ⬜ | 11 |
 | 13 | SCStream dirtyRects 解析與可靠性防禦 | M0 | Opus 4.8 | ⬜ | 11,12 |
 | 14 | ScreenCaptureSource 膠水 + CaptureEngine 串接 | M0 | Sonnet 5 | ⬜ | 2,13 |
