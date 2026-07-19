@@ -121,4 +121,10 @@ public actor AttentionModel {
         default:         return (0,   0.5, 0.2) // COLD：靜置 → 周邊心跳
         }
     }
+
+    /// 依當前能量回傳三層擷取金字塔（§B.5：焦點 / 周邊 / 概覽）。
+    public func capturePyramid(now: Date = Date()) -> CapturePyramid {
+        decay(now: now)
+        return CapturePyramid.forEnergy(energy)
+    }
 }
