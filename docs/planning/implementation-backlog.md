@@ -70,7 +70,7 @@
 | **B. 智慧擷取引擎（把螢幕視覺疊上會跑的東西）** ||||||
 | 11 | Tile 座標與幾何工具 | M0 | Sonnet 5 | ✅ | — |
 | 12 | Metal dHash 差異比對邏輯 + 🔒 shader 骨架 | M0 | Fable 5（全步） | ✅ | 11 |
-| 13 | SCStream dirtyRects 解析與可靠性防禦 | M0 | Opus 4.8 | ⬜ | 11,12 |
+| 13 | SCStream dirtyRects 解析與可靠性防禦 | M0 | Opus 4.8 | ✅ | 11,12 |
 | 14 | ScreenCaptureSource 膠水 + CaptureEngine 串接 | M0 | Sonnet 5 | ⬜ | 2,13 |
 | 15 | 多解析度金字塔參數 | M0 | Sonnet 5 | ⬜ | 2 |
 | 16 | 擷取接進 app（視覺脈絡疊加事件日誌） | 應用層 | Sonnet 5 | ⬜ | 8,14 |
