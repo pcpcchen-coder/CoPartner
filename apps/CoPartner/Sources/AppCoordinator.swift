@@ -187,10 +187,15 @@ final class AppCoordinator: ObservableObject {
         captureActivity = CaptureActivity()
         captureTask?.cancel()
         captureTask = Task { [weak self] in
+            var lastPush = Date.distantPast
             for await event in events {
                 guard let self else { return }
                 self.captureActivity.record(event)
-                self.captureSummary = self.captureActivity.summary
+                let now = Date()
+                if now.timeIntervalSince(lastPush) >= 0.25 {   // 選單摘要最多 ~4Hz，避免每 tile 都刷 UI
+                    self.captureSummary = self.captureActivity.summary
+                    lastPush = now
+                }
             }
         }
     }
