@@ -2,16 +2,72 @@ import Foundation
 import CoreGraphics
 import CoPartnerCore
 // 設計：docs/design/v2_smart-capture-engine.md §B
-// TODO(M0): SCStream + SCStreamFrameInfo.dirtyRects 解析（§B.1）
-// TODO(M0): Metal compute shader per-tile dHash（§B.2，shader 放 Resources/TileHash.metal）
-// TODO(M0): CGEventTap 驅動 AttentionModel（§B.3）
-// TODO(M1): tile 冷熱狀態機 + DYNAMIC 影片降頻（§B.6）
+// TODO(M1): tile 冷熱狀態機 + DYNAMIC 影片降頻（§B.6，step 19 取代目前的 .warm 佔位）
 // TODO(M3): reference frame + delta 重建（§B.7）
 
+/// 擷取引擎：吃 FrameProducer 的每幀（SCK 觀測 + per-tile hash），
+/// 以 DirtyRegionResolver 融合出「這幀哪些 tile 髒了」，逐一吐成 TileEvent 串流。
+/// 真幀來源（SCStream + Metal hash）為 🔒（step 18）；此處管線用假來源即可 CI 全測。
 public actor CaptureEngine {
-    public init() {}
-    public func start() async throws { /* TODO */ }
-    public func stop() async { /* TODO */ }
+    public let grid: TileGrid
+    private let resolver: DirtyRegionResolver
+    private var previousHashes: [UInt64]?
+    private var task: Task<Void, Never>?
+    private var continuation: AsyncStream<TileEvent>.Continuation?
+
+    public init(grid: TileGrid, thresholds: ChangeThresholds = ChangeThresholds()) {
+        self.grid = grid
+        self.resolver = DirtyRegionResolver(grid: grid, thresholds: thresholds)
+    }
+
+    /// 開始消費幀來源，回傳 dirty-tile 事件串流。stop() 或來源結束時串流 finish。
+    public func start(from producer: FrameProducer) -> AsyncStream<TileEvent> {
+        stopInternal()                       // 重入保護：先收掉上一輪
+        let (stream, continuation) = AsyncStream<TileEvent>.makeStream()
+        self.continuation = continuation
+        self.previousHashes = nil
+        task = Task { [weak self] in
+            for await frame in producer.frames() {
+                await self?.process(frame)
+            }
+            await self?.finish()             // 來源自然結束 → 收尾
+        }
+        return stream
+    }
+
+    public func stop() { stopInternal() }
+
+    // MARK: - 內部
+
+    private func process(_ frame: TileFrame) {
+        let dirty: Set<TileXY>
+        if let previous = previousHashes {
+            dirty = resolver.resolve(frame, oldHashes: previous, newHashes: frame.hashes)
+        } else {
+            dirty = resolver.tiles(forDirtyRects: frame.dirtyRects)   // 首幀無前一幀可比 → 只採 dirtyRects
+        }
+        previousHashes = frame.hashes
+        for tile in dirty {
+            let index = tile.y * grid.cols + tile.x
+            let dhash = frame.hashes.indices.contains(index) ? frame.hashes[index] : 0
+            continuation?.yield(TileEvent(tileX: tile.x, tileY: tile.y,
+                                          state: .warm,          // 佔位；真冷熱狀態機於 step 19
+                                          dhash: dhash, timestamp: frame.timestamp))
+        }
+    }
+
+    private func finish() {
+        continuation?.finish()
+        continuation = nil
+    }
+
+    private func stopInternal() {
+        task?.cancel()
+        task = nil
+        continuation?.finish()
+        continuation = nil
+        previousHashes = nil
+    }
 }
 
 /// 事件加權的注意力模型（ADR-0006 / §B.3.1）。
