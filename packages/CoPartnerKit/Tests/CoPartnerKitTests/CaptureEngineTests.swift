@@ -29,7 +29,7 @@ final class CaptureEngineTests: XCTestCase {
     func testEmitsEventForHashChangedTile() async {
         let engine = CaptureEngine(grid: grid)
         let frame1 = TileFrame(hashes: [10, 20, 30, 40], timestamp: t0)                    // baseline
-        let frame2 = TileFrame(hashes: [10, 20, 30, 40 ^ 0xFF], timestamp: t0.addingTimeInterval(1)) // tile 3 變
+        let frame2 = TileFrame(hashes: [10, 20, 30, 999], timestamp: t0.addingTimeInterval(1)) // tile 3 變
         let stream = await engine.start(from: FakeProducer(framesToYield: [frame1, frame2]))
 
         var events: [TileEvent] = []
@@ -38,7 +38,7 @@ final class CaptureEngineTests: XCTestCase {
         XCTAssertEqual(events.count, 1)                       // 首幀 baseline 不吐；第二幀一個變動
         XCTAssertEqual(events[0].tileX, 1)                    // index 3 → (1,1)
         XCTAssertEqual(events[0].tileY, 1)
-        XCTAssertEqual(events[0].dhash, 40 ^ 0xFF)
+        XCTAssertEqual(events[0].dhash, 999)
         XCTAssertEqual(events[0].state, .warm)
     }
 
