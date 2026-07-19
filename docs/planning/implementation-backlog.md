@@ -69,7 +69,7 @@
 | 10.5 | 使用者可設定熱鍵（KeyboardShortcuts.Recorder 設定視窗）+ 放大操作劇本區 | 應用層 | Sonnet 5 | ✅ 真機通過 | 9,10 |
 | **B. 智慧擷取引擎（把螢幕視覺疊上會跑的東西）** ||||||
 | 11 | Tile 座標與幾何工具 | M0 | Sonnet 5 | ✅ | — |
-| 12 | Metal dHash 差異比對邏輯 + 🔒 shader 骨架 | M0 | Sonnet 5 /🔮Fable(shader) | ⬜ | 11 |
+| 12 | Metal dHash 差異比對邏輯 + 🔒 shader 骨架 | M0 | Fable 5（全步） | ✅ | 11 |
 | 13 | SCStream dirtyRects 解析與可靠性防禦 | M0 | Opus 4.8 | ⬜ | 11,12 |
 | 14 | ScreenCaptureSource 膠水 + CaptureEngine 串接 | M0 | Sonnet 5 | ⬜ | 2,13 |
 | 15 | 多解析度金字塔參數 | M0 | Sonnet 5 | ⬜ | 2 |
@@ -213,9 +213,9 @@
 - **DoD**：✅ CI 綠燈 ・ **模型**：Sonnet 5
 
 #### Step 12 — Metal dHash 差異比對邏輯 + 🔒 shader 骨架
-- **新增檔案**：`Sources/CaptureEngine/TileHashDiff.swift`（`hammingDistance`、`enum ChangeMagnitude {none,small,large}`、`classify(distance:thresholds:)`）+ 🔒 `Sources/CaptureEngine/Resources/TileHash.metal`（per-threadgroup uint64，無法 CI 跑）。
-- **新增測試**（`TileHashDiffTests.swift`）：`testIdenticalHashesZeroDistance`、`testHammingDistanceKnownBitPatterns`、`testSmallDistanceIsCursorResidue`、`testLargeDistanceIsRealChange`、`testClassifyThresholdBoundaries`。
-- **DoD**：Swift ✅ CI；`.metal` 🔒（Step 18 驗）・ **模型**：Sonnet 5 寫 Swift；`.metal` 無先例可抄、無法 CI 迭代除錯，**建議 Fable 5** 起草。
+- **交付（✅ 完成，Fable 5 全步執行）**：`TileHashDiff.swift`（hammingDistance / ChangeMagnitude{none,small,large} / ChangeThresholds smallMaxBits=2，8 測試）+ `Resources/TileHash.metal`（9×8 亮度格 dHash；一 threadgroup 一 tile、單 writer 零 atomics；防 uint underflow 與 divergent barrier）+ `TileHashComputer.swift`（🔒 host dispatcher，dispatch 契約以代碼固定）。
+- **實作發現**：(1) SPM/Xcode 會自動編譯 target 內 `.metal` → **CI 其實能把關 shader 語法/型別**，比原估「完全驗不到」好；真機只剩 hash 正確性+效能（step 18）。(2) `Bundle.module` 需 Package.swift 宣告 `resources:[.process("Resources")]` 才會合成——純 swift build 首推曾紅一次，已修（cbb83a7）。
+- **DoD**：Swift + `.metal` 編譯 ✅ CI；hash 正確性/效能 🔒（Step 18 驗）
 
 #### Step 13 — SCStream dirtyRects 解析與可靠性防禦
 - **目標**：對抗 §B.1 已知陷阱（status 常回 idle、dirtyRects 可能空、Sequoia 15.6.1 contentRect X=48 bug）。protocol 抽象 SCK，Metal hash 永遠當 ground truth。
