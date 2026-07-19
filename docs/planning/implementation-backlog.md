@@ -75,7 +75,7 @@
 | 15 | 多解析度金字塔參數 | M0 | Sonnet 5 | ✅ | 2 |
 | 16 | 擷取接進 app（視覺脈絡疊加事件日誌） | 應用層 | Sonnet 5 | ✅ 協調邏輯（真擷取 🔒 step 18） | 8,14 |
 | 17 | 量測 harness（CPU/延遲/漏抓率） | M0 | Opus 4.8 | ✅ | 14 |
-| 18 | 🔒 M0 真機驗收（V1 vs V2 對照） | M0 | — | ⬜ | 14,15,16,17 |
+| 18 | 🔒 M0 真機驗收（V1 vs V2 對照） | M0 | — | 🔒 膠水就緒，待你真機（step18-dogfood.md） | 14,15,16,17 |
 | 19 | Tile 狀態機（COLD/WARM/HOT/DYNAMIC） | M1 | Opus 4.8 | ✅ | 12,13 |
 | 20 | DYNAMIC 週期性偵測 | M1 | Opus 4.8 | ✅ | 19 |
 | 21 | 每 app override 清單 | M1 | Opus 4.8 | ✅ | 19 |
