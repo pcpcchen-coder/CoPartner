@@ -9,6 +9,9 @@ struct MenuBarContentView: View {
             Text(coordinator.lastStepSummary)
                 .font(.caption).foregroundStyle(.secondary)
                 .lineLimit(2)
+            Text(coordinator.captureSummary)
+                .font(.caption2).foregroundStyle(.tertiary)
+                .lineLimit(1)
             Divider()
 
             // 即時操作劇本（最新在上）——「操作時間機器」的畫面。

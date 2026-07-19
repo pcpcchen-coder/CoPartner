@@ -18,6 +18,7 @@ final class AppCoordinator: ObservableObject {
     @Published private var session = CaptureSessionState()
     @Published var lastStepSummary: String = "尚未開始觀察"
     @Published private(set) var recentLines: [String] = []
+    @Published private(set) var captureSummary: String = "螢幕擷取：待真機啟用（step 18）"
 
     var isIdle: Bool { session.mode == .idle }
     var statusIcon: String {
@@ -34,6 +35,8 @@ final class AppCoordinator: ObservableObject {
     private var inputTap: InputEventTap?
     private var workspaceObserver: NSObjectProtocol?
     private var streamTask: Task<Void, Never>?
+    private var captureActivity = CaptureActivity()
+    private var captureTask: Task<Void, Never>?
 
     init() { registerHotkeys() }
 
@@ -131,6 +134,20 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
+    /// 消費 CaptureEngine 的 dirty-tile 事件流 → 更新選單擷取摘要（協調邏輯；CaptureActivity 已測）。
+    /// 真擷取來源 SCKFrameProducer（SCStream + Metal）於 step 18 真機接上，屆時由此方法點亮。
+    func consumeCaptureEvents(_ events: AsyncStream<TileEvent>) {
+        captureActivity = CaptureActivity()
+        captureTask?.cancel()
+        captureTask = Task { [weak self] in
+            for await event in events {
+                guard let self else { return }
+                self.captureActivity.record(event)
+                self.captureSummary = self.captureActivity.summary
+            }
+        }
+    }
+
     private func teardownPipeline() {
         inputTap?.stop()
         inputTap = nil
@@ -140,6 +157,9 @@ final class AppCoordinator: ObservableObject {
         }
         streamTask?.cancel()
         streamTask = nil
+        captureTask?.cancel()
+        captureTask = nil
+        captureSummary = "螢幕擷取：待真機啟用（step 18）"
         let dying = feed
         Task { await dying.stop() }
     }
