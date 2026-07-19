@@ -31,9 +31,11 @@ final class OCRRegionMapperTests: XCTestCase {
     func testBoundingROIUnionOfTiles() {
         let grid = TileGrid(width: 256, height: 256, tileSize: 128)   // 2×2
         // (0,0)+(1,1) 外接框覆蓋整個 256×256 → 正規化全螢幕
-        let roi = OCRRegionMapper.boundingROI(forTiles: [TileXY(x: 0, y: 0), TileXY(x: 1, y: 1)], grid: grid)
-        XCTAssertEqual(roi?.width, 1, accuracy: 1e-9)
-        XCTAssertEqual(roi?.height, 1, accuracy: 1e-9)
+        guard let roi = OCRRegionMapper.boundingROI(forTiles: [TileXY(x: 0, y: 0), TileXY(x: 1, y: 1)], grid: grid) else {
+            return XCTFail("有 tile 應算出 ROI")
+        }
+        XCTAssertEqual(roi.width, 1, accuracy: 1e-9)
+        XCTAssertEqual(roi.height, 1, accuracy: 1e-9)
     }
 
     func testEmptyTilesReturnsNil() {
