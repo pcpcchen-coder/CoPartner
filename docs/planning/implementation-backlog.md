@@ -84,10 +84,10 @@
 | 23.5 | 🔧 擷取 CPU 優化（只 hash dirty tile + async GPU + 自適應幀率）| M1 | Opus/Fable | ⬜ 延後（真機發現）| 18,23 |
 | 24 | 🔒 M1 真機驗收（1080p 影片 CPU） | M1 | — | ⬜ | 20,21,22,23 |
 | **C. 局部 OCR + AX 文字** ||||||
-| 25 | Vision OCR ROI 映射器（+ 🔒 真 OCR） | M2 | Sonnet 5 | ⬜ | 11 |
-| 26 | AX-text-first fallback 邏輯 | M2 | Sonnet 5 | ⬜ | 4 |
-| 27 | sidecar `/ocr` 接線（ocrmac） | M2 | Sonnet 5 | ⬜ | — |
-| 28 | CI 補 Python pytest job | 基建 | Sonnet 5 | ⬜ | 27 |
+| 25 | Vision OCR ROI 映射器（+ 🔒 真 OCR） | M2 | Sonnet 5 | ✅（ROI；真 OCR 品質併 29 🔒）| 11 |
+| 26 | AX-text-first fallback 邏輯 | M2 | Sonnet 5 | ✅ | 4 |
+| 27 | sidecar `/ocr` 接線（ocrmac） | M2 | Sonnet 5 | ✅（接線；真 ocrmac 品質 🔒）| — |
+| 28 | CI 補 Python pytest job | 基建 | Sonnet 5 | ✅ | 27 |
 | 29 | 🔒 M2 真機驗收（OCR 吞吐 ≤ V1 20%） | M2 | — | ⬜ | 25,26,27 |
 | **D. 記憶系統（rolling-wave）** ||||||
 | 30 | 【展開】D 階段詳細 step 規劃 | M3 | Opus 4.8 | ⬜ | 18,24 |
@@ -282,13 +282,13 @@
 
 延續 §B.8。（原 M2.5 的 L0 已在 Phase A 完成。）
 
-#### Step 25 — Vision OCR ROI 映射器（+ 🔒 真 OCR）
+#### Step 25 — Vision OCR ROI 映射器（+ 🔒 真 OCR）✅
 - 可測：dirty tiles → normalized ROI rect。新增 `Sources/CaptureEngine/OCRRegionMapper.swift` + 🔒 真 `VNRecognizeTextRequest`（`.accurate`、zh-Hant+en）。**DoD**：ROI ✅ CI；辨識品質 🔒 ・ **模型**：Sonnet 5
 
-#### Step 26 — AX-text-first fallback 邏輯
+#### Step 26 — AX-text-first fallback 邏輯 ✅
 - 「能拿 AX 文字的 tile 不跑 OCR」決策，假 AX text provider 測。**DoD**：✅ CI ・ **模型**：Sonnet 5
 
-#### Step 27 — sidecar `/ocr` 接線（ocrmac）
+#### Step 27 — sidecar `/ocr` 接線（ocrmac）✅
 - 把 `sidecar/.../server.py` 已 stub 的 `/ocr` 接上 `ocrmac`。**DoD**：邏輯待 Step 28 pytest 驗；辨識品質 🔒 ・ **模型**：Sonnet 5
 
 #### Step 28 — CI 補 Python pytest job ✅
