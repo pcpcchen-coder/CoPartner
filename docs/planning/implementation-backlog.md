@@ -65,7 +65,8 @@
 | 7 | L0 PII 遮罩（貼上/剪下前置遮罩） | M2.5 | Opus 4.8 | ✅ | 5 |
 | 8 | 即時事件日誌 view-model + 接進 menu bar | 應用層 | Sonnet 5 | ✅ | 3,4,6,7 |
 | 9 | 緊急停止（⌃⌥⌘.）+ 觀察開關（⌃⌥⌘O）真接線 | 應用層 | Opus 4.8 | ✅ | 8 |
-| 10 | 🔒 可跑骨架 dogfood 驗收（操作時間機器） | M2.5 | — | 🔒 待你真機 | 8,9 |
+| 10 | 🔒 可跑骨架 dogfood 驗收（操作時間機器） | M2.5 | — | ✅ 真機通過 | 8,9 |
+| 10.5 | 使用者可設定熱鍵（KeyboardShortcuts.Recorder 設定視窗） | 應用層 | Sonnet 5 | ⬜ | 9,10 |
 | **B. 智慧擷取引擎（把螢幕視覺疊上會跑的東西）** ||||||
 | 11 | Tile 座標與幾何工具 | M0 | Sonnet 5 | ⬜ | — |
 | 12 | Metal dHash 差異比對邏輯 + 🔒 shader 骨架 | M0 | Sonnet 5 /🔮Fable(shader) | ⬜ | 11 |
@@ -189,9 +190,16 @@
 - **DoD**：狀態機邏輯 ✅ CI 綠燈；全域熱鍵實際觸發 🔒
 - **建議模型**：**Opus 4.8**（kill-switch 是「接手你電腦的工具」最重要的安全控制，停止路徑要一次對）
 
-#### Step 10 — 🔒 可跑骨架 dogfood 驗收（操作時間機器）
-- **你在你的 Mac 上執行**：`scripts/bootstrap.sh`（產生 Xcode 專案）→ Xcode 跑 app → 授權 **Input Monitoring + Accessibility**（這階段**還不需要 Screen Recording**）→ 開啟觀察 → 操作一段 → 確認事件日誌視窗即時、正確地把你的操作寫成劇本；⌃⌥⌘. 能立即停止。回報體感與任何漏記/誤記。
-- **對應 roadmap 驗收**：M2.5「劇本完整重現一段操作（時間機器）」。**這是第一個 dogfoodable 里程碑**，達成後你就有一個每天能開著用的東西，後面所有功能都疊在它上面。
+#### Step 10 — ✅ 可跑骨架 dogfood 驗收（操作時間機器）— 真機通過（2026-07-03）
+- **結果**：在真機（非標準鍵盤的 Mac mini）上通過。眼睛圖示、開始觀察、FOCUS/SWITCH（免權限）皆正常；授權輸入監控+輔助使用後 TYPE（合併成詞）/ SCROLL 皆正確；**假卡號→`[貼上疑似卡號，已遮罩]`、密碼欄不外洩實際字元的隱私遮罩在真機生效**（Phase A 最關鍵驗證）；CPU ~5%（純事件追蹤，尚無螢幕擷取）；無 crash。
+- **發現**：固定熱鍵 ⌃⌥⌘. / ⌃⌥⌘O 在非標準鍵盤上不好按 → 需可設定熱鍵（Step 10.5）。
+- **對應 roadmap 驗收**：M2.5「劇本完整重現一段操作（時間機器）」✅。
+
+#### Step 10.5 — 使用者可設定熱鍵（KeyboardShortcuts.Recorder 設定視窗）
+- **背景**：dogfood 發現固定熱鍵不通用（非標準鍵盤）。`KeyboardShortcuts` 內建 Recorder UI，讓使用者自錄熱鍵並自動持久化（UserDefaults），不需自造。
+- **修改/新增檔案**：新增 `apps/CoPartner/Sources/SettingsView.swift`（兩個 `KeyboardShortcuts.Recorder(for: .toggleObserve)` / `.emergencyStop`）；`CoPartnerApp.swift` 加 `Settings { SettingsView() }` scene（⌘, 開啟）；`MenuBarContentView` 加「設定…」按鈕（`SettingsLink` 或 `NSApp.sendAction(Selector(("showSettingsWindow:")))`）。預設值沿用 step 9 的 ⌃⌥⌘O / ⌃⌥⌘.，使用者可覆蓋。
+- **DoD**：主要為 🔒 app 膠水（KeyboardShortcuts 自理持久化，純邏輯近乎為零）——app job 編譯 ✅ + 真機驗收「改了熱鍵會生效且重開仍記得」。
+- **建議模型**：Sonnet 5（標準 SwiftUI + 既有庫）
 
 ---
 

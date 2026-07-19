@@ -85,9 +85,24 @@ open apps/CoPartner/CoPartner.xcodeproj
 
 **請回報：** 劇本有沒有跑出來（FOCUS/SWITCH/TYPE/SCROLL/PASTE 各是否正確）？密碼欄/假卡號有沒有正確遮罩？熱鍵有沒有觸發？有沒有 crash？CPU（活動監視器）大概多少？打字延遲體感？這些會決定 Phase B 起點與是否需先調 §2 其餘技術債（視窗欄近似、AXObserver）。
 
-## 5. 下一步
+## 5. Step 10 dogfood 結果（2026-07-03，真機通過 ✅）
 
-- **若 dogfood 順利**：進 **Phase B（step 11 起）** —— tile 幾何 / Metal dHash / SCStream dirtyRects，把螢幕視覺擷取疊到這台已經會跑的時間機器上。
-- **若 dogfood 發現骨架內容太少不夠用**：先插一小段「輸入驅動的 L0 內容充實」（補 §2 洞 1 的 TYPE/PASTE/SCROLL 真接線）再進 Phase B。
+在 Mac mini（非標準鍵盤）上實跑：
 
-依你 dogfood 的回報決定。
+- ✅ menu bar 眼睛圖示、開始觀察、FOCUS/SWITCH（免權限）正常。
+- ✅ 授權輸入監控+輔助使用後：TYPE 逐字合併成詞、SCROLL 皆正確。
+- ✅ **隱私遮罩真機生效（Phase A 最關鍵）**：假卡號 → `[貼上疑似卡號，已遮罩]`；密碼欄不外洩實際字元。ADR-0005 的隱私承諾在真硬體上守住。
+- ✅ CPU ~5%（純事件追蹤、尚無螢幕擷取）；無 crash。
+- ⚠️ 固定熱鍵 ⌃⌥⌘. / ⌃⌥⌘O 在非標準鍵盤上不好按 → 排入 **Step 10.5 可設定熱鍵**。
+
+**新增/更新的後續債（依真機回饋）：**
+
+1. **Step 10.5 可設定熱鍵**：`KeyboardShortcuts.Recorder` 設定視窗（見 backlog）。近期可做。
+2. **每次擊鍵都讀 AX 焦點**：`handleInput` 對每個輸入事件都呼叫 `focusedElement()`（多次 AX 呼叫）+ `frontmostApplication`，可能是 5% CPU 的主因。Phase B 前可加節流/快取（同一焦點 N ms 內不重讀）。
+3. （既有）視窗欄用 AX value 近似、AXObserver 未做——非阻塞，見 §2。
+
+## 6. 下一步（三選一，你決定）
+
+- **Step 10.5**：先把可設定熱鍵做掉（小、直接解你痛點）。
+- **Phase B（step 11 起）**：tile 幾何 / Metal dHash / SCStream，把螢幕視覺擷取疊到這台會跑的時間機器上（真機依賴最重的一段）。
+- **小債優先**：先做焦點讀取節流（後續債 2），把 CPU 壓下來再進 Phase B。
