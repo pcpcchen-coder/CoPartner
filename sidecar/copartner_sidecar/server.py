@@ -30,11 +30,14 @@ class OCRRequest(BaseModel):
 
 def _ocrmac_backend(image_path: str, languages: list[str]) -> list[dict]:
     """真 OCR：macOS Vision（經 ocrmac）。延遲 import 避免非 mac / CI 環境載入失敗。"""
-    from ocrmac import ocrmac  # noqa: PLC0415
+    from ocrmac import ocrmac
 
     annotations = ocrmac.OCR(image_path, language_preference=languages).recognize()
     # ocrmac 回 (text, confidence, bbox) tuples → 正規化 dict。
-    return [{"text": text, "confidence": conf, "bbox": list(bbox)} for (text, conf, bbox) in annotations]
+    return [
+        {"text": text, "confidence": conf, "bbox": list(bbox)}
+        for (text, conf, bbox) in annotations
+    ]
 
 
 # 可注入的 OCR 後端；測試以 fake 取代，真機用 ocrmac。
