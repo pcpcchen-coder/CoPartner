@@ -73,7 +73,7 @@
 | 13 | SCStream dirtyRects 解析與可靠性防禦 | M0 | Opus 4.8 | ✅ | 11,12 |
 | 14 | ScreenCaptureSource 膠水 + CaptureEngine 串接 | M0 | Sonnet 5 | ✅ | 2,13 |
 | 15 | 多解析度金字塔參數 | M0 | Sonnet 5 | ✅ | 2 |
-| 16 | 擷取接進 app（視覺脈絡疊加事件日誌） | 應用層 | Sonnet 5 | ⬜ | 8,14 |
+| 16 | 擷取接進 app（視覺脈絡疊加事件日誌） | 應用層 | Sonnet 5 | ✅ 協調邏輯（真擷取 🔒 step 18） | 8,14 |
 | 17 | 量測 harness（CPU/延遲/漏抓率） | M0 | Sonnet 5 | ⬜ | 14 |
 | 18 | 🔒 M0 真機驗收（V1 vs V2 對照） | M0 | — | ⬜ | 14,15,16,17 |
 | 19 | Tile 狀態機（COLD/WARM/HOT/DYNAMIC） | M1 | Sonnet 5 / Opus 審 | ⬜ | 12,13 |
@@ -242,7 +242,8 @@
 - **DoD**：工具碼 ✅ CI 可編譯；量測結果 🔒 ・ **模型**：Sonnet 5
 
 #### Step 18 — 🔒 M0 真機驗收
-- 打包簽章 app（`scripts/permissions-check.sh` 先跑）、授權三權限、跑 harness，量 CPU%/漏抓率/延遲，產 V1 vs V2 對照數字（roadmap M0 驗收）。你在 Mac 上執行、回報。
+- **先補真擷取膠水（step 14/16 刻意延後至此，因 100% 真機驗證）**：`SCKFrameProducer`（FrameProducer 真實作）＝ `ScreenCaptureSource`（step 13）+ `TileHashComputer`（step 12）+ `CVPixelBuffer→MTLTexture`（`CVMetalTextureCache`）+ `SCShareableContent`/`SCContentFilter`/`SCStreamConfiguration` 啟動；`TileHashComputer.computeHashes(from: CVImageBuffer)` 像素→hash 橋接；`AppCoordinator.startPipeline` 建 `CaptureEngine` 並呼叫 `consumeCaptureEvents`（step 16 已備接口）。
+- **再驗收**：打包簽章 app（`scripts/permissions-check.sh` 先跑）、授權三權限（＋ Screen Recording）、跑 step 17 harness，量 CPU%/漏抓率/延遲，確認 tile 正確標髒、captureSummary 即時更新，產 V1 vs V2 對照數字（roadmap M0 驗收）。你在 Mac 上執行、回報。
 
 #### Step 19 — Tile 狀態機（COLD/WARM/HOT/DYNAMIC）
 - **目標**：純狀態轉換（吃 Step 12 的 `ChangeMagnitude` 時間序列）→ `TileEvent.State`，規則見 §B.6。
