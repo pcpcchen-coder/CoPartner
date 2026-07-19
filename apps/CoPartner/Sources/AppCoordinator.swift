@@ -3,6 +3,7 @@ import Combine
 import AppKit
 import KeyboardShortcuts
 import CoreVideo
+import CoreMedia
 @preconcurrency import ScreenCaptureKit
 import CoPartnerCore
 import CaptureEngine
@@ -41,6 +42,7 @@ final class AppCoordinator: ObservableObject {
     private var captureTask: Task<Void, Never>?
     private var captureProducer: SCKFrameProducer?
     private var captureEngine: CaptureEngine?
+    private var captureStartTask: Task<Void, Never>?
 
     init() { registerHotkeys() }
 
@@ -109,12 +111,14 @@ final class AppCoordinator: ObservableObject {
 
     /// 啟動真螢幕擷取：SCShareableContent → SCKFrameProducer → CaptureEngine → 摘要。
     /// 全程 guarded：無 Metal / 缺權限 / SCK 失敗 → 擷取關閉，事件日誌照常運作。
+    /// async 啟動期間若已停止觀察（緊急停止）→ 放棄並收掉，避免擷取在 stop 後仍存活（race）。
     private func startCapture() {
         captureSummary = "螢幕擷取：啟動中…"
-        Task { [weak self] in
+        captureStartTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let content = try await SCShareableContent.current
+                guard self.session.mode != .idle, !Task.isCancelled else { return }  // await 期間已停 → 放棄
                 guard let display = content.displays.first else {
                     self.captureSummary = "螢幕擷取：找不到顯示器"; return
                 }
@@ -125,9 +129,13 @@ final class AppCoordinator: ObservableObject {
                 config.width = display.width
                 config.height = display.height
                 config.pixelFormat = kCVPixelFormatType_32BGRA
+                config.minimumFrameInterval = CMTime(value: 1, timescale: 10)  // 上限 10fps，控 CPU
                 config.showsCursor = true
                 let filter = SCContentFilter(display: display, excludingWindows: [])
                 try producer.start(filter: filter, configuration: config)
+                guard self.session.mode != .idle, !Task.isCancelled else {   // start 前後可能已停 → 收掉
+                    producer.stop(); await engine.stop(); return
+                }
                 let events = await engine.start(from: producer)
                 self.captureProducer = producer
                 self.captureEngine = engine
@@ -194,6 +202,8 @@ final class AppCoordinator: ObservableObject {
         }
         streamTask?.cancel()
         streamTask = nil
+        captureStartTask?.cancel()   // 中止還在 async 啟動中的擷取（防 stop 後才啟動的 race）
+        captureStartTask = nil
         captureTask?.cancel()
         captureTask = nil
         captureProducer?.stop()
