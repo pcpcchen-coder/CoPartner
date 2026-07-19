@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import CoreMedia
+import CoreVideo
 @preconcurrency import ScreenCaptureKit
 // 🔒 真機膠水：SCStream 擷取，從每幀 attachments 解出 status/dirtyRects/contentRect
 // 交給 handler（→ DirtyRegionResolver）。需 Screen Recording 權限；實際擷取與
@@ -17,7 +18,8 @@ public struct SCKFrameInfo: FrameInfoProviding, Sendable {
 }
 
 public final class ScreenCaptureSource: NSObject, SCStreamOutput {
-    public typealias Handler = @Sendable (SCKFrameInfo) -> Void
+    // 非 @Sendable：handler 在 SCK sample queue（單一序列）呼叫，可捕捉非 Sendable 的 hasher。
+    public typealias Handler = (SCKFrameInfo, CVPixelBuffer) -> Void
 
     private let handler: Handler
     private var stream: SCStream?
@@ -42,8 +44,10 @@ public final class ScreenCaptureSource: NSObject, SCStreamOutput {
 
     public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
                        of type: SCStreamOutputType) {
-        guard type == .screen, let info = Self.frameInfo(from: sampleBuffer) else { return }
-        handler(info)
+        guard type == .screen,
+              let info = Self.frameInfo(from: sampleBuffer),
+              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        handler(info, pixelBuffer)
     }
 
     /// 從 CMSampleBuffer attachments 解出 SCK 每幀資訊。

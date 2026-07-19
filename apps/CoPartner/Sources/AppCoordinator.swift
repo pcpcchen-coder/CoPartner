@@ -2,6 +2,8 @@ import SwiftUI
 import Combine
 import AppKit
 import KeyboardShortcuts
+import CoreVideo
+@preconcurrency import ScreenCaptureKit
 import CoPartnerCore
 import CaptureEngine
 import ScriptNarrator
@@ -37,6 +39,8 @@ final class AppCoordinator: ObservableObject {
     private var streamTask: Task<Void, Never>?
     private var captureActivity = CaptureActivity()
     private var captureTask: Task<Void, Never>?
+    private var captureProducer: SCKFrameProducer?
+    private var captureEngine: CaptureEngine?
 
     init() { registerHotkeys() }
 
@@ -99,6 +103,39 @@ final class AppCoordinator: ObservableObject {
         }
         _ = tap.start()
         inputTap = tap
+
+        startCapture()   // 螢幕擷取（需 Screen Recording；失敗則不影響事件日誌）
+    }
+
+    /// 啟動真螢幕擷取：SCShareableContent → SCKFrameProducer → CaptureEngine → 摘要。
+    /// 全程 guarded：無 Metal / 缺權限 / SCK 失敗 → 擷取關閉，事件日誌照常運作。
+    private func startCapture() {
+        captureSummary = "螢幕擷取：啟動中…"
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let content = try await SCShareableContent.current
+                guard let display = content.displays.first else {
+                    self.captureSummary = "螢幕擷取：找不到顯示器"; return
+                }
+                let grid = TileGrid(width: display.width, height: display.height)
+                let producer = try SCKFrameProducer(grid: grid)
+                let engine = CaptureEngine(grid: grid)
+                let config = SCStreamConfiguration()
+                config.width = display.width
+                config.height = display.height
+                config.pixelFormat = kCVPixelFormatType_32BGRA
+                config.showsCursor = true
+                let filter = SCContentFilter(display: display, excludingWindows: [])
+                try producer.start(filter: filter, configuration: config)
+                let events = await engine.start(from: producer)
+                self.captureProducer = producer
+                self.captureEngine = engine
+                self.consumeCaptureEvents(events)
+            } catch {
+                self.captureSummary = "螢幕擷取：未啟用（\(error.localizedDescription)）"
+            }
+        }
     }
 
     /// 讀一次焦點、更新 FOCUS/SWITCH，回傳目前焦點元件（供 TYPE 判斷欄位與安全性）。
@@ -159,7 +196,12 @@ final class AppCoordinator: ObservableObject {
         streamTask = nil
         captureTask?.cancel()
         captureTask = nil
-        captureSummary = "螢幕擷取：待真機啟用（step 18）"
+        captureProducer?.stop()
+        captureProducer = nil
+        let dyingEngine = captureEngine
+        captureEngine = nil
+        Task { await dyingEngine?.stop() }
+        captureSummary = "螢幕擷取：未啟用"
         let dying = feed
         Task { await dying.stop() }
     }

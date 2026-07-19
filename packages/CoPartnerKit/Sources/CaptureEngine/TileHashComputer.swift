@@ -1,5 +1,6 @@
 import Foundation
 import Metal
+import CoreVideo
 // 🔒 真機膠水：TileHash.metal 的 host 端 dispatcher。CI 只把關編譯；
 // 「hash 算得對不對 / 效能」於 M0 真機驗收（step 18）。
 // dispatch 契約以代碼固定（而非只寫在註解），與 TileHash.metal 檔頭一一對應。
@@ -24,6 +25,7 @@ public final class TileHashComputer {
     private let device: MTLDevice
     private let queue: MTLCommandQueue
     private let pipeline: MTLComputePipelineState
+    private var textureCache: CVMetalTextureCache?   // CVPixelBuffer → MTLTexture 快取（單一擷取佇列用）
 
     public init(grid: TileGrid) throws {
         guard let device = MTLCreateSystemDefaultDevice(),
@@ -65,5 +67,26 @@ public final class TileHashComputer {
 
         let pointer = buffer.contents().bindMemory(to: UInt64.self, capacity: tileCount)
         return Array(UnsafeBufferPointer(start: pointer, count: tileCount))
+    }
+
+    /// 由 SCK 幀的 CVPixelBuffer（BGRA）算 per-tile hash（經 CVMetalTextureCache 零拷貝轉 MTLTexture）。
+    /// TODO(step 18): 真機確認 retina 縮放（config pixel 尺寸 vs grid 尺寸須一致）。
+    public func computeHashes(from pixelBuffer: CVPixelBuffer) throws -> [UInt64] {
+        if textureCache == nil {
+            var cache: CVMetalTextureCache?
+            CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &cache)
+            textureCache = cache
+        }
+        guard let cache = textureCache else { return [] }
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        var cvTextureOut: CVMetalTexture?
+        let result = CVMetalTextureCacheCreateTextureFromImage(
+            kCFAllocatorDefault, cache, pixelBuffer, nil,
+            .bgra8Unorm, width, height, 0, &cvTextureOut)
+        guard result == kCVReturnSuccess,
+              let cvTexture = cvTextureOut,
+              let texture = CVMetalTextureGetTexture(cvTexture) else { return [] }
+        return try computeHashes(for: texture)
     }
 }
