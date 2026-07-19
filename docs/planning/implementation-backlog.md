@@ -272,8 +272,9 @@
 - (1) 只 hash SCK dirtyRects 命中的 tile（GPU dispatch 子集，非全螢幕）；(2) 移除同步 `waitUntilCompleted`，改 completion handler 不阻塞 sample queue；(3) 注意力驅動自適應幀率（`CapturePyramid` 已設計，idle 0.2–1fps、活動處拉高）。**建議配 Instruments 抓真熱點再動手，勿再猜。**
 - **DoD**：可測部分（dispatch 子集計算、幀率選擇）✅ CI；CPU 改善 🔒 真機 ・ **模型**：Opus 4.8（GPU/管線）
 
-#### Step 24 — 🔒 M1 真機驗收
-- 播 1080p 影片 CPU 不超 baseline；影片正確標 DYNAMIC。你在 Mac 上執行、回報。
+#### Step 24 — 🔒 M1 真機驗收（前置：step 23.5）
+- **與 23.5 綁定**：目前低幀率（2fps）下 DYNAMIC 不會觸發（週期性偵測需高於影片幀率取樣），且 UI 未顯示 tile 狀態、DYNAMIC 尚未拿來降頻。須先做 23.5（自適應幀率 + DYNAMIC 降頻 + UI 顯示狀態）。
+- 之後驗：播 1080p 影片 → 影片區正確標 DYNAMIC → CPU 因降頻不超 baseline。你在 Mac 上執行、回報。
 
 ---
 
