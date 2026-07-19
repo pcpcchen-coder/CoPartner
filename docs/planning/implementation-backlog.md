@@ -75,12 +75,13 @@
 | 15 | 多解析度金字塔參數 | M0 | Sonnet 5 | ✅ | 2 |
 | 16 | 擷取接進 app（視覺脈絡疊加事件日誌） | 應用層 | Sonnet 5 | ✅ 協調邏輯（真擷取 🔒 step 18） | 8,14 |
 | 17 | 量測 harness（CPU/延遲/漏抓率） | M0 | Opus 4.8 | ✅ | 14 |
-| 18 | 🔒 M0 真機驗收（V1 vs V2 對照） | M0 | — | 🔒 膠水就緒，待你真機（step18-dogfood.md） | 14,15,16,17 |
+| 18 | 🔒 M0 真機驗收 | M0 | — | ✅ 真機通過（管線/停止/idle 9%）| 14,15,16,17 |
 | 19 | Tile 狀態機（COLD/WARM/HOT/DYNAMIC） | M1 | Opus 4.8 | ✅ | 12,13 |
 | 20 | DYNAMIC 週期性偵測 | M1 | Opus 4.8 | ✅ | 19 |
 | 21 | 每 app override 清單 | M1 | Opus 4.8 | ✅ | 19 |
 | 22 | OCR/持久化節流串接 | M1 | Opus 4.8 | ✅ | 19 |
 | 23 | CaptureEngine 全狀態機整合 | M1 | Opus 4.8 | ✅ | 14,19 |
+| 23.5 | 🔧 擷取 CPU 優化（只 hash dirty tile + async GPU + 自適應幀率）| M1 | Opus/Fable | ⬜ 延後（真機發現）| 18,23 |
 | 24 | 🔒 M1 真機驗收（1080p 影片 CPU） | M1 | — | ⬜ | 20,21,22,23 |
 | **C. 局部 OCR + AX 文字** ||||||
 | 25 | Vision OCR ROI 映射器（+ 🔒 真 OCR） | M2 | Sonnet 5 | ⬜ | 11 |
@@ -261,6 +262,15 @@
 
 #### Step 23 — CaptureEngine 全狀態機整合
 - 把 Tier 2 換成完整 per-tile 狀態機驅動頻率/解析度。**DoD**：✅ CI（假來源）；真機 🔒 ・ **模型**：Sonnet 5
+
+#### Step 18 dogfood 結果（2026-07-19，真機通過）
+- ✅ SCStream+Metal+管線整條在真機運作（tile 座標正確跳動）；緊急停止正確（修了一個 async race）；不影響事件日誌；無 crash。
+- CPU（CoPartner 單一程序、相對單核）：idle 9% / operating 25% / video 25%（系統整體僅 ~10%，多核下屬輕載）。
+- **根因（非 bug）**：目前是「每幀抓整個螢幕、算全部 tile hash」——尚未真正 foveated。故 operating CPU 偏高屬預期。→ Step 23.5 優化。
+
+#### Step 23.5 — 🔧 擷取 CPU 優化（延後，真機發現）
+- (1) 只 hash SCK dirtyRects 命中的 tile（GPU dispatch 子集，非全螢幕）；(2) 移除同步 `waitUntilCompleted`，改 completion handler 不阻塞 sample queue；(3) 注意力驅動自適應幀率（`CapturePyramid` 已設計，idle 0.2–1fps、活動處拉高）。**建議配 Instruments 抓真熱點再動手，勿再猜。**
+- **DoD**：可測部分（dispatch 子集計算、幀率選擇）✅ CI；CPU 改善 🔒 真機 ・ **模型**：Opus 4.8（GPU/管線）
 
 #### Step 24 — 🔒 M1 真機驗收
 - 播 1080p 影片 CPU 不超 baseline；影片正確標 DYNAMIC。你在 Mac 上執行、回報。
