@@ -129,7 +129,9 @@ final class AppCoordinator: ObservableObject {
                 config.width = display.width
                 config.height = display.height
                 config.pixelFormat = kCVPixelFormatType_32BGRA
-                config.minimumFrameInterval = CMTime(value: 1, timescale: 10)  // 上限 10fps，控 CPU
+                // 暫用低固定幀率控 CPU（2fps）。真正的解是注意力驅動的自適應幀率
+                // （idle 0.2–1fps、活動處短暫拉高，見 CapturePyramid）——列為後續優化步。
+                config.minimumFrameInterval = CMTime(value: 1, timescale: 2)
                 config.showsCursor = true
                 let filter = SCContentFilter(display: display, excludingWindows: [])
                 try producer.start(filter: filter, configuration: config)
