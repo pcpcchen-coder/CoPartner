@@ -18,8 +18,8 @@ public enum PIIMasker {
         (.chinaID,     #"\b\d{17}[\dXx]\b"#),
     ]
 
-    // NSRegularExpression 不可變且執行緒安全（Apple 文件），故以 nonisolated(unsafe) 共享一份。
-    nonisolated(unsafe) private static let compiled: [(Category, NSRegularExpression)] =
+    // NSRegularExpression 不可變且執行緒安全（Sendable），編譯期共享一份即可。
+    private static let compiled: [(Category, NSRegularExpression)] =
         rawPatterns.map { ($0.0, try! NSRegularExpression(pattern: $0.1)) }
 
     /// 偵測文字中出現的 PII 類別（可能多個）。
