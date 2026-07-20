@@ -117,6 +117,12 @@ public struct RoutingSignal: Sendable {
 
 // MARK: - 雲端接手提議（V2-F / docs/design/sandbox-threat-model.md）
 
+/// 提議動作的風險分級（威脅模型 §3）。**high 在任何 policy 下都不可自動核准**（不變式 I2）。
+public enum ActionRisk: Int, Sendable, Codable, Comparable {
+    case low = 0, medium = 1, high = 2
+    public static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
+}
+
 /// 雲端模型回傳的「提議動作」。**刻意結構化、無整串 shell 字串欄位**（不變式 I4）——
 /// shell 類只有 argv，executor 以 posix_spawn 直帶 argv、不經 `sh -c`。風險分級由 step 50 判定。
 public struct ProposedAction: Sendable, Equatable, Identifiable {
@@ -138,5 +144,22 @@ public struct ProposedAction: Sendable, Equatable, Identifiable {
         self.id = id
         self.kind = kind
         self.rationale = rationale
+    }
+}
+
+extension ProposedAction.Kind {
+    /// 稽核 / HUD 顯示用的一行描述（CloudRouter 稽核與 ActionExecutor 共用）。
+    public var summary: String {
+        switch self {
+        case .screenshot: return "screenshot"
+        case let .click(x, y): return "click(\(x),\(y))"
+        case let .typeText(t): return "type(\(t.count) chars)"
+        case let .keypress(k): return "key(\(k))"
+        case let .scroll(dx, dy): return "scroll(\(dx),\(dy))"
+        case let .shell(argv): return "shell(\(argv.joined(separator: " ")))"
+        case let .readFile(p): return "readFile(\(p))"
+        case let .writeFile(p, _): return "writeFile(\(p))"
+        case let .outboundComms(k, t): return "outbound(\(k)→\(t))"
+        }
     }
 }

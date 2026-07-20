@@ -56,22 +56,11 @@ public enum ProposedActionParser {
 }
 
 /// 稽核（不變式 I9）：每個提議落一行 human-readable log（含 context_hash）。
+/// 動作描述本體在 `ProposedAction.Kind.summary`（CoPartnerCore，與 ActionExecutor 共用）。
 public enum HandoffAuditLog {
     public static func line(for action: ProposedAction, contextHash: String) -> String {
         "[handoff \(contextHash)] propose \(describe(action.kind))"
     }
 
-    static func describe(_ kind: ProposedAction.Kind) -> String {
-        switch kind {
-        case .screenshot: return "screenshot"
-        case let .click(x, y): return "click(\(x),\(y))"
-        case let .typeText(t): return "type(\(t.count) chars)"
-        case let .keypress(k): return "key(\(k))"
-        case let .scroll(dx, dy): return "scroll(\(dx),\(dy))"
-        case let .shell(argv): return "shell(\(argv.joined(separator: " ")))"
-        case let .readFile(p): return "readFile(\(p))"
-        case let .writeFile(p, _): return "writeFile(\(p))"
-        case let .outboundComms(k, t): return "outbound(\(k)→\(t))"
-        }
-    }
+    static func describe(_ kind: ProposedAction.Kind) -> String { kind.summary }
 }

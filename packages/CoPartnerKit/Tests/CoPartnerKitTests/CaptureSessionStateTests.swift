@@ -44,4 +44,20 @@ final class CaptureSessionStateTests: XCTestCase {
         s.beginIntervention()
         XCTAssertEqual(s.mode, .intervening)
     }
+
+    func testEndInterventionReturnsToObserving() {
+        var s = CaptureSessionState()
+        s.beginIntervention()
+        s.endIntervention()
+        XCTAssertEqual(s.mode, .observing)
+    }
+
+    func testEndInterventionNoopWhenNotIntervening() {
+        var s = CaptureSessionState()
+        s.endIntervention()
+        XCTAssertEqual(s.mode, .idle)
+        s.toggleObserve()
+        s.endIntervention()
+        XCTAssertEqual(s.mode, .observing)
+    }
 }
