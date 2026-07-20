@@ -99,10 +99,10 @@
 | 36 | 🔒 M3 真機驗收（8hr ≤ ~400MB） | M3 | — | ⬜ | 31–35 |
 | **E. 本地推理 + L1/L2 敘事（rolling-wave）** ||||||
 | 37 | 【展開】E 階段詳細 step 規劃 | M4 | Opus 4.8 | ✅ | 36 |
-| 38 | FoundationModels L1 Narrator 接線 | M4 | Opus 4.8 | ⬜ | 37 |
-| 39 | Availability + fallback 階梯 | M4 | Opus 4.8 | ⬜ | 38 |
-| 40 | L2 Summarizer | M4 | Sonnet 5 | ⬜ | 38 |
-| 41 | sidecar `/vlm` 接 mlx-vlm | M4 | Opus 4.8 | ⬜ | 37 |
+| 38 | FoundationModels L1 Narrator 接線 | M4 | Opus 4.8 | ✅（規則式+委派+FM 隔離；真 FM 併 42 🔒）| 37 |
+| 39 | Availability + fallback 階梯 | M4 | Opus 4.8 | ✅ | 38 |
+| 40 | L2 Summarizer | M4 | Sonnet 5 | ✅ | 38 |
+| 41 | sidecar `/vlm` 接 mlx-vlm | M4 | Opus 4.8 | ✅（接線；真 mlx 併 42 🔒）| 37 |
 | 42 | 🔒 M4 真機驗收（本地 sub-second） | M4 | — | ⬜ | 38–41 |
 | **F. 雲端 + 動作 + 接手互動（rolling-wave，第二高風險）** ||||||
 | 43 | 【展開】F 階段詳細 step + 沙箱威脅模型 | M5 | Fable 5 | ⬜ | 42 |
@@ -375,7 +375,7 @@
 | **可注入 `NarrationBackend` + 規則式保底** | Narrator 持 `any NarrationBackend`；`RuleBasedNarrator` 是階梯底、**永不回 nil** | 模型全抽 protocol 後，CI 用規則式/假 backend 驗；規則式保證「降級但不中斷」（§5） |
 | **模組落點** | 全部落 **ScriptNarrator**（測試 target 已 link）；`/vlm` 落 Python sidecar（pytest job step 28 已建） | 零依賴改動 |
 
-#### Step 38 — FoundationModels L1 Narrator 接線
+#### Step 38 — FoundationModels L1 Narrator 接線 ✅
 - **目標**（v2.1 §2）：把 `Narrator.narrate` 從 `nil` 接真——委派給可注入的 `NarrationBackend`；真 FM backend 以 canImport 隔離。
 - **CI 可測**：`NarrationBackend` protocol、`RuleBasedNarrator`（L0 行 → `ActionStep`）、`Narrator` 委派、`GeneratedStep → ActionStep` 映射（純函式）。**🔒**：`FoundationModelsNarrator`（真 session + `@Generable` + prewarm），真敘事品質 step 42。
 - **新增檔案**：
@@ -386,14 +386,14 @@
 - **新增測試**（`RuleBasedNarratorTests.swift`）：`testEmptyLinesReturnsNil`、`testCategoryInferredFromKeywords`（debug/搜尋/編輯）、`testArtifactsExtracted`（檔名/URL/錯誤碼）、`testOpenLoopDetected`、`testNonEmptyNeverReturnsNil`、`testNarratorUsesInjectedBackend`（注入假 backend 驗委派）。
 - **DoD**：rule-based + 委派 ✅ CI；真 FM 🔒 step 42（canImport 隔離，CI 不編 FM）・ **模型**：Opus 4.8
 
-#### Step 39 — Availability + fallback 階梯
+#### Step 39 — Availability + fallback 階梯 ✅
 - **目標**（§5）：`NarrationLadder` 依 availability 選 tier，且模型回 `nil` 時**級聯下降**；規則式在底、保證有輸出（降級不中斷）。
 - **新增檔案**：`Sources/ScriptNarrator/NarrationLadder.swift`
   - `struct NarrationLadder`：`init(fm: (any NarrationBackend)?, qwen: (any NarrationBackend)?, rule: any NarrationBackend)`、`func narrate(_ lines: [String], fmAvailable: Bool, qwenReachable: Bool) async -> ActionStep`（**回非 optional**，rule 保底）
 - **新增測試**（`NarrationLadderTests.swift`）：`testFMAvailableUsesFM`、`testFMUnavailableFallsToQwen`、`testBothUnavailableUsesRule`、`testFMReturnsNilCascadesToQwen`、`testAllModelsNilEndsAtRule`、`testResultNeverNil`。
 - **DoD**：✅ CI ・ **模型**：Opus 4.8
 
-#### Step 40 — L2 Summarizer
+#### Step 40 — L2 Summarizer ✅
 - **目標**（v2.1 §2 L2）：把多個 L1 `ActionStep` 依 **app 切換 或 時間窗**滾成段落摘要；規則式 rollup CI 可測，真 LLM 摘要可選/🔒。
 - **新增檔案**：`Sources/ScriptNarrator/L2Summarizer.swift`
   - `struct L2Summary: Sendable, Equatable { let startedAt: Date; let apps: [String]; let text: String; let stepCount: Int }`
@@ -401,7 +401,7 @@
 - **新增測試**（`L2SummarizerTests.swift`）：`testAppChangeSplitsSessions`、`testTimeWindowSplits`、`testSingleAppRunOneSummary`、`testEmptyStepsEmpty`、`testSummaryTextMentionsGoals`、`testStepCountAggregated`。
 - **DoD**：✅ CI ・ **模型**：Sonnet 5
 
-#### Step 41 — sidecar `/vlm` 接 mlx-vlm
+#### Step 41 — sidecar `/vlm` 接 mlx-vlm ✅
 - **目標**（v2 §D）：`/vlm` 從 stub 接真，比照 step 27 `/ocr` 的**注入式後端**：`VLMRequest(image_path, prompt, max_tokens)` → `vlm_backend` → `{text}`；真後端 `_mlx_vlm_backend` 延遲 import（載 `Qwen2.5-VL-7B-Instruct-4bit` generate）；缺檔 404、後端錯 500。真 mlx 品質 🔒 step 42。
 - **修改檔案**：`sidecar/copartner_sidecar/server.py`（`/vlm` 接 `vlm_backend` + `os.path` 檢查）；新增 `sidecar/tests/test_vlm.py`
 - **新增測試**（pytest，注入 fake `vlm_backend`）：`test_health`、`test_vlm_returns_text`、`test_vlm_missing_file_404`、`test_vlm_backend_error_500`、`test_vlm_passes_prompt_and_max_tokens`。
