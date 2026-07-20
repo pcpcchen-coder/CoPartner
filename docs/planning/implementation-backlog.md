@@ -117,7 +117,7 @@
 | 52 | Undo stack | M5 | Sonnet 5 | ✅（stack 邏輯；真快照 🔒）| 51 |
 | 53 | 🔒 M5 真機驗收（熱鍵後 Claude 正確接續 open loop） | M5 | — | ⬜ | 47,48,49,51,52 |
 | **G. 隱私 + 黑名單（rolling-wave）** ||||||
-| 54 | 【展開】G 階段詳細 step 規劃 | M6 | Opus 4.8 | ⬜ | 53 |
+| 54 | 【展開】G 階段詳細 step 規劃 | M6 | Opus 4.8 | ✅ | 53 |
 | 55 | tile 級遮罩（PII regex + AX secure field） | M6 | Opus 4.8 | ⬜ | 54 |
 | 56 | SCContentFilter 黑名單 | M6 | Sonnet 5 | ⬜ | 54 |
 | 57 | 熱圖隱私串接 | M6 | Sonnet 5 | ⬜ | 35,55 |
@@ -493,11 +493,55 @@
 
 ## Phase G — 隱私 + 黑名單（rolling-wave）
 
-- **Step 54 【展開】**。**模型**：Opus 4.8
-- **Step 55 tile 級遮罩**：`kAXSecureTextField` + URL/標題啟發式 + OCR 正則（卡號/身分證/API key）。**模型**：Opus 4.8（漏遮＝PII 外洩）
-- **Step 56 SCContentFilter 黑名單**：白名單 `includingApplications`（避空陣列 bug）、排除自身 app（避錄製迴圈）。**模型**：Sonnet 5
-- **Step 57 熱圖隱私串接**：串 Step 35 熱圖與遮罩，確保聚合權重也不洩漏敏感區。**模型**：Sonnet 5
-- **Step 58 🔒 M6 真機驗收（PIPL 最終審查）**：密碼欄/銀行頁 100% 被遮；黑名單 app 0 frame；全案跑一輪隱私稽核。
+延續 v2 §G ＋ v1 §G（資料分類矩陣）。**Step 54【展開】已完成 ✅**（本節即產出）。
+
+Phase G 不是從零蓋隱私，而是補齊**縱深五層**中間缺的兩層。展開時的定位表：
+
+| 縱深層 | 內容 | 狀態 |
+|---|---|---|
+| 1. L0 文字層 | `PIIMasker`（卡號/身分證/密碼欄 placeholder）| step 7 ✅ 真機驗過 |
+| 2. tile 像素層 | 敏感區域 → tile 遮罩：不 OCR、不持久化、不進熱圖 | **step 55（本階段）** |
+| 3. app 源頭層 | 黑名單 app 連 frame 都不進 SCStream | **step 56（本階段）** |
+| 4. 聚合層 | 熱圖只存聚合權重（35 ✅）＋ 遮罩串接 | **step 57（本階段）** |
+| 5. 出境層 | `EgressGate` PIPL 硬牆（45 ✅）＋ litellm 不變式（46 ✅）| ✅ |
+
+**架構決策**（rolling-wave）：
+
+| 決策 | 理由 |
+|---|---|
+| **fail-closed + sticky**：region 消失後 tile 續遮 N 秒才解除 | 焦點暫移/AX 抖動不得造成漏遮窗口；誤遮代價=少記幾個 tile，漏遮代價=外洩 |
+| **遮罩三出口單點鎖**（`TileMaskPolicy`：OCR / 持久化 / 熱圖三個決策一處出）| 防「加了新出口忘了接遮罩」——新消費者必經同一政策點 |
+| **`includingApplications` 白名單實作 + 空清單回 `nil`（型別層防空陣列 bug）** | §G 已知 SCContentFilter 空陣列 bug；nil=「這幀別開 stream」而非空陣列 |
+| **自身 app 一律排除** | 避免錄製迴圈（選單/HUD 自己看自己）|
+| 全部落 **CaptureEngine**；文字 scrubber 用閉包注入 | 重用 TileGrid/TileXY/AttentionHeatmap；不引入對 ScriptNarrator 的模組依賴 |
+
+#### Step 55 — tile 級遮罩（敏感區域 → 遮罩 tile）
+- **目標**（§G）：`kAXSecureTextField` / URL・標題啟發式 / OCR 正則命中 → 對應 tile **不 OCR、不持久化、不進熱圖**，只記「此處有敏感輸入」。漏遮＝PII 外洩，故 sticky fail-closed。
+- **新增檔案**：`Sources/CaptureEngine/SensitiveRegionMask.swift`
+  - `struct SensitiveRegion: Equatable { let rect: CGRect; let reason: Reason }`；`enum Reason { secureField, piiText, heuristic }`
+  - `struct SensitiveTileMask`：`init(grid: TileGrid, stickySeconds: TimeInterval = 5)`、`mutating update(regions: [SensitiveRegion], at: Date)`（region → `grid.tiles(overlapping:)` 聯集；消失的 tile 續遮 sticky 秒才回收）、`func isMasked(_ tile: TileXY, at: Date) -> Bool`、`var maskedTiles: Set<TileXY>`
+  - `enum TileMaskPolicy`（三出口單點）：`effectiveTextSource(masked: Bool, base: TextSource) -> TextSource`（masked → `.skip`，不論 base）、`mayPersist(masked: Bool) -> Bool`、`mayReinforceAttention(masked: Bool) -> Bool`
+- **新增測試**（`SensitiveTileMaskTests.swift`）：`testRegionMapsToOverlappingTiles`、`testMultipleRegionsUnion`、`testStickyKeepsMaskAfterRegionGone`、`testStickyExpiresAfterWindow`（注入 now）、`testMaskedTileSkipsOCRAnyBase`、`testMaskedTileNeverPersists`、`testMaskedTileNeverReinforcesAttention`、`testUnmaskedPassesThrough`。
+- **DoD**：遮罩簿記/政策 ✅ CI；真 `kAXSecureTextField` 偵測與啟發式接線 🔒 58 ・ **模型**：Opus 4.8（漏遮＝PII 外洩）
+
+#### Step 56 — SCContentFilter 黑名單（app 源頭排除）
+- **目標**（§G）：黑名單 app（密碼管理器/銀行類）**連 frame 都不進** SCStream；用 `includingApplications` 白名單實作（避空陣列 bug）；自身 app 一律排除（錄製迴圈）。
+- **新增檔案**：`Sources/CaptureEngine/CaptureBlacklist.swift`
+  - `struct CaptureBlacklist`：`init(blockedBundleIDs: Set<String>, blockedNamePatterns: [String], ownBundleID: String)`；預設清單含 1Password / Bitwarden / LastPass / Keychain Access（bundle id）＋「bank/banking/密碼」類名稱 pattern（大小寫不敏感子字串）
+  - `func isBlocked(bundleID: String?, appName: String) -> Bool`（自身 app 恆 true）
+  - `func includeList<App>(allApps: [App], bundleID: (App) -> String?, name: (App) -> String) -> [App]?`——全部減去 blocked；**結果為空 → 回 `nil`（別開 stream），永不回空陣列**
+- **新增測試**（`CaptureBlacklistTests.swift`）：`testDefaultListBlocksPasswordManagers`、`testNamePatternCaseInsensitive`、`testOwnAppAlwaysExcluded`、`testIncludeListDropsBlocked`、`testEmptyIncludeListReturnsNilNotEmpty`（空陣列 bug 防禦）、`testNonBlockedPasses`。
+- **DoD**：黑名單模型/includeList ✅ CI；真 `SCContentFilter(display:including:)` 膠水（AppCoordinator.startCapture 改接）🔒 58 ・ **模型**：Sonnet 5
+
+#### Step 57 — 熱圖隱私串接
+- **目標**（§C.4/§G）：串 step 35 熱圖與 step 55 遮罩：遮罩 tile **永不被 reinforce**；`summary()` 永不指向遮罩區（含 top tile 被遮時回退次熱未遮 tile、全遮回空字串）。35 的「只存聚合 O(tiles)」不變式照舊。
+- **新增檔案**：`Sources/CaptureEngine/AttentionPrivacyGuard.swift`
+  - `enum AttentionPrivacyGuard`：`static func reinforceIfAllowed(_ heatmap: inout AttentionHeatmap, tile: TileXY, weight: Double, at: Date, mask: SensitiveTileMask)`（masked → no-op）、`static func sanitizedSummary(heatmap: AttentionHeatmap, mask: SensitiveTileMask, at: Date) -> String`
+- **新增測試**（`AttentionPrivacyGuardTests.swift`）：`testMaskedTileNotReinforced`（weight 保持 0）、`testTopTilesExcludeMasked`、`testSummaryFallsBackToUnmaskedTile`、`testAllMaskedSummaryEmpty`、`testUnmaskedReinforceNormal`。
+- **DoD**：✅ CI ・ **模型**：Sonnet 5
+
+#### Step 58 — 🔒 M6 真機驗收（PIPL 最終審查；前置：55,56,57）
+- 在你的 Mac 上：密碼欄輸入 **100% 遮**（L0 行、OCR、持久化三處皆無明文，僅「此處有敏感輸入」）；開黑名單 app（如 1Password）→ **0 frame** 進擷取（含自身 app 不自錄）；熱圖 summary 不指向敏感區；對照 `sandbox-threat-model.md` I6 與 v1 §G 資料分類矩陣（絕不出本機/遮罩後可上雲/可上雲）做全案隱私稽核一輪。你在 Mac 上執行、回報。**（併入真機 runbook 清單：24/29/36/42/53/58）**
 
 ---
 
