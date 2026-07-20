@@ -91,11 +91,11 @@
 | 29 | 🔒 M2 真機驗收（OCR 吞吐 ≤ V1 20%） | M2 | — | ⬜ | 25,26,27 |
 | **D. 記憶系統（rolling-wave）** ||||||
 | 30 | 【展開】D 階段詳細 step 規劃 | M3 | Opus 4.8 | ✅ | 18,24 |
-| 31 | Reference+delta 重建演算法 | M3 | Sonnet 5 / Opus 審 | ⬜ | 30 |
-| 32 | L1 RAM ring buffer | M3 | Sonnet 5 | ⬜ | 30 |
-| 33 | sqlite-vec schema + KNN wrapper | M3 | Opus 4.8 | ⬜ | 30 |
-| 34 | Re-baseline 觸發邏輯 | M3 | Sonnet 5 | ⬜ | 31 |
-| 35 | 注意力熱圖（衰減式） | M3 | Sonnet 5 | ⬜ | 30 |
+| 31 | Reference+delta 重建演算法 | M3 | Sonnet 5 / Opus 審 | ✅（重建/簿記；真像素併 36 🔒）| 30 |
+| 32 | L1 RAM ring buffer | M3 | Sonnet 5 | ✅ | 30 |
+| 33 | sqlite-vec schema + KNN wrapper | M3 | Opus 4.8 | ✅（KNN/MemoryStore；真 vec0 併 36 🔒）| 30 |
+| 34 | Re-baseline 觸發邏輯 | M3 | Sonnet 5 | ✅ | 31 |
+| 35 | 注意力熱圖（衰減式） | M3 | Sonnet 5 | ✅ | 30 |
 | 36 | 🔒 M3 真機驗收（8hr ≤ ~400MB） | M3 | — | ⬜ | 31–35 |
 | **E. 本地推理 + L1/L2 敘事（rolling-wave）** ||||||
 | 37 | 【展開】E 階段詳細 step 規劃 | M4 | Opus 4.8 | ⬜ | 36 |
@@ -313,18 +313,19 @@
 
 **通用測試策略**：所有平台重活（真 SQLite `vec0` extension、真像素）都藏在 protocol 後、以**注入假後端**在 CI 驗邏輯；真後端留 🔒（step 36）。與 step 27/33 的 `ocr_backend` 注入同套路。
 
-#### Step 31 — Reference frame + delta 重建（I/P-frame）✅ 目標
+#### Step 31 — Reference frame + delta 重建（I/P-frame）✅
 - **目標**（§B.7）：維護壓縮 reference（I-frame）＋ 一串 delta（P-frame：dirty tile 內容+座標+hash）；`reconstruct()` = reference ⊕ deltas。**全案資料正確性風險最高**（重建錯＝靜默損毀），故測試含損毀防禦。
 - **CI 可測策略**：tile 內容用**不透明識別子**（`hash: UInt64` + 可選 `payload: Data`）代表，不需真像素即可驗「重建簿記」正確；真像素無損 round-trip 留 🔒（step 36）。
 - **新增檔案**：`Sources/CaptureEngine/ReferenceDeltaStore.swift`
   - `struct TileCell: Equatable { let hash: UInt64; let payload: Data? }`
   - `struct FrameSnapshot: Equatable { let grid: TileGrid; var tiles: [TileXY: TileCell] }`
-  - `struct DeltaFrame { let changed: [TileXY: TileCell] }`
-  - `struct ReferenceDeltaStore`：`mutating setReference(_:)`、`mutating appendDelta(_:) throws`、`reconstruct() -> FrameSnapshot`、`reconstruct(throughDeltaIndex:) -> FrameSnapshot`、`var pendingDeltaCoverage: Double`（變動 tile 數 ÷ 總 tile 數，供 step 34）、`var deltaCount: Int`
-- **新增測試**（`ReferenceDeltaStoreTests.swift`）：`testReconstructNoDeltasEqualsReference`、`testSingleDeltaOverwritesTile`、`testLaterDeltaWinsSameTile`（P-frame 後寫覆蓋）、`testDeltaAddsPreviouslyBlankTile`、`testReconstructThroughIntermediateIndex`（時光回溯到第 k 個 delta）、`testPendingCoverageTracksChangedArea`、`testGridMismatchDeltaThrows`（grid 不符 → 拒絕，防靜默損毀）。
-- **DoD**：重建/簿記 ✅ CI；真像素無損 🔒（step 36）・ **模型**：Sonnet 5 實作 + **Opus 4.8 審查**（最易藏靜默損毀）
+  - `struct DeltaFrame { let grid: TileGrid; let changed: [TileXY: TileCell] }`（附 grid 供一致性檢查）
+  - `enum ReferenceDeltaError { case noReference, gridMismatch }`
+  - `struct ReferenceDeltaStore`：`mutating setReference(_:)`、`mutating appendDelta(_:) throws`、`reconstruct() -> FrameSnapshot`、`reconstruct(throughDeltaIndex:) -> FrameSnapshot`、`var pendingDeltaCoverage: Double`（變動 tile 聯集 ÷ 總格數，供 step 34）、`var deltaCount: Int`、`var hasReference: Bool`
+- **新增測試**（`ReferenceDeltaStoreTests.swift`，9 個）：`testReconstructNoDeltasEqualsReference`、`testSingleDeltaOverwritesTile`、`testLaterDeltaWinsSameTile`（P-frame 後寫覆蓋）、`testDeltaAddsPreviouslyBlankTile`、`testReconstructThroughIntermediateIndex`（時光回溯到第 k 個 delta）、`testPendingCoverageTracksChangedArea`、`testGridMismatchDeltaThrows`、`testAppendWithoutReferenceThrows`（皆防靜默損毀）。
+- **DoD**：重建/簿記 ✅ CI（已綠）；真像素無損 🔒（step 36）・ **模型**：Sonnet 5 實作 + **Opus 4.8 審查**（最易藏靜默損毀）
 
-#### Step 32 — L1 RAM 熱環（ring buffer）✅ 目標
+#### Step 32 — L1 RAM 熱環（ring buffer）✅
 - **目標**：最近 5–15 min 熱劇本（L0 原始行 + 最近 L1 `ActionStep`），RAM 環狀緩衝，**容量上限 + 時間窗**雙重淘汰（v2.1 §3 熱劇本列）。
 - **新增檔案**：`Sources/MemoryStore/L1HotBuffer.swift`
   - `struct L1HotBuffer`：`init(capacity: Int, window: TimeInterval)`、`mutating append(_ step: ActionStep, at: Date)`、`mutating appendL0(_ line: String, at: Date)`、`recentSteps(now: Date) -> [ActionStep]`（濾掉超出 window 的）、`recentL0(now: Date) -> [String]`、`var count: Int`
@@ -332,24 +333,24 @@
 - **新增測試**（`L1HotBufferTests.swift`）：`testWithinCapacityKeepsAll`、`testOverCapacityEvictsOldest`（環語意）、`testEntriesOlderThanWindowDropped`（注入 `now`）、`testRecentStepsNewestLast`（定序）、`testL0AndStepsIndependentCaps`、`testEmptyReturnsEmpty`。
 - **DoD**：✅ CI ・ **模型**：Sonnet 5
 
-#### Step 33 — sqlite-vec schema + KNN 包裝（+ `MemoryStore` 真實作）✅ 目標
+#### Step 33 — sqlite-vec schema + KNN 包裝（+ `MemoryStore` 真實作）✅
 - **目標**（§C）：L2 溫層 `vec0` 虛擬表 float[768] KNN；把 `MemoryStore.insert/search` 從空殼接真。extension 載入與磁碟持久化 🔒，**query/ranking 邏輯以純 Swift 索引在 CI 驗**。
 - **新增檔案**：
-  - `Sources/MemoryStore/VectorIndex.swift`：`protocol VectorIndex { mutating func insert(id: UUID, vector: [Float]) throws; func knn(query: [Float], k: Int) -> [(id: UUID, distance: Float)] }` ＋ `struct InMemoryVectorIndex: VectorIndex`（純 Swift L2/cosine KNN，CI 用）
-  - `Sources/MemoryStore/SQLiteVecIndex.swift`（🔒 真 `vec0`：`import SQLite3`、`sqlite3_load_extension`、`CREATE VIRTUAL TABLE ... USING vec0(embedding float[768])`；薄膠水，邏輯不落此）
-  - `Sources/MemoryStore/Embedding.swift`：`protocol TextEmbedder { func embed(_ text: String) -> [Float] }`（真後端 FoundationModels/句向量留 step 38+；測試用確定性假 embedder）
-  - 改 `MemoryStore.swift`：持 `VectorIndex` + `TextEmbedder`（可注入），`insert(step:)` 存 embedding、`search(query:k:)` embed→knn→回 `ActionStep`
-- **新增測試**（`VectorIndexTests.swift` + `MemoryStoreTests.swift`）：`testKNNNearestFirst`、`testKNNRespectsK`、`testKNNEmptyIndexEmpty`、`testDimensionMismatchThrows`（非 768 維）、`testCosineOrdering`；`testInsertThenSearchFindsStep`（注入假 embedder：語意近的 query 撈回該 step）、`testSearchRanksBySimilarity`、`testSearchKLimit`。
-- **DoD**：索引/排序/`MemoryStore` 邏輯 ✅ CI；真 `vec0` 載入 + 磁碟持久化 🔒（step 36）・ **模型**：Opus 4.8
+  - `Sources/MemoryStore/VectorIndex.swift`：`protocol VectorIndex: Sendable { var dimension; mutating func insert(id:vector:) throws; func knn(query:k:) -> [(id, distance)] }` ＋ `struct InMemoryVectorIndex`（純 Swift **L2** 平面 KNN，CI 用）＋ `enum VectorIndexError { dimensionMismatch, notWired }`
+  - `Sources/MemoryStore/SQLiteVecIndex.swift`：**目前為佔位 skeleton**（`final class`，`insert` 直接 `throw .notWired`、`knn` 回空——絕不靜默假存）。真 `vec0` 綁定（`import SQLite3`、`load_extension`、`CREATE VIRTUAL TABLE ... USING vec0(embedding float[768])`）🔒 step 36，同時避開 CI 的 sqlite3 連結風險。
+  - `Sources/MemoryStore/Embedding.swift`：`protocol TextEmbedder: Sendable { var dimension; func embed(_:) -> [Float] }` ＋ `struct HashingEmbedder`（確定性佔位，非語意；真語意後端留 step 38+；測試注入自訂假 embedder）
+  - 改 `MemoryStore.swift`：actor 持可注入 `any VectorIndex` + `any TextEmbedder` + `[UUID: ActionStep]`，`insert(step:)` embed→index、`search(query:k:)` embed→knn→撈回 `ActionStep`
+- **新增測試**（`VectorIndexTests.swift` 6 + `MemoryStoreTests.swift` 4）：`testKNNNearestFirst`、`testKNNRespectsK`、`testKNNEmptyIndexEmpty`、`testKNNDistancesMonotonic`、`testDimensionMismatchThrows`（非 768 維）、`testSkeletonSQLiteIndexRefusesWrite`（佔位拒寫）；`testInsertThenSearchFindsStep`（注入 3 維假 embedder：語意近的 query 撈回該 step）、`testSearchRanksBySimilarity`、`testSearchKLimit`、`testEmptyStoreReturnsEmpty`。
+- **DoD**：索引/排序/`MemoryStore` 邏輯 ✅ CI（已綠）；真 `vec0` 載入 + 磁碟持久化 🔒（step 36）・ **模型**：Opus 4.8
 
-#### Step 34 — Re-baseline 觸發邏輯
+#### Step 34 — Re-baseline 觸發邏輯 ✅
 - **目標**（§B.7）：每 T 秒 **或** 累積 delta 覆蓋 > 畫面 X% → 觸發 re-baseline（存新 I-frame）。純決策函式，吃 step 31 的 `pendingDeltaCoverage`。
 - **新增檔案**：`Sources/CaptureEngine/RebaselinePolicy.swift`
   - `struct RebaselinePolicy`：`init(maxInterval: TimeInterval, maxCoverage: Double)`、`func decision(sinceLastBaseline: TimeInterval, coverage: Double) -> RebaselineDecision`（`enum RebaselineDecision { case keep, rebaseline(reason: Reason) }`，`Reason { case timeExceeded, coverageExceeded }`）
 - **新增測試**（`RebaselinePolicyTests.swift`）：`testTimeExceededTriggers`（時間到即使 coverage 低）、`testCoverageExceededTriggers`（覆蓋超標即使時間短）、`testNeitherKeeps`、`testBoundaryInclusive`（`>=` 語意固定）、`testReasonReported`。
 - **DoD**：✅ CI ・ **模型**：Sonnet 5
 
-#### Step 35 — 注意力熱圖（衰減式）✅ 目標
+#### Step 35 — 注意力熱圖（衰減式）✅
 - **目標**（§C.4 / §G）：tile grid 上的衰減 heatmap，**只存每 tile 聚合衰減權重、不存原始座標時序**（隱私硬約束），有 TTL；產 `attention_summary` 自然語言轉述（餵 ContextEnvelope，v2.1 §4）。
 - **新增檔案**：`Sources/CaptureEngine/AttentionHeatmap.swift`
   - `struct AttentionHeatmap`：`init(grid: TileGrid, halfLife: TimeInterval)`、`mutating reinforce(tile: TileXY, weight: Double, at: Date)`、`mutating decay(to now: Date)`、`func weight(for: TileXY) -> Double`、`func topTiles(_ n: Int) -> [TileXY]`、`func summary() -> String`
