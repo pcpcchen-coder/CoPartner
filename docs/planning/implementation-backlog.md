@@ -110,11 +110,11 @@
 | 45 | PII 出境閘門整合 | M5 | Opus 4.8 | ✅（閘門邏輯；真 Presidio 併 53 🔒）| 7,44 |
 | 46 | LiteLLM Gateway 設定 + PIPL 路由 | M5 | Sonnet 5 | ✅ | 43 |
 | 47 | CloudRouter.handoff() 接 Claude computer-use | M5 | Fable 5 | ✅（組裝/換算/解析/稽核；真呼叫併 53 🔒）| 44,45,46 |
-| 48 | 接手 HUD（推測任務/下一步/信心 + Approve/Skip/Stop） | 應用層 | Opus 4.8 | ⬜ | 43 |
-| 49 | 熱鍵 ⌃⌥⌘Space → triggerIntervention 真接線 | 應用層 | Sonnet 5 | ⬜ | 9,47,48 |
-| 50 | 風險分級 + 危險指令偵測 | M5 | Opus 4.8 | ⬜ | 43 |
-| 51 | ActionExecutor 沙箱（XPC + sandbox-exec） | M5 | Fable 5 | ⬜ | 50 |
-| 52 | Undo stack | M5 | Sonnet 5 | ⬜ | 51 |
+| 48 | 接手 HUD（推測任務/下一步/信心 + Approve/Skip/Stop） | 應用層 | Opus 4.8 | ✅（狀態機+token；浮層 UI 併 53 🔒）| 43 |
+| 49 | 熱鍵 ⌃⌥⌘Space → triggerIntervention 真接線 | 應用層 | Sonnet 5 | ✅（協調鏈；真熱鍵行為併 53 🔒）| 9,47,48 |
+| 50 | 風險分級 + 危險指令偵測 | M5 | Opus 4.8 | ✅ | 43 |
+| 51 | ActionExecutor 沙箱（XPC + sandbox-exec） | M5 | Fable 5 | ✅（閘門/政策/sbpl；真 XPC+sandbox 併 53 🔒）| 50 |
+| 52 | Undo stack | M5 | Sonnet 5 | ✅（stack 邏輯；真快照 🔒）| 51 |
 | 53 | 🔒 M5 真機驗收（熱鍵後 Claude 正確接續 open loop） | M5 | — | ⬜ | 47,48,49,51,52 |
 | **G. 隱私 + 黑名單（rolling-wave）** ||||||
 | 54 | 【展開】G 階段詳細 step 規劃 | M6 | Opus 4.8 | ⬜ | 53 |
@@ -452,31 +452,35 @@
 - **DoD**：組裝/換算/解析/稽核 ✅ CI；真呼叫 🔒 53 ・ **模型**：**Fable 5**
 - ⚠️ 開工時以 `/claude-api` skill 對齊當下 computer-use beta header / tool 版本與支援模型，勿沿用本文件寫死值。
 
-#### Step 48 — 接手 HUD 狀態機（Approve/Skip/Stop）+ ApprovalToken
+#### Step 48 — 接手 HUD 狀態機（Approve/Skip/Stop）+ ApprovalToken ✅
 - **目標**（v1 §F / T7 / I1/I2/I7）：常駐浮層的**可測 view-model**：顯示推測任務+下一步+信心+風險原因；按鈕驅動狀態轉換；**Approve 時鑄造 `ApprovalToken`**（`internal` init，僅本模組）；`autoBounded` 只自動核 low 風險且有連續上限，**high 任何 policy 都必須人按**（I2）；Stop/kill-switch → `aborted`，作廢整個 handoff 世代的 token（I7）。
 - **新增檔案**：`Sources/ActionExecutor/TakeoverSessionModel.swift`（`enum HUDState { idle, proposing, awaitingApproval(ProposedAction, ActionRisk), executing, done, aborted }`；`struct ApprovalToken`（handoff 世代號 + action id，`internal` init）；`mutating approve()/skip()/stop()/receive(_:risk:)`）；CoPartnerCore 加 `ActionRisk {low, medium, high}`（自 ActionExecutor.Risk 遷移共用）。`Package.swift` 測試依賴**加 `"ActionExecutor"`**。SwiftUI 浮層殼在 app（🔒 53 目測）。
 - **新增測試**（`TakeoverSessionModelTests.swift`）：`testReceiveEntersAwaitingApproval`、`testApproveMintsTokenAndExecutes`、`testSkipAdvancesWithoutToken`、`testStopAbortsAndInvalidatesGeneration`、`testHighRiskNeverAutoApproved`（confirmEach/autoBounded 都驗，I2）、`testAutoBoundedApprovesLowUpToCap`、`testAutoBoundedCapFallsBackToConfirm`。
 - **DoD**：狀態機/token ✅ CI；浮層 UI 🔒 ・ **模型**：Opus 4.8（人在迴圈 UX，攸關安全信任）
+- **as-built**：新增 `HandoffGeneration` 世代時鐘（NSLock class）——狀態機與 executor **共用同一實例**，token 作廢單一權威（無兩套真相）；`suggestOnly` 下 approve 也不鑄 token（建議模式永不執行）；另補 `testSuggestOnlyApproveNeverMints`/`testMediumNotAutoApprovedUnderAutoBounded`；`CaptureSessionState` 加 `endIntervention()`（介入結束回 observing）。
 
-#### Step 49 — 熱鍵 ⌃⌥⌘Space → triggerIntervention 真接線
+#### Step 49 — 熱鍵 ⌃⌥⌘Space → triggerIntervention 真接線 ✅
 - **目標**：`AppCoordinator.triggerIntervention()` 接上「L1HotBuffer/L2 取材 → EnvelopeBuilder → EgressGate → CloudRouter.handoff → TakeoverSessionModel」；kill-switch ⌃⌥⌘. 中止鏈全通（取消 handoff task、模型 `stop()`，I7）；EgressGate `.blocked` → HUD 顯示「僅本地」而非出境。**修正 `AppCoordinator.swift` 內 `TODO(M3)` 錯誤標記**（熱鍵交棒屬 M5/此 step，非 M3）。
 - **可測**：協調邏輯抽函式（blocked 路徑、abort 傳遞、觀察中才可觸發）；真熱鍵/浮層 🔒 53。
 - **DoD**：協調邏輯 ✅ CI；真熱鍵 🔒 ・ **模型**：Sonnet 5
+- **as-built**：envelope 取材暫用 L0 劇本行（`recentLines`）當 sessionSummary/openLoop——真 L1/L2 取材待 Narrator 接入 app 管線；PIPL detector 用 `PIIMasker.detect(.chinaID)`（真分類表 🔒 53）；`TODO(M3)` 錯誤標記實際位於 `CaptureEngine.swift`（非 AppCoordinator），已更新註記（ReferenceDeltaStore step 31 已完成）；另註冊 ⌃⌥⌘Space 全域熱鍵、選單顯示接手狀態。
 
-#### Step 50 — 風險分級 + 危險指令偵測
+#### Step 50 — 風險分級 + 危險指令偵測 ✅
 - **目標**（T1/T2/T5/T9 / I2/I3）：`RiskClassifier`（ProposedAction → ActionRisk）+ `DangerousCommandDetector`（威脅模型 §5 清單：`rm -rf` 含分寫、`sudo`、`dd of=/dev/`、`curl|sh`、`git push -f`、fork bomb、秘密路徑 `~/.ssh`/Keychain/`.env`…）。規則**保守偏殺**（誤殺=多按一次確認）；對外通訊類 kind 無條件 high；不可 undo 動作 ≥ high。
 - **新增檔案**：`Sources/ActionExecutor/RiskClassifier.swift`、`DangerousCommandDetector.swift`。
-- **新增測試**：`testRmRfVariantsDetected`（`-rf`/`-r -f`/`--recursive --force`/目標 `~`）、`testSudoAndPrivilegeEscalation`、`testPipeToShellDetected`、`testForcePushDetected`、`testSecretPathsReadOrWriteHigh`、`testOutboundCommsAlwaysHigh`、`testUIClickDefaultsLow`、`testUnknownKindDefaultsMedium`（未知偏保守）。
+- **新增測試**：`testRmRfVariantsDetected`（`-rf`/`-r -f`/`--recursive --force`/目標 `~`/絕對路徑）、`testSudoAndPrivilegeEscalation`、`testPipeToShellDetected`、`testForcePushAndHardReset`、`testDdAndForkBomb`、`testSecretPathsReadOrWriteHigh`、`testOutboundCommsAlwaysHigh`、`testUIActionsDefaultLow`、`testBenignCommandsNotFlagged`（不誤殺）。
 - **DoD**：✅ CI ・ **模型**：Opus 4.8
+- **as-built**：`ProposedAction.Kind` 是封閉 enum，parser 已拒未知 tool → 原規劃的 `testUnknownKindDefaultsMedium` 無對象、以 `testBenignCommandsNotFlagged` 取代；`keypress` chord 分 medium（⌘Q/⌘⌫ 可觸發破壞，保守）；`typeText` low。
 
-#### Step 51 — ActionExecutor 沙箱（XPC + sandbox-exec）
+#### Step 51 — ActionExecutor 沙箱（XPC + sandbox-exec）✅
 - **目標**（B4 / T3/T4/T7/T8 / I1/I4/I5/I8）：`execute(action:token:)` 接真。**CI 可測**：token 驗證（無效/過世代 → throw，I1）；`SandboxPolicy`（對照 `TakeoverContract.allowedTools` 硬擋越權，T4）；路徑 canonicalize（解 `..`/symlink 語意）後比白名單（I5，純邏輯部分）；sbpl profile 產生器（deny-default、network 全拒、exec/寫入白名單 → 字串斷言）；`RateLimiter`（N action/min + 同 action 連續 k 次 → halt，I8）；audit log（I9）。**🔒**：真 XPC service、code-signing 驗證、真 `sandbox-exec` spawn（`posix_spawn` argv 直呼、無 shell）。
 - **新增檔案**：`Sources/ActionExecutor/SandboxPolicy.swift`、`SbplProfileBuilder.swift`、`PathAllowlist.swift`、`RateLimiter.swift`；改 `ActionExecutor.swift`（`execute(action: ProposedAction, token: ApprovalToken)`）。
-- **新增測試**：`testExecuteWithoutValidTokenThrows`、`testStaleGenerationTokenRejected`、`testToolOutsideContractRejected`、`testPathTraversalNormalizedThenRejected`、`testSbplDeniesNetworkByDefault`、`testSbplExecAllowlistOnly`、`testRateLimitHaltsAfterN`、`testSameActionLoopHalts`、`testAuditLogPerExecution`。
+- **新增測試**：`testStaleGenerationTokenRejected`、`testTokenActionMismatchRejected`、`testToolOutsideContractRejected`、`testOutboundCommsNeverInDefaultContract`、`testPathTraversalNormalizedThenRejected`、`testSymlinkEscapeRejected`（真 symlink）、`testSecretComponentsDeniedEvenInsideRoot`、`testSbplDeniesNetworkByDefault`、`testSbplExecAllowlistOnly`、`testRateLimitHaltsAfterN`、`testSameActionLoopHalts`、`testAuditLogPerExecution`、`testNotWiredWithoutPerformer`。
 - **DoD**：政策/token/sbpl 產生/速率 ✅ CI；真 XPC+sandbox 🔒 53 ・ **模型**：**Fable 5**（安全邊界錯＝真漏洞）
+- **as-built**：「無 token 呼叫」在型別層面不存在（execute 的 token 參數必填、模組外鑄不出）→ 原規劃的 `testExecuteWithoutValidTokenThrows` 由 stale/mismatch 兩測取代；token 額外**綁定單一動作 id**（一票一用）；真執行以 `performer` 注入、預設 nil → `.notWired`（同 SQLiteVecIndex 誠實佔位模式）；symlink 逃逸用真檔案系統測（macOS runner 可跑）。
 - ⚠️ `sandbox-exec` 半棄用——實作時先驗證目標 macOS 版本仍可用，否則走威脅模型 §6 備援路徑。
 
-#### Step 52 — Undo stack
+#### Step 52 — Undo stack ✅
 - **目標**（T9）：`UndoStack` 記錄反操作（檔案寫入前快照、AX 前狀態）；LIFO undo；**不可 undo 動作＝barrier**（undo 到此停，HUD 已在 48/50 強制確認過）；新 handoff 開新 scope。
 - **新增檔案**：`Sources/ActionExecutor/UndoStack.swift`（`enum UndoEntry { restorable(id, inverse: ProposedAction), barrier(id, label) }`）。
 - **新增測試**：`testUndoLIFOOrder`、`testBarrierStopsUndo`、`testUndoEmptyNoop`、`testNewHandoffScopesStack`、`testRestorableProducesInverseAction`。
