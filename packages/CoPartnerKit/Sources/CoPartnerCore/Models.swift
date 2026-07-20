@@ -114,3 +114,29 @@ public struct RoutingSignal: Sendable {
         self.containsSensitive = containsSensitive
     }
 }
+
+// MARK: - 雲端接手提議（V2-F / docs/design/sandbox-threat-model.md）
+
+/// 雲端模型回傳的「提議動作」。**刻意結構化、無整串 shell 字串欄位**（不變式 I4）——
+/// shell 類只有 argv，executor 以 posix_spawn 直帶 argv、不經 `sh -c`。風險分級由 step 50 判定。
+public struct ProposedAction: Sendable, Equatable, Identifiable {
+    public enum Kind: Sendable, Equatable {
+        case screenshot
+        case click(x: Int, y: Int)
+        case typeText(String)
+        case keypress(String)                              // 如 "cmd+s"
+        case scroll(dx: Int, dy: Int)
+        case shell(argv: [String])                         // 無整串命令字串（I4）
+        case readFile(path: String)
+        case writeFile(path: String, contents: String)
+        case outboundComms(kind: String, target: String)   // 寄信 / 送出表單類（step 50 一律 high）
+    }
+    public let id: UUID
+    public let kind: Kind
+    public let rationale: String
+    public init(id: UUID = UUID(), kind: Kind, rationale: String = "") {
+        self.id = id
+        self.kind = kind
+        self.rationale = rationale
+    }
+}

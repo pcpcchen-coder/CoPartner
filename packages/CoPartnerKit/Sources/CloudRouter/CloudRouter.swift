@@ -9,8 +9,14 @@ import CoPartnerCore
 
 public actor CloudRouter {
     private var policy = EscalationPolicy()
+    private let transport: (any HandoffTransport)?
+    private let requestBuilder: HandoffRequestBuilder
 
-    public init() {}
+    public init(transport: (any HandoffTransport)? = nil,
+                requestBuilder: HandoffRequestBuilder = HandoffRequestBuilder()) {
+        self.transport = transport
+        self.requestBuilder = requestBuilder
+    }
 
     /// 依當前變動訊號決定這次該跑哪一階推理（本地優先，§E.1 / ADR-0007）。
     /// 回傳 `.cloud` 代表「大變動」——呼叫端應打包 ContextEnvelope 並呼叫 `handoff`；
@@ -19,9 +25,19 @@ public actor CloudRouter {
         policy.decide(signal, now: now)
     }
 
-    /// 將 ContextEnvelope 交棒給雲端大模型，回傳串流動作。
-    /// 僅在 `route(_:)` 判定為 `.cloud` 時呼叫。
-    public func handoff(_ envelope: ContextEnvelope) async throws { /* TODO */ }
+    /// 將 ContextEnvelope 交棒給雲端 computer-use，回傳串流提議動作（穩定前綴在前命中 prompt cache）。
+    /// 僅在 `route(_:)` 判定為 `.cloud` 時呼叫。真傳輸注入（CI 假 transport；真呼叫 🔒 step 53）。
+    public func handoff(_ envelope: ContextEnvelope,
+                        systemPrompt: String = "",
+                        referencePrefix: String = "") -> AsyncThrowingStream<ProposedAction, Error> {
+        guard let transport else {
+            return AsyncThrowingStream { $0.finish(throwing: HandoffError.noTransport) }
+        }
+        let request = requestBuilder.build(envelope: envelope,
+                                           systemPrompt: systemPrompt,
+                                           referencePrefix: referencePrefix)
+        return transport.stream(request)
+    }
 }
 
 /// 本地↔雲端分層推理的升級策略（ADR-0007 / §E.1）。
