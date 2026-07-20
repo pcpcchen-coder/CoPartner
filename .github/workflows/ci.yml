@@ -23,7 +23,7 @@ jobs:
       - name: Test sidecar
         run: |
           cd sidecar
-          PYTHONPATH=. uv run --no-project --with fastapi --with pydantic --with httpx --with pytest pytest
+          PYTHONPATH=. uv run --no-project --with fastapi --with pydantic --with httpx --with pyyaml --with pytest pytest
   app:
     runs-on: macos-15
     steps:

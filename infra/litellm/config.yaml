@@ -27,3 +27,10 @@ router_settings:
 
 litellm_settings:
   max_budget: 5      # USD/day，超過熔斷（V1 §G dead-man's switch）
+
+# PIPL 硬牆（威脅模型 T6 / 不變式 I6，ADR-0005 / §G）：
+# 含上海團隊個資 / 敏感畫面 → 強制走本地模型，never_egress 表示這類流量永不出境，
+# 且本地模型不得 fallback 回雲端（見 router_settings.fallbacks：local-qwen-vl 無雲端 fallback）。
+pipl_routing:
+  sensitive_model: local-qwen-vl
+  never_egress: true
