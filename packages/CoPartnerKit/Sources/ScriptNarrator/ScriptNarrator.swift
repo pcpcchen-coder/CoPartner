@@ -55,9 +55,15 @@ public struct EventLog: Sendable {
     }
 }
 
-/// L1：本地 LLM 敘事器。FoundationModels 不可用時 fallback。
+/// L1：本地 LLM 敘事器。委派給可注入的 `NarrationBackend`（預設純規則式保底，永不中斷）。
+/// 真 FoundationModels 後端見 `FoundationModelsNarrator`（🔒 canImport 隔離）；
+/// availability 級聯下降見 `NarrationLadder`（step 39）。
 public actor Narrator {
-    public init() {}
-    /// TODO: 接 FoundationModels.LanguageModelSession，輸出 ActionStep
-    public func narrate(_ eventLogLines: [String]) async -> ActionStep? { nil }
+    private let backend: any NarrationBackend
+    public init(backend: any NarrationBackend = RuleBasedNarrator()) {
+        self.backend = backend
+    }
+    public func narrate(_ eventLogLines: [String]) async -> ActionStep? {
+        await backend.narrate(eventLogLines)
+    }
 }
