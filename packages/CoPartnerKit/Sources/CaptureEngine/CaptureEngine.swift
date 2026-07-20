@@ -2,7 +2,7 @@ import Foundation
 import CoreGraphics
 import CoPartnerCore
 // 設計：docs/design/v2_smart-capture-engine.md §B
-// TODO(M3): reference frame + delta 重建（§B.7）
+// reference frame + delta 重建：ReferenceDeltaStore 已於 step 31 完成（M3）；接入本引擎的持久化 wiring 待 M3 真機段
 
 /// 擷取引擎：吃 FrameProducer 的每幀（SCK 觀測 + per-tile hash），
 /// 以 DirtyRegionResolver 融合出「這幀哪些 tile 髒了」，經 per-tile 冷熱狀態機（§B.6）

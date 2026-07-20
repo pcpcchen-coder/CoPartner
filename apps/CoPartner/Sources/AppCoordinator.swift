@@ -8,12 +8,23 @@ import CoreMedia
 import CoPartnerCore
 import CaptureEngine
 import ScriptNarrator
+import CloudRouter
+import ActionExecutor
 // 串接各子系統的協調者（🔒 真機膠水：實際觀察 / 熱鍵行為於 step 10 dogfood 驗收）。
 // 可測邏輯放在 CoPartnerKit（CaptureSessionState / EventLogFeed / FocusChangeTracker）。
 
 extension KeyboardShortcuts.Name {
     static let toggleObserve = Self("toggleObserve", default: .init(.o, modifiers: [.control, .option, .command]))
     static let emergencyStop = Self("emergencyStop", default: .init(.period, modifiers: [.control, .option, .command]))
+    static let triggerIntervention = Self("triggerIntervention", default: .init(.space, modifiers: [.control, .option, .command]))
+}
+
+/// EgressGate 的 scrubber：接 step 7 的 PIIMasker（出境前遮罩，威脅 T6）。
+struct PIIMaskerScrubber: PIIScrubbing {
+    func scrub(_ text: String) -> (clean: String, foundPII: Bool) {
+        let clean = PIIMasker.redact(text)
+        return (clean, clean != text)
+    }
 }
 
 @MainActor
@@ -44,6 +55,13 @@ final class AppCoordinator: ObservableObject {
     private var captureEngine: CaptureEngine?
     private var captureStartTask: Task<Void, Never>?
 
+    // 接手鏈（step 49）：世代時鐘為 token 作廢的單一權威（威脅 I7）。
+    @Published private(set) var takeoverSummary: String = "接手：未啟動"
+    private let handoffGeneration = HandoffGeneration()
+    private var takeoverModel: TakeoverSessionModel?
+    private var handoffTask: Task<Void, Never>?
+    private let cloudRouter = CloudRouter()   // 無 transport：真雲端傳輸 🔒 step 53
+
     init() { registerHotkeys() }
 
     /// ⌃⌥⌘O 切換觀察、⌃⌥⌘. 緊急停止（全域熱鍵；實際觸發需真機驗收）。
@@ -53,6 +71,9 @@ final class AppCoordinator: ObservableObject {
         }
         KeyboardShortcuts.onKeyUp(for: .emergencyStop) { [weak self] in
             MainActor.assumeIsolated { self?.stopAll() }
+        }
+        KeyboardShortcuts.onKeyUp(for: .triggerIntervention) { [weak self] in
+            MainActor.assumeIsolated { self?.triggerIntervention() }
         }
     }
 
@@ -65,15 +86,80 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
-    /// 緊急停止：任何狀態 → idle，拆掉所有觀察來源。冪等。
+    /// 緊急停止：任何狀態 → idle，拆掉所有觀察來源 + 中止接手全鏈（威脅 I7）。冪等。
     func stopAll() {
+        abortHandoff(reason: "已中止（緊急停止）")
         guard session.mode != .idle else { return }
         session.stopAll()
         teardownPipeline()
         lastStepSummary = "已停止觀察"
     }
 
-    func triggerIntervention() { /* step 49：打包 ContextEnvelope → CloudRouter.handoff */ }
+    /// ⌃⌥⌘Space / 選單「立即介入」（step 49）：
+    /// 打包 ContextEnvelope（劇本主體）→ EgressGate（PII 遮罩 + PIPL 硬牆）→ CloudRouter.handoff。
+    /// PIPL 命中 → 整包不出境、僅本地。真雲端傳輸未接（🔒 step 53）→ 走完整條鏈後以「尚未接線」收尾。
+    func triggerIntervention() {
+        guard session.mode == .observing else {          // 觀察中才可接手
+            takeoverSummary = (session.mode == .intervening) ? "接手：進行中" : "接手：需先開始觀察"
+            return
+        }
+        let lines = recentLines
+        let envelope = EnvelopeBuilder().build(
+            now: Date(),
+            steps: [],                                   // 真 L1 取材待 Narrator 接入 app 管線（Phase E 接線）
+            sessionSummary: lines.suffix(10).joined(separator: "\n"),
+            openLoop: lines.last ?? "（無最近操作）",
+            clipboard: NSPasteboard.general.string(forType: .string))
+        let gate = EgressGate(
+            scrubber: PIIMaskerScrubber(),
+            piplDetector: { PIIMasker.detect($0).contains(.chinaID) })   // PIPL 硬牆：中國個資永不出境
+        switch gate.check(envelope) {
+        case .blocked(let reason):
+            takeoverSummary = "接手：PIPL 封鎖（\(reason)）— 僅本地處理，不出境"
+        case .allow(let cleanEnvelope):
+            session.beginIntervention()
+            var model = TakeoverSessionModel(policy: cleanEnvelope.takeover.policy,
+                                             generationClock: handoffGeneration)
+            model.begin()
+            takeoverModel = model
+            takeoverSummary = "接手：交棒中…"
+            let router = cloudRouter
+            handoffTask = Task { [weak self] in
+                do {
+                    let stream = await router.handoff(cleanEnvelope,
+                                                      systemPrompt: "CoPartner takeover",
+                                                      referencePrefix: "")
+                    for try await proposal in stream {
+                        guard let self else { return }
+                        self.takeoverSummary = "接手提議：\(proposal.kind.summary)"
+                    }
+                    guard let self else { return }
+                    self.takeoverModel?.complete()
+                    self.takeoverSummary = "接手：完成"
+                    self.session.endIntervention()
+                } catch {
+                    guard let self else { return }
+                    let message = (error as? HandoffError == .noTransport)
+                        ? "雲端傳輸尚未接線（step 53）" : error.localizedDescription
+                    self.takeoverSummary = "接手：\(message)"
+                    self.takeoverModel = nil
+                    self.session.endIntervention()       // 失敗 → 回觀察，事件日誌不中斷
+                }
+            }
+        }
+    }
+
+    /// 中止接手鏈：取消串流、作廢世代 token（I7）、回觀察/停止。冪等。
+    private func abortHandoff(reason: String) {
+        handoffTask?.cancel()
+        handoffTask = nil
+        if takeoverModel != nil {
+            takeoverModel?.stop()                        // 內含 generation.abort()
+            takeoverModel = nil
+            takeoverSummary = "接手：\(reason)"
+        }
+        handoffGeneration.abort()                        // 冪等保險：任何在途 token 一律作廢
+    }
 
     // MARK: - Pipeline（🔒 真機膠水）
 
