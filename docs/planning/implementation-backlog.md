@@ -118,9 +118,9 @@
 | 53 | 🔒 M5 真機驗收（熱鍵後 Claude 正確接續 open loop） | M5 | — | ⬜ | 47,48,49,51,52 |
 | **G. 隱私 + 黑名單（rolling-wave）** ||||||
 | 54 | 【展開】G 階段詳細 step 規劃 | M6 | Opus 4.8 | ✅ | 53 |
-| 55 | tile 級遮罩（PII regex + AX secure field） | M6 | Opus 4.8 | ⬜ | 54 |
-| 56 | SCContentFilter 黑名單 | M6 | Sonnet 5 | ⬜ | 54 |
-| 57 | 熱圖隱私串接 | M6 | Sonnet 5 | ⬜ | 35,55 |
+| 55 | tile 級遮罩（PII regex + AX secure field） | M6 | Opus 4.8 | ✅（遮罩簿記/政策；真偵測併 58 🔒）| 54 |
+| 56 | SCContentFilter 黑名單 | M6 | Sonnet 5 | ✅（黑名單/includeList；真 SCK 膠水併 58 🔒）| 54 |
+| 57 | 熱圖隱私串接 | M6 | Sonnet 5 | ✅ | 35,55 |
 | 58 | 🔒 M6 真機驗收（PIPL 最終審查） | M6 | — | ⬜ | 55,56,57 |
 
 ---
@@ -515,7 +515,7 @@ Phase G 不是從零蓋隱私，而是補齊**縱深五層**中間缺的兩層�
 | **自身 app 一律排除** | 避免錄製迴圈（選單/HUD 自己看自己）|
 | 全部落 **CaptureEngine**；文字 scrubber 用閉包注入 | 重用 TileGrid/TileXY/AttentionHeatmap；不引入對 ScriptNarrator 的模組依賴 |
 
-#### Step 55 — tile 級遮罩（敏感區域 → 遮罩 tile）
+#### Step 55 — tile 級遮罩（敏感區域 → 遮罩 tile）✅
 - **目標**（§G）：`kAXSecureTextField` / URL・標題啟發式 / OCR 正則命中 → 對應 tile **不 OCR、不持久化、不進熱圖**，只記「此處有敏感輸入」。漏遮＝PII 外洩，故 sticky fail-closed。
 - **新增檔案**：`Sources/CaptureEngine/SensitiveRegionMask.swift`
   - `struct SensitiveRegion: Equatable { let rect: CGRect; let reason: Reason }`；`enum Reason { secureField, piiText, heuristic }`
@@ -524,7 +524,7 @@ Phase G 不是從零蓋隱私，而是補齊**縱深五層**中間缺的兩層�
 - **新增測試**（`SensitiveTileMaskTests.swift`）：`testRegionMapsToOverlappingTiles`、`testMultipleRegionsUnion`、`testStickyKeepsMaskAfterRegionGone`、`testStickyExpiresAfterWindow`（注入 now）、`testMaskedTileSkipsOCRAnyBase`、`testMaskedTileNeverPersists`、`testMaskedTileNeverReinforcesAttention`、`testUnmaskedPassesThrough`。
 - **DoD**：遮罩簿記/政策 ✅ CI；真 `kAXSecureTextField` 偵測與啟發式接線 🔒 58 ・ **模型**：Opus 4.8（漏遮＝PII 外洩）
 
-#### Step 56 — SCContentFilter 黑名單（app 源頭排除）
+#### Step 56 — SCContentFilter 黑名單（app 源頭排除）✅
 - **目標**（§G）：黑名單 app（密碼管理器/銀行類）**連 frame 都不進** SCStream；用 `includingApplications` 白名單實作（避空陣列 bug）；自身 app 一律排除（錄製迴圈）。
 - **新增檔案**：`Sources/CaptureEngine/CaptureBlacklist.swift`
   - `struct CaptureBlacklist`：`init(blockedBundleIDs: Set<String>, blockedNamePatterns: [String], ownBundleID: String)`；預設清單含 1Password / Bitwarden / LastPass / Keychain Access（bundle id）＋「bank/banking/密碼」類名稱 pattern（大小寫不敏感子字串）
@@ -533,7 +533,7 @@ Phase G 不是從零蓋隱私，而是補齊**縱深五層**中間缺的兩層�
 - **新增測試**（`CaptureBlacklistTests.swift`）：`testDefaultListBlocksPasswordManagers`、`testNamePatternCaseInsensitive`、`testOwnAppAlwaysExcluded`、`testIncludeListDropsBlocked`、`testEmptyIncludeListReturnsNilNotEmpty`（空陣列 bug 防禦）、`testNonBlockedPasses`。
 - **DoD**：黑名單模型/includeList ✅ CI；真 `SCContentFilter(display:including:)` 膠水（AppCoordinator.startCapture 改接）🔒 58 ・ **模型**：Sonnet 5
 
-#### Step 57 — 熱圖隱私串接
+#### Step 57 — 熱圖隱私串接 ✅
 - **目標**（§C.4/§G）：串 step 35 熱圖與 step 55 遮罩：遮罩 tile **永不被 reinforce**；`summary()` 永不指向遮罩區（含 top tile 被遮時回退次熱未遮 tile、全遮回空字串）。35 的「只存聚合 O(tiles)」不變式照舊。
 - **新增檔案**：`Sources/CaptureEngine/AttentionPrivacyGuard.swift`
   - `enum AttentionPrivacyGuard`：`static func reinforceIfAllowed(_ heatmap: inout AttentionHeatmap, tile: TileXY, weight: Double, at: Date, mask: SensitiveTileMask)`（masked → no-op）、`static func sanitizedSummary(heatmap: AttentionHeatmap, mask: SensitiveTileMask, at: Date) -> String`
