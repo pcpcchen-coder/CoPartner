@@ -90,7 +90,7 @@
 | 28 | CI 補 Python pytest job | 基建 | Sonnet 5 | ✅ | 27 |
 | 29 | 🔒 M2 真機驗收（OCR 吞吐 ≤ V1 20%） | M2 | — | ⬜ | 25,26,27 |
 | **D. 記憶系統（rolling-wave）** ||||||
-| 30 | 【展開】D 階段詳細 step 規劃 | M3 | Opus 4.8 | ⬜ | 18,24 |
+| 30 | 【展開】D 階段詳細 step 規劃 | M3 | Opus 4.8 | ✅ | 18,24 |
 | 31 | Reference+delta 重建演算法 | M3 | Sonnet 5 / Opus 審 | ⬜ | 30 |
 | 32 | L1 RAM ring buffer | M3 | Sonnet 5 | ⬜ | 30 |
 | 33 | sqlite-vec schema + KNN wrapper | M3 | Opus 4.8 | ⬜ | 30 |
@@ -302,15 +302,62 @@
 
 ## Phase D — 記憶系統（rolling-wave）
 
-延續 §C + v2.1 §3（劇本＝檢索主幹）。`MemoryStore.swift` 已有 `insert`/`search` 空殼。
+延續 §C（三層記憶 + reference/delta 持久化 + 衰減熱圖）＋ v2.1 §3（劇本＝檢索主幹）。`MemoryStore.swift` 目前為 `actor MemoryStore { insert(step:) / search(query:k:) }` 空殼（回 `[]`）。
 
-- **Step 30 【展開】**：依 Phase A/B 真機結果（尤其 tile hash 實際資料量）把 D 階 step 展開成完整測試案例清單。**模型**：Opus 4.8
-- **Step 31 Reference+delta 重建**：I/P-frame（§B.7），**資料正確性風險最高**（重建錯＝靜默損毀）。**模型**：Sonnet 5 實作 + **Opus 4.8 審查**
-- **Step 32 L1 RAM ring buffer**：最近 5–15 min 熱劇本。**模型**：Sonnet 5
-- **Step 33 sqlite-vec schema + KNN**：`vec0` float[768] + `MemoryStore.insert/search` 實作；extension 載入 🔒，query/ranking 可測；`Package.swift` 測試依賴**加入 `"MemoryStore"`**。**模型**：Opus 4.8
-- **Step 34 Re-baseline 觸發**：每 T 秒或 delta > 畫面 X% → re-baseline。**模型**：Sonnet 5
-- **Step 35 注意力熱圖**：衰減式 heatmap，只存聚合權重（§G：不存原始座標時序）。**模型**：Sonnet 5
-- **Step 36 🔒 M3 真機驗收**：8hr 磁碟 ≤ ~400MB；語意檢索可用。
+**Step 30【展開】已完成 ✅**（本節即產出）。展開時依既有程式碼狀態定下的**模組落點**（rolling-wave 決策，非設計文件原文）：
+
+| 子系統 | 落點模組 | 理由 |
+|---|---|---|
+| Reference+delta 重建（31）、Re-baseline 觸發（34）、注意力熱圖（35）| **CaptureEngine** | 本質是 frame/tile 概念，需重用既有 `TileXY`/`TileGrid`；測試 target **已 link CaptureEngine**，可立即 CI 可測、零依賴改動 |
+| L1 熱環（32）、L2 sqlite-vec（33）、`MemoryStore` 真實作 | **MemoryStore** | 記憶三層應同模組；於 **step 32**（首個 MemoryStore 測試）把 `"MemoryStore"` 加進 `Package.swift` 測試 target 依賴 |
+
+**通用測試策略**：所有平台重活（真 SQLite `vec0` extension、真像素）都藏在 protocol 後、以**注入假後端**在 CI 驗邏輯；真後端留 🔒（step 36）。與 step 27/33 的 `ocr_backend` 注入同套路。
+
+#### Step 31 — Reference frame + delta 重建（I/P-frame）✅ 目標
+- **目標**（§B.7）：維護壓縮 reference（I-frame）＋ 一串 delta（P-frame：dirty tile 內容+座標+hash）；`reconstruct()` = reference ⊕ deltas。**全案資料正確性風險最高**（重建錯＝靜默損毀），故測試含損毀防禦。
+- **CI 可測策略**：tile 內容用**不透明識別子**（`hash: UInt64` + 可選 `payload: Data`）代表，不需真像素即可驗「重建簿記」正確；真像素無損 round-trip 留 🔒（step 36）。
+- **新增檔案**：`Sources/CaptureEngine/ReferenceDeltaStore.swift`
+  - `struct TileCell: Equatable { let hash: UInt64; let payload: Data? }`
+  - `struct FrameSnapshot: Equatable { let grid: TileGrid; var tiles: [TileXY: TileCell] }`
+  - `struct DeltaFrame { let changed: [TileXY: TileCell] }`
+  - `struct ReferenceDeltaStore`：`mutating setReference(_:)`、`mutating appendDelta(_:) throws`、`reconstruct() -> FrameSnapshot`、`reconstruct(throughDeltaIndex:) -> FrameSnapshot`、`var pendingDeltaCoverage: Double`（變動 tile 數 ÷ 總 tile 數，供 step 34）、`var deltaCount: Int`
+- **新增測試**（`ReferenceDeltaStoreTests.swift`）：`testReconstructNoDeltasEqualsReference`、`testSingleDeltaOverwritesTile`、`testLaterDeltaWinsSameTile`（P-frame 後寫覆蓋）、`testDeltaAddsPreviouslyBlankTile`、`testReconstructThroughIntermediateIndex`（時光回溯到第 k 個 delta）、`testPendingCoverageTracksChangedArea`、`testGridMismatchDeltaThrows`（grid 不符 → 拒絕，防靜默損毀）。
+- **DoD**：重建/簿記 ✅ CI；真像素無損 🔒（step 36）・ **模型**：Sonnet 5 實作 + **Opus 4.8 審查**（最易藏靜默損毀）
+
+#### Step 32 — L1 RAM 熱環（ring buffer）✅ 目標
+- **目標**：最近 5–15 min 熱劇本（L0 原始行 + 最近 L1 `ActionStep`），RAM 環狀緩衝，**容量上限 + 時間窗**雙重淘汰（v2.1 §3 熱劇本列）。
+- **新增檔案**：`Sources/MemoryStore/L1HotBuffer.swift`
+  - `struct L1HotBuffer`：`init(capacity: Int, window: TimeInterval)`、`mutating append(_ step: ActionStep, at: Date)`、`mutating appendL0(_ line: String, at: Date)`、`recentSteps(now: Date) -> [ActionStep]`（濾掉超出 window 的）、`recentL0(now: Date) -> [String]`、`var count: Int`
+- **Package.swift**：測試 target 依賴**加入 `"MemoryStore"`**（首個 MemoryStore 測試）。
+- **新增測試**（`L1HotBufferTests.swift`）：`testWithinCapacityKeepsAll`、`testOverCapacityEvictsOldest`（環語意）、`testEntriesOlderThanWindowDropped`（注入 `now`）、`testRecentStepsNewestLast`（定序）、`testL0AndStepsIndependentCaps`、`testEmptyReturnsEmpty`。
+- **DoD**：✅ CI ・ **模型**：Sonnet 5
+
+#### Step 33 — sqlite-vec schema + KNN 包裝（+ `MemoryStore` 真實作）✅ 目標
+- **目標**（§C）：L2 溫層 `vec0` 虛擬表 float[768] KNN；把 `MemoryStore.insert/search` 從空殼接真。extension 載入與磁碟持久化 🔒，**query/ranking 邏輯以純 Swift 索引在 CI 驗**。
+- **新增檔案**：
+  - `Sources/MemoryStore/VectorIndex.swift`：`protocol VectorIndex { mutating func insert(id: UUID, vector: [Float]) throws; func knn(query: [Float], k: Int) -> [(id: UUID, distance: Float)] }` ＋ `struct InMemoryVectorIndex: VectorIndex`（純 Swift L2/cosine KNN，CI 用）
+  - `Sources/MemoryStore/SQLiteVecIndex.swift`（🔒 真 `vec0`：`import SQLite3`、`sqlite3_load_extension`、`CREATE VIRTUAL TABLE ... USING vec0(embedding float[768])`；薄膠水，邏輯不落此）
+  - `Sources/MemoryStore/Embedding.swift`：`protocol TextEmbedder { func embed(_ text: String) -> [Float] }`（真後端 FoundationModels/句向量留 step 38+；測試用確定性假 embedder）
+  - 改 `MemoryStore.swift`：持 `VectorIndex` + `TextEmbedder`（可注入），`insert(step:)` 存 embedding、`search(query:k:)` embed→knn→回 `ActionStep`
+- **新增測試**（`VectorIndexTests.swift` + `MemoryStoreTests.swift`）：`testKNNNearestFirst`、`testKNNRespectsK`、`testKNNEmptyIndexEmpty`、`testDimensionMismatchThrows`（非 768 維）、`testCosineOrdering`；`testInsertThenSearchFindsStep`（注入假 embedder：語意近的 query 撈回該 step）、`testSearchRanksBySimilarity`、`testSearchKLimit`。
+- **DoD**：索引/排序/`MemoryStore` 邏輯 ✅ CI；真 `vec0` 載入 + 磁碟持久化 🔒（step 36）・ **模型**：Opus 4.8
+
+#### Step 34 — Re-baseline 觸發邏輯
+- **目標**（§B.7）：每 T 秒 **或** 累積 delta 覆蓋 > 畫面 X% → 觸發 re-baseline（存新 I-frame）。純決策函式，吃 step 31 的 `pendingDeltaCoverage`。
+- **新增檔案**：`Sources/CaptureEngine/RebaselinePolicy.swift`
+  - `struct RebaselinePolicy`：`init(maxInterval: TimeInterval, maxCoverage: Double)`、`func decision(sinceLastBaseline: TimeInterval, coverage: Double) -> RebaselineDecision`（`enum RebaselineDecision { case keep, rebaseline(reason: Reason) }`，`Reason { case timeExceeded, coverageExceeded }`）
+- **新增測試**（`RebaselinePolicyTests.swift`）：`testTimeExceededTriggers`（時間到即使 coverage 低）、`testCoverageExceededTriggers`（覆蓋超標即使時間短）、`testNeitherKeeps`、`testBoundaryInclusive`（`>=` 語意固定）、`testReasonReported`。
+- **DoD**：✅ CI ・ **模型**：Sonnet 5
+
+#### Step 35 — 注意力熱圖（衰減式）✅ 目標
+- **目標**（§C.4 / §G）：tile grid 上的衰減 heatmap，**只存每 tile 聚合衰減權重、不存原始座標時序**（隱私硬約束），有 TTL；產 `attention_summary` 自然語言轉述（餵 ContextEnvelope，v2.1 §4）。
+- **新增檔案**：`Sources/CaptureEngine/AttentionHeatmap.swift`
+  - `struct AttentionHeatmap`：`init(grid: TileGrid, halfLife: TimeInterval)`、`mutating reinforce(tile: TileXY, weight: Double, at: Date)`、`mutating decay(to now: Date)`、`func weight(for: TileXY) -> Double`、`func topTiles(_ n: Int) -> [TileXY]`、`func summary() -> String`
+- **新增測試**（`AttentionHeatmapTests.swift`）：`testReinforceRaisesWeight`、`testDecayReducesOverTime`（注入 `now`，指數衰減）、`testNegligibleWeightEvictedByTTL`、`testTopTilesHottestFirst`、`testOnlyAggregateStored`（**隱私**：連續 1000 次 reinforce 同 tile 後，內部儲存仍為 1 筆／`O(tiles)` 而非 `O(events)`，且無座標時間序 API）、`testSummaryNamesHotRegionElseEmpty`。
+- **DoD**：✅ CI ・ **模型**：Sonnet 5
+
+#### Step 36 — 🔒 M3 真機驗收（前置：31–35）
+- 在你的 Mac 上：連續觀察 **8hr → 磁碟 ≤ ~400MB**（reference+delta 真像素持久化生效）；真 `vec0` extension 載入成功、語意檢索撈得回相關歷史 step（`MemoryStore.search` 對真資料可用）；reference ⊕ deltas 真像素重建**無損**（抽樣比對）。你在 Mac 上執行、回報。
 
 ---
 
