@@ -19,11 +19,12 @@ let package = Package(
     ],
     targets: [
         .target(name: "CoPartnerCore"),
-        .target(name: "CaptureEngine", dependencies: ["CoPartnerCore"]),
+        .target(name: "CaptureEngine", dependencies: ["CoPartnerCore"],
+                resources: [.process("Resources")]),   // TileHash.metal → module bundle（Bundle.module）
         .target(name: "ScriptNarrator", dependencies: ["CoPartnerCore"]),
         .target(name: "MemoryStore", dependencies: ["CoPartnerCore"]),
         .target(name: "CloudRouter", dependencies: ["CoPartnerCore"]),
         .target(name: "ActionExecutor", dependencies: ["CoPartnerCore"]),
-        .testTarget(name: "CoPartnerKitTests", dependencies: ["CoPartnerCore", "ScriptNarrator"]),
+        .testTarget(name: "CoPartnerKitTests", dependencies: ["CoPartnerCore", "CaptureEngine", "ScriptNarrator", "CloudRouter", "MemoryStore", "ActionExecutor"]),
     ]
 )

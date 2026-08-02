@@ -54,6 +54,24 @@ V1→V2 差異：擷取單位（整 frame → tile + attention region 多頻率�
 ### B.3 滑鼠驅動 attention region
 CGEventTap 監聽 mouseMoved/leftMouseDown/scrollWheel（global、低延遲、`.listenOnly`）。attention region = 游標中心 600×400pt，內部 tile 升 hot-priority（2x、4–8 FPS）。滑鼠靜止衰減、快速滑動降頻（模擬 saccade vs fixation）。
 
+#### B.3.1 事件加權的注意力能量模型（ADR-0006）
+不只用游標「位置」，更用事件「種類」決定注意力強度——因為**點擊是一個意圖動作的起點**，點擊後 ~300–500ms（UI 反應、彈窗、選取、焦點變更）是整段操作中資訊最密集的時刻；單純移動是滑鼠在路上（ballistic/saccade），靜置則資訊量最低。
+
+以一個注意力能量 `A ∈ [0,1]` 驅動擷取參數（region 半徑 / 解析度 scale / FPS），各事件取 max 後隨時間衰減（half-life ~2s，clicks 重新充能）：
+
+| 事件 | 對 A 的作用 | 理由 |
+|---|---|---|
+| **click（mouseDown）** | `A = 1.0` + **立即強制一次高解析擷取** + 擴大 region | 動作起點，最該細看 |
+| drag（mouseDragged） | `A = max(A, 0.85)` 並追蹤移動中的 region | 選取/拖曳進行中 |
+| keyDown（打字） | `A_focus = max(., 0.8)`，**錨定 focused element（§B.4）非游標** | 打字常不在滑鼠處 |
+| scrollWheel | `A = max(A, 0.6)` | 內容在游標下變動，偏閱讀 |
+| mouseMoved | `A = max(A, 0.3·(1−speed))`，**快速移動更低** | 過渡中，不升級 |
+| idle（N 秒無事件） | 只衰減 → 回 baseline（COLD） | 周邊心跳 0.2 FPS |
+
+`A` 分帶映射到擷取參數（見 `CaptureEngine/AttentionModel`）：`≥0.7` HOT(400pt/2x/8fps)、`0.4–0.7` 升高(300pt/1x/4fps)、`0.15–0.4` WARM(250pt/1x/2fps)、其餘 COLD(0.5x/0.2fps)。
+
+**整合**：click 可把 attention region 內 tile 立即從 WARM→HOT（§B.6）；click 也是 Action Script Narrator（v2.1）天然的 L0 事件邊界 / L1 step 起點。**邊界處理**：連點/雙擊 coalesce 避免 thrash，週期性高頻連點（如遊戲）比照 DYNAMIC；敏感 region 即使 A 高仍不擷取內容（§G）。click 常先於 AX 的 focus/window 變更通知 → 與 `AXObserver` 併用觸發強制照一張。
+
 ### B.4 焦點元件定義重點區域
 `AXUIElementCreateSystemWide()` + `kAXFocusedUIElementAttribute` 取 focused element 的 AXFrame；`AXObserver` 訂閱 focused element/window 變更。滑鼠軸 + 焦點軸取聯集為高優先區；兩者皆閒置 → 退回低頻概覽。能拿 AX 文字的 tile 不必跑 OCR（accessibility-first，OCR fallback，對齊 screenpipe）。
 
@@ -91,6 +109,30 @@ Qwen2.5-VL-7B MLX（4-bit ~5–6GB，vision feature caching 多輪快 ~3×）只
 ## E. 雲端 Claude 整合（V2）
 
 ContextEnvelope：focus_image（焦點 L0 2x 小圖）+ overview_thumb（≤1024px）+ dirty_summary（文字）+ attention_heatmap（稀疏權重）+ focused_text（AX ±200 字）。熱圖轉自然語言幫 Claude 聚焦。Computer Use：beta `computer-use-2025-11-24`、`computer_20251124`；Opus 4.7 ~3.75MP；Retina 座標 ÷2；切 tile 分送不提升精度 → 送焦點整圖。LiteLLM + prompt caching：reference/縮圖/系統 prompt 放穩定前綴命中 cache。PIPL guard：含上海個資/敏感畫面 → 強制 local-only。
+
+### E.1 本地↔雲端分層推理階梯與升級觸發（ADR-0007）
+
+本地與雲端模型不是二選一，而是一條**本地優先的推理階梯**：絕大多數「小範圍辨識」留在本地跑，只有「大變動」才把上下文往雲端送。階梯由便宜到貴：
+
+| 階 | 引擎 | 處理 | 何時 |
+|---|---|---|---|
+| `localOCR` | Vision ROI（§B.8） | dirty-tile 文字 | 幾乎沒變 / 低注意力，只要文字 |
+| `localIntent` | FoundationModels 3B（§D） | 意圖分類 / 路由 | 一般操作中 |
+| `localVLM` | Qwen2.5-VL MLX（§D） | 焦點拼接圖視覺語意 | 換版面 / 高注意力焦點需「看懂」 |
+| `cloud` | Claude computer-use（§E） | 複雜推理 + 動作規劃 | **大變動 / 跨視窗多步任務** |
+
+**升級觸發**（任一成立即升 `cloud`，否則留在對應本地階）：
+
+1. **變動規模大**：dHash 聚合的變動 tile 佔畫面比例 ≥ 門檻（§B.2），代表大面積改版 / 換頁——即「有大變動再往雲端送」。
+2. **本地信心不足**：本地模型對「已充分理解當前畫面」的 confidence < 門檻（看不懂就問雲端）。
+3. **跨視窗 / 多步規劃**：任務需橫跨多個 app / 視窗或多步動作，單張焦點圖不足以決策。
+
+**兩道閘門**：
+
+- **隱私優先（最高）**：含上海團隊個資 / 敏感 tile 一律封頂在本地（最多 `localVLM`），即使變動再大也**不出境**（ADR-0005 / §G）。
+- **冷卻 / 防 thrash**：雲端升級之間設最小間隔（預設 ~4s）；冷卻窗內的連續大變動改用最強本地階（`localVLM`）頂著，避免把成本 / 延遲打爆（類比 ADR-0006 連點 coalesce）。
+
+訊號（`RoutingSignal`）與 ADR-0006 的注意力能量 `A`、§B.6 冷熱狀態、§B.2 dHash 變動量同源；門檻為保守起點，M5 真機以「誤升級率 / 漏升級率 / 延遲 / 每日 token」調校。實作見 `CloudRouter` 的 `EscalationPolicy`。
 
 ## F. 觸發與介入流程（V2）
 

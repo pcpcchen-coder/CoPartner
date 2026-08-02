@@ -12,5 +12,10 @@ struct CoPartnerApp: App {
                 .environmentObject(coordinator)
         }
         .menuBarExtraStyle(.window)
+
+        // 設定視窗（⌘, 或選單「設定熱鍵…」）——讓使用者自訂全域熱鍵（step 10.5）。
+        Settings {
+            SettingsView()
+        }
     }
 }

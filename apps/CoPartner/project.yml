@@ -14,6 +14,9 @@ settings:
 packages:
   CoPartnerKit:
     path: ../../packages/CoPartnerKit
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: 2.0.0
 targets:
   CoPartner:
     type: application
@@ -32,6 +35,7 @@ targets:
         product: CloudRouter
       - package: CoPartnerKit
         product: ActionExecutor
+      - package: KeyboardShortcuts
     info:
       path: Sources/Info.plist
       properties:
@@ -43,3 +47,10 @@ targets:
       properties:
         com.apple.security.app-sandbox: false   # 需跨程序 AX / CGEvent，無法沙箱化
         com.apple.security.network.client: true
+schemes:
+  CoPartner:                    # 明確的 shared scheme，讓 headless CI 的 xcodebuild -scheme 可靠找到
+    build:
+      targets:
+        CoPartner: all
+    run:
+      config: Debug

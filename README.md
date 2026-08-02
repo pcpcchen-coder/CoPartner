@@ -1,6 +1,6 @@
 # CoPartner
 
-> 一個在 macOS 上持續觀察你的操作、用本地模型把行為寫成「操作劇本」、並在你按下熱鍵時由雲端大模型接手完成任務的 **Ambient AI Assistant**。
+> 一個在 macOS 上持續觀察你的操作、用本地模型把行為寫成「操作劇本」、並在你按下熱鍵時由雲端大模型接手完成任務的 **Ambient AI Assistant**。 (補上全日語音錄音後的文字轉換摘要，並且可以透過語音互動交棒!)
 
 **首要目標平台**：Mac Mini M4 / Apple Silicon，macOS 26 Tahoe（向下相容 Sequoia 15 為次要目標）。
 
@@ -10,7 +10,7 @@ CoPartner 由三個核心理念組成：
 
 1. **看得省（Smart Capture Engine）** — 不做定頻全畫面截圖，改用 foveated + dirty-region 擷取：滑鼠/焦點區高解析高頻，周邊低解析低頻，只對「變動的 tile」細看。借鏡 KVM-over-IP / VNC 的增量更新與人眼中央窩成像。
 2. **記得清（Action Script Narrator）** — 本地快速模型（Apple FoundationModels 3B / Qwen MLX）持續把操作寫成 human-readable 的劇本（L0 事件日誌 → L1 敘事步驟 → L2 段落摘要），滾動彙總。
-3. **交棒快（Cloud Takeover）** — 熱鍵觸發時，把劇本（文字因果史）+ 焦點小圖交給 Claude（Computer Use），由大模型「續寫」未完成的 open loop，使用者免重新解釋。
+3. **交棒快（Cloud Takeover）** — 熱鍵觸發時，把劇本（文字因果史）+ 焦點小圖交給 Claude（Computer Use），由大模型「續寫」未完成的 open loop，使用者免重新解釋。(可語音交棒)
 
 混合架構：敏感資料與高頻觀察留本地，複雜推理與動作規劃上雲；兩者之間有明確隱私閘門（PII 遮罩 + app 黑名單 + 上海團隊 PIPL 跨境合規）。
 

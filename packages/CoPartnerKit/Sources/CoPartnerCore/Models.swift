@@ -80,3 +80,86 @@ public struct ContextEnvelope: Sendable, Codable {
         self.takeover = takeover
     }
 }
+
+// MARK: - 本地↔雲端分層推理路由（V2-E.1 / ADR-0007）
+
+/// 推理階梯：本地優先，由便宜到貴。只有「大變動」才升到 `.cloud`。
+public enum InferenceTier: Int, Sendable, Codable, Comparable {
+    case localOCR = 0     // Vision dirty-tile 文字（§B.8）——最便宜
+    case localIntent = 1  // FoundationModels 3B 意圖 / 路由（§D）
+    case localVLM = 2      // Qwen2.5-VL 焦點拼接圖視覺語意（§D）
+    case cloud = 3         // Claude computer-use（§E）——最貴，留給大變動 / 跨視窗任務
+    public static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
+}
+
+/// 驅動分層路由的訊號。由擷取 / 本地推理層產生，CloudRouter 的 `EscalationPolicy` 消費。
+public struct RoutingSignal: Sendable {
+    public var dirtyAreaRatio: Double   // 變動 tile 佔畫面比例 [0,1]（§B.2 dHash 聚合）= 「變動大小」
+    public var attentionEnergy: Double  // 注意力能量 A∈[0,1]（ADR-0006）
+    public var localConfidence: Double  // 本地模型對「已充分理解當前畫面」的信心 [0,1]
+    public var contextSwitched: Bool    // 換 app / 視窗 / 版面（novelty）
+    public var crossWindowTask: Bool    // 需跨視窗 / 多步規劃（單張焦點圖不足）
+    public var containsSensitive: Bool  // 含敏感 / 上海個資 → 強制不出境（ADR-0005 / §G）
+    public init(dirtyAreaRatio: Double = 0,
+                attentionEnergy: Double = 0.5,
+                localConfidence: Double = 1.0,
+                contextSwitched: Bool = false,
+                crossWindowTask: Bool = false,
+                containsSensitive: Bool = false) {
+        self.dirtyAreaRatio = dirtyAreaRatio
+        self.attentionEnergy = attentionEnergy
+        self.localConfidence = localConfidence
+        self.contextSwitched = contextSwitched
+        self.crossWindowTask = crossWindowTask
+        self.containsSensitive = containsSensitive
+    }
+}
+
+// MARK: - 雲端接手提議（V2-F / docs/design/sandbox-threat-model.md）
+
+/// 提議動作的風險分級（威脅模型 §3）。**high 在任何 policy 下都不可自動核准**（不變式 I2）。
+public enum ActionRisk: Int, Sendable, Codable, Comparable {
+    case low = 0, medium = 1, high = 2
+    public static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
+}
+
+/// 雲端模型回傳的「提議動作」。**刻意結構化、無整串 shell 字串欄位**（不變式 I4）——
+/// shell 類只有 argv，executor 以 posix_spawn 直帶 argv、不經 `sh -c`。風險分級由 step 50 判定。
+public struct ProposedAction: Sendable, Equatable, Identifiable {
+    public enum Kind: Sendable, Equatable {
+        case screenshot
+        case click(x: Int, y: Int)
+        case typeText(String)
+        case keypress(String)                              // 如 "cmd+s"
+        case scroll(dx: Int, dy: Int)
+        case shell(argv: [String])                         // 無整串命令字串（I4）
+        case readFile(path: String)
+        case writeFile(path: String, contents: String)
+        case outboundComms(kind: String, target: String)   // 寄信 / 送出表單類（step 50 一律 high）
+    }
+    public let id: UUID
+    public let kind: Kind
+    public let rationale: String
+    public init(id: UUID = UUID(), kind: Kind, rationale: String = "") {
+        self.id = id
+        self.kind = kind
+        self.rationale = rationale
+    }
+}
+
+extension ProposedAction.Kind {
+    /// 稽核 / HUD 顯示用的一行描述（CloudRouter 稽核與 ActionExecutor 共用）。
+    public var summary: String {
+        switch self {
+        case .screenshot: return "screenshot"
+        case let .click(x, y): return "click(\(x),\(y))"
+        case let .typeText(t): return "type(\(t.count) chars)"
+        case let .keypress(k): return "key(\(k))"
+        case let .scroll(dx, dy): return "scroll(\(dx),\(dy))"
+        case let .shell(argv): return "shell(\(argv.joined(separator: " ")))"
+        case let .readFile(p): return "readFile(\(p))"
+        case let .writeFile(p, _): return "writeFile(\(p))"
+        case let .outboundComms(k, t): return "outbound(\(k)→\(t))"
+        }
+    }
+}
