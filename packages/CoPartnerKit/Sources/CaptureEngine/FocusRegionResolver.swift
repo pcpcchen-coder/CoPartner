@@ -8,8 +8,13 @@ public struct AXFocusedElement: Sendable, Equatable {
     public var subrole: String?    // 如 AXSecureTextField（密碼欄）——用來確保永不記錄密碼
     public var frame: CGRect       // 螢幕座標
     public var value: String?      // AX value / 選取文字（可能為 nil）
-    public init(role: String, subrole: String? = nil, frame: CGRect, value: String? = nil) {
-        self.role = role; self.subrole = subrole; self.frame = frame; self.value = value
+    /// 所屬視窗標題（AXWindow 的 AXTitle）。**焦點識別用這個，不要用 value**——
+    /// value 是欄位內容（終端機每輸出一字就變），拿來判斷「換視窗了嗎」會狂噴 FOCUS。
+    public var windowTitle: String?
+    public init(role: String, subrole: String? = nil, frame: CGRect,
+                value: String? = nil, windowTitle: String? = nil) {
+        self.role = role; self.subrole = subrole; self.frame = frame
+        self.value = value; self.windowTitle = windowTitle
     }
 }
 

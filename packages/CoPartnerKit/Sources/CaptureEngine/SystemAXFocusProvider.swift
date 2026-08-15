@@ -16,7 +16,22 @@ public final class SystemAXFocusProvider: AXFocusProviding {
         let subrole = copyString(focused, kAXSubroleAttribute as CFString)
         let value = copyString(focused, kAXValueAttribute as CFString)
         let frame = copyFrame(focused) ?? .zero
-        return AXFocusedElement(role: role, subrole: subrole, frame: frame, value: value)
+        return AXFocusedElement(role: role, subrole: subrole, frame: frame,
+                                value: value, windowTitle: windowTitle(of: focused))
+    }
+
+    /// 沿 AXParent 往上找 AXWindow，讀其 AXTitle（焦點識別用；value 會隨內容變動不適合）。
+    /// 最多走 8 層避免病態階層造成長迴圈。
+    private func windowTitle(of element: AXUIElement) -> String? {
+        var current: AXUIElement? = element
+        for _ in 0..<8 {
+            guard let node = current else { return nil }
+            if copyString(node, kAXRoleAttribute as CFString) == (kAXWindowRole as String) {
+                return copyString(node, kAXTitleAttribute as CFString)
+            }
+            current = copyElement(node, kAXParentAttribute as CFString)
+        }
+        return nil
     }
 
     // TODO(step 10+): AXObserver 訂閱 focused element / window 變更以反應式觸發（§B.3.1）。

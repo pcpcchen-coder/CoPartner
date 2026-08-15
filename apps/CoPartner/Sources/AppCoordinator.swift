@@ -296,7 +296,10 @@ final class AppCoordinator: ObservableObject {
     @discardableResult
     private func pollFocus(app: String) -> AXFocusedElement? {
         let element = axProvider.focusedElement()
-        if let event = focusTracker.event(app: app, window: element?.value ?? "") {
+        // 焦點識別用**視窗標題**（fallback: role）。
+        // ⚠️ 不可用 element.value——那是欄位內容，終端機每輸出一字就變，會狂噴 FOCUS（step 29 dogfood 實測）。
+        let window = element?.windowTitle ?? element?.role ?? ""
+        if let event = focusTracker.event(app: app, window: window) {
             let currentFeed = feed
             Task { await currentFeed.record(event) }
         }
@@ -306,6 +309,9 @@ final class AppCoordinator: ObservableObject {
     /// 輸入事件 → 焦點更新 + TYPE/PASTE/SCROLL 劇本事件（純翻譯在 InputEventTranslator）。
     private func handleInput(_ captured: CapturedInput) {
         let app = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
+        // 滑鼠**移動**不做焦點輪詢：它不代表焦點改變，卻是最高頻的事件源（每次 AX 讀取都有成本）。
+        // 點擊/拖曳仍輪詢——那是真正可能換焦點的動作（ADR-0006 也以 click 拉注意力峰值）。
+        if case .pointer(let signal) = captured, case .move = signal { return }
         let element = pollFocus(app: app)
         let l0: L0Event?
         switch captured {
