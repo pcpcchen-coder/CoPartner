@@ -88,7 +88,7 @@
 | 26 | AX-text-first fallback 邏輯 | M2 | Sonnet 5 | ✅ | 4 |
 | 27 | sidecar `/ocr` 接線（ocrmac） | M2 | Sonnet 5 | ✅（接線；真 ocrmac 品質 🔒）| — |
 | 28 | CI 補 Python pytest job | 基建 | Sonnet 5 | ✅ | 27 |
-| 29 | 🔒 M2 真機驗收（OCR 吞吐 ≤ V1 20%） | M2 | — | ⬜ | 25,26,27 |
+| 29 | 🔒 M2 真機驗收（OCR 吞吐 ≤ V1 20%） | M2 | — | ✅ 真機通過（18%）| 25,26,27 |
 | **D. 記憶系統（rolling-wave）** ||||||
 | 30 | 【展開】D 階段詳細 step 規劃 | M3 | Opus 4.8 | ✅ | 18,24 |
 | 31 | Reference+delta 重建演算法 | M3 | Sonnet 5 / Opus 審 | ✅（重建/簿記；真像素併 36 🔒）| 30 |
@@ -295,8 +295,23 @@
 - **背景**：CI 的 `python` job **只有 `ruff check`，沒有測試**。補上。
 - **修改檔案**：`sidecar/pyproject.toml`（加 `pytest` dev dep）、新增 `sidecar/tests/`、`.github/workflows/ci.yml`（加 `uvx pytest`）。**DoD**：✅ CI ・ **模型**：Sonnet 5
 
-#### Step 29 — 🔒 M2 真機驗收
+#### Step 29 — 🔒 M2 真機驗收 ✅ 真機通過（2026-08-15）
 - OCR 像素吞吐 ≤ V1 的 20%。你在 Mac 上執行、回報。
+- **結果**：✅ 通過。焦點區 OCR 實測 **18%**（選單顯示 `畫面文字[18%]：…`）；辨識中英混合正確
+  （備忘錄內文含標點/括號皆對），**未混入**其他 app / 選單列文字。sidecar（ocrmac/Vision）鏈路
+  在真機運作：截圖 → 焦點裁切 → `/ocr` → 摘要。
+- **本次 dogfood 補的膠水**：`OCRClient`（sidecar client，注入式 sender）+ `OCRTextDigest`（摘要）
+  + `OCRCropPlanner`（焦點裁切，M2 指標可目測）+ AppCoordinator OCR 迴圈（每 ~3s，黑名單源頭排除）。
+- **真機發現並修復的 bug**：
+  1. **FOCUS 狂刷**（同秒十幾行重複）——`pollFocus` 誤用 AX `value`（欄位內容）當視窗識別，
+     終端機每輸出一字即被判定換視窗。改用 `AXFocusedElement.windowTitle`（provider 沿 AXParent
+     上溯找 AXWindow 讀 AXTitle）+ 滑鼠 move 不輪詢焦點。`FocusIdentityRegressionTests` 釘住。
+  2. **OCR 截整螢幕**——混入選單列/他 app 文字且等同 V1 吞吐。改為只 OCR 焦點區（`OCRCropPlanner`）。
+  3. **`uv run copartner-sidecar` spawn 失敗**——`pyproject.toml` 缺 `[build-system]`，uv 視為
+     non-package 專案不安裝 script。補 hatchling backend。
+- **環境註記**：未簽章開發版每次 rebuild 會使 TCC 螢幕錄製授權失效（清單顯示已開但仍反覆索權）。
+  解法：`tccutil reset ScreenCapture com.pcpcchen.copartner.CoPartner` → 重新授權 → **停止再重跑**；
+  根治請在 Signing & Capabilities 指定固定 Team（免費個人帳號即可）。
 
 ---
 

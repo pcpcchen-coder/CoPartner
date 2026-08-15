@@ -35,7 +35,15 @@
 
 ---
 
-## M2 — Step 29：局部 OCR 吞吐 + 辨識品質
+## M2 — Step 29：局部 OCR 吞吐 + 辨識品質 — ✅ 已通過（2026-08-15，實測 18%）
+
+> **已完成，保留作為後續里程碑的參考範例。** 實測 18% ≤ 20% 目標；辨識中英混合正確、未混入他 app 文字。
+> 過程中修掉三個真機才現形的問題：FOCUS 狂刷（AX value 誤當視窗識別）、OCR 截整螢幕、
+> sidecar 缺 `[build-system]` 導致 `uv run copartner-sidecar` spawn 失敗。詳見 backlog step 29 節。
+> **環境提醒（對後續里程碑都適用）**：未簽章開發版每次 rebuild 會使 TCC 授權失效 →
+> `tccutil reset ScreenCapture com.pcpcchen.copartner.CoPartner` 後重新授權，並**停止再重跑**；
+> 根治請在 Signing & Capabilities 指定固定 Team。
+> sidecar 啟動：`cd sidecar && uv sync && uv run copartner-sidecar`（或 `uv run uvicorn copartner_sidecar.server:app --host 127.0.0.1 --port 8765`）。
 
 **現況**：OCR ROI 映射（step 25）、AX-text-first 決策（step 26）、sidecar `/ocr` 接線 + 合約 pytest（step 27/28）都 CI 綠。真 `ocrmac`/Vision 辨識、真吞吐沒驗過。
 

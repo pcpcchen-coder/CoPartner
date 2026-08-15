@@ -4,6 +4,7 @@ import AppKit
 import KeyboardShortcuts
 import CoreVideo
 import CoreMedia
+import ImageIO
 @preconcurrency import ScreenCaptureKit
 import CoPartnerCore
 import CaptureEngine
@@ -33,6 +34,7 @@ final class AppCoordinator: ObservableObject {
     @Published var lastStepSummary: String = "尚未開始觀察"
     @Published private(set) var recentLines: [String] = []
     @Published private(set) var captureSummary: String = "螢幕擷取：待真機啟用（step 18）"
+    @Published private(set) var screenTextSummary: String = "畫面文字：未啟用"
 
     var isIdle: Bool { session.mode == .idle }
     var statusIcon: String {
@@ -54,6 +56,11 @@ final class AppCoordinator: ObservableObject {
     private var captureProducer: SCKFrameProducer?
     private var captureEngine: CaptureEngine?
     private var captureStartTask: Task<Void, Never>?
+
+    // 局部 OCR（step 29）：截焦點畫面 → sidecar /ocr → 摘要。黑名單/自身 app 從 source 排除（§G）。
+    private let ocrRecognizer = SidecarOCRRecognizer()
+    private var ocrTask: Task<Void, Never>?
+    private lazy var ocrBlacklist = CaptureBlacklist(ownBundleID: Bundle.main.bundleIdentifier ?? "com.copartner.app")
 
     // 接手鏈（step 49）：世代時鐘為 token 作廢的單一權威（威脅 I7）。
     @Published private(set) var takeoverSummary: String = "接手：未啟動"
@@ -193,6 +200,81 @@ final class AppCoordinator: ObservableObject {
         inputTap = tap
 
         startCapture()   // 螢幕擷取（需 Screen Recording；失敗則不影響事件日誌）
+        startOCRLoop()   // 局部 OCR（需 sidecar 起著；失敗則不影響事件日誌與擷取）
+    }
+
+    /// 節流 OCR 迴圈：每 ~3s 截一次焦點顯示器 → 存暫存 PNG → sidecar /ocr → 摘要。
+    /// 全程 guarded：sidecar 沒起 / 截圖失敗 → 摘要顯示未啟用，其餘子系統照常。
+    private func startOCRLoop() {
+        screenTextSummary = "畫面文字：啟動中…"
+        ocrTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.session.mode != .idle else { return }
+                await self.ocrTick()
+                try? await Task.sleep(for: .seconds(3))
+            }
+        }
+    }
+
+    private func ocrTick() async {
+        do {
+            let content = try await SCShareableContent.current
+            guard session.mode != .idle, !Task.isCancelled else { return }
+            guard let display = content.displays.first else {
+                screenTextSummary = "畫面文字：找不到顯示器"; return
+            }
+            // 黑名單 + 自身 app 從截圖源頭排除（隱私 §G / step 56）。
+            let excluded = content.applications.filter {
+                ocrBlacklist.isBlocked(bundleID: $0.bundleIdentifier, appName: $0.applicationName)
+            }
+            let filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: [])
+            let config = SCStreamConfiguration()
+            config.width = display.width
+            config.height = display.height
+            let full = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+
+            // 只 OCR 焦點區（§B.8）：整螢幕 OCR 會混入選單列/他 app 文字，且違反 M2 吞吐指標。
+            // 無有效焦點框 → 本次略過（不做全螢幕 OCR）。
+            let focusFrame = axProvider.focusedElement()?.frame
+            guard let crop = OCRCropPlanner.cropRect(focusFrame: focusFrame,
+                                                     screenWidth: display.width,
+                                                     screenHeight: display.height) else {
+                screenTextSummary = "畫面文字：（無焦點區，略過）"
+                return
+            }
+            // CGImage 座標可能因 Retina 而與點座標不同比例——依實際像素寬換算縮放。
+            let scale = CGFloat(full.width) / CGFloat(display.width)
+            let pixelCrop = CGRect(x: crop.minX * scale, y: crop.minY * scale,
+                                   width: crop.width * scale, height: crop.height * scale)
+            guard let image = full.cropping(to: pixelCrop) else {
+                screenTextSummary = "畫面文字：（裁切失敗）"
+                return
+            }
+
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("copartner-ocr.png")
+            try Self.savePNG(image, to: url)
+            let segments = try await ocrRecognizer.recognize(imagePath: url.path, languages: ["zh-Hant", "en-US"])
+            guard session.mode != .idle, !Task.isCancelled else { return }
+            let ratio = OCRCropPlanner.areaRatio(cropRect: crop,
+                                                 screenWidth: display.width, screenHeight: display.height)
+            let pct = Int((ratio * 100).rounded())   // M2 吞吐指標：目標 ≤ ~20%
+            let snippet = OCRTextDigest.snippet(from: segments)
+            screenTextSummary = snippet.isEmpty
+                ? "畫面文字：（本次無辨識結果，焦點區 \(pct)%）"
+                : "畫面文字[\(pct)%]：\(snippet)"
+        } catch let error as OCRClientError {
+            screenTextSummary = "畫面文字：sidecar 未回應（\(error)）"
+        } catch {
+            screenTextSummary = "畫面文字：未啟用（\(error.localizedDescription)）"
+        }
+    }
+
+    private static func savePNG(_ image: CGImage, to url: URL) throws {
+        guard let dest = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else {
+            throw OCRClientError.badResponse
+        }
+        CGImageDestinationAddImage(dest, image, nil)
+        guard CGImageDestinationFinalize(dest) else { throw OCRClientError.badResponse }
     }
 
     /// 啟動真螢幕擷取：SCShareableContent → SCKFrameProducer → CaptureEngine → 摘要。
@@ -238,7 +320,10 @@ final class AppCoordinator: ObservableObject {
     @discardableResult
     private func pollFocus(app: String) -> AXFocusedElement? {
         let element = axProvider.focusedElement()
-        if let event = focusTracker.event(app: app, window: element?.value ?? "") {
+        // 焦點識別用**視窗標題**（fallback: role）。
+        // ⚠️ 不可用 element.value——那是欄位內容，終端機每輸出一字就變，會狂噴 FOCUS（step 29 dogfood 實測）。
+        let window = element?.windowTitle ?? element?.role ?? ""
+        if let event = focusTracker.event(app: app, window: window) {
             let currentFeed = feed
             Task { await currentFeed.record(event) }
         }
@@ -248,6 +333,9 @@ final class AppCoordinator: ObservableObject {
     /// 輸入事件 → 焦點更新 + TYPE/PASTE/SCROLL 劇本事件（純翻譯在 InputEventTranslator）。
     private func handleInput(_ captured: CapturedInput) {
         let app = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
+        // 滑鼠**移動**不做焦點輪詢：它不代表焦點改變，卻是最高頻的事件源（每次 AX 讀取都有成本）。
+        // 點擊/拖曳仍輪詢——那是真正可能換焦點的動作（ADR-0006 也以 click 拉注意力峰值）。
+        if case .pointer(let signal) = captured, case .move = signal { return }
         let element = pollFocus(app: app)
         let l0: L0Event?
         switch captured {
@@ -299,6 +387,9 @@ final class AppCoordinator: ObservableObject {
         captureStartTask = nil
         captureTask?.cancel()
         captureTask = nil
+        ocrTask?.cancel()
+        ocrTask = nil
+        screenTextSummary = "畫面文字：未啟用"
         captureProducer?.stop()
         captureProducer = nil
         let dyingEngine = captureEngine
