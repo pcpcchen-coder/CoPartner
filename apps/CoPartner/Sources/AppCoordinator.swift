@@ -231,13 +231,37 @@ final class AppCoordinator: ObservableObject {
             let config = SCStreamConfiguration()
             config.width = display.width
             config.height = display.height
-            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            let full = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+
+            // 只 OCR 焦點區（§B.8）：整螢幕 OCR 會混入選單列/他 app 文字，且違反 M2 吞吐指標。
+            // 無有效焦點框 → 本次略過（不做全螢幕 OCR）。
+            let focusFrame = axProvider.focusedElement()?.frame
+            guard let crop = OCRCropPlanner.cropRect(focusFrame: focusFrame,
+                                                     screenWidth: display.width,
+                                                     screenHeight: display.height) else {
+                screenTextSummary = "畫面文字：（無焦點區，略過）"
+                return
+            }
+            // CGImage 座標可能因 Retina 而與點座標不同比例——依實際像素寬換算縮放。
+            let scale = CGFloat(full.width) / CGFloat(display.width)
+            let pixelCrop = CGRect(x: crop.minX * scale, y: crop.minY * scale,
+                                   width: crop.width * scale, height: crop.height * scale)
+            guard let image = full.cropping(to: pixelCrop) else {
+                screenTextSummary = "畫面文字：（裁切失敗）"
+                return
+            }
+
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("copartner-ocr.png")
             try Self.savePNG(image, to: url)
             let segments = try await ocrRecognizer.recognize(imagePath: url.path, languages: ["zh-Hant", "en-US"])
             guard session.mode != .idle, !Task.isCancelled else { return }
+            let ratio = OCRCropPlanner.areaRatio(cropRect: crop,
+                                                 screenWidth: display.width, screenHeight: display.height)
+            let pct = Int((ratio * 100).rounded())   // M2 吞吐指標：目標 ≤ ~20%
             let snippet = OCRTextDigest.snippet(from: segments)
-            screenTextSummary = snippet.isEmpty ? "畫面文字：（本次無辨識結果）" : "畫面文字：\(snippet)"
+            screenTextSummary = snippet.isEmpty
+                ? "畫面文字：（本次無辨識結果，焦點區 \(pct)%）"
+                : "畫面文字[\(pct)%]：\(snippet)"
         } catch let error as OCRClientError {
             screenTextSummary = "畫面文字：sidecar 未回應（\(error)）"
         } catch {
