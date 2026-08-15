@@ -4,7 +4,6 @@ import AppKit
 import KeyboardShortcuts
 import CoreVideo
 import CoreMedia
-import ImageIO
 @preconcurrency import ScreenCaptureKit
 import CoPartnerCore
 import CaptureEngine
@@ -57,8 +56,9 @@ final class AppCoordinator: ObservableObject {
     private var captureEngine: CaptureEngine?
     private var captureStartTask: Task<Void, Never>?
 
-    // 局部 OCR（step 29）：截焦點畫面 → sidecar /ocr → 摘要。黑名單/自身 app 從 source 排除（§G）。
-    private let ocrRecognizer = SidecarOCRRecognizer()
+    // 局部 OCR（step 29）：截焦點畫面 → **macOS Vision 直接辨識** → 摘要。
+    // 不經 sidecar：日常使用零外部服務依賴，使用者只要開 app（sidecar 保留給 /vlm 視覺語意）。
+    private let ocrRecognizer = VisionTextRecognizer()
     private var ocrTask: Task<Void, Never>?
     private lazy var ocrBlacklist = CaptureBlacklist(ownBundleID: Bundle.main.bundleIdentifier ?? "com.copartner.app")
 
@@ -251,30 +251,20 @@ final class AppCoordinator: ObservableObject {
                 return
             }
 
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("copartner-ocr.png")
-            try Self.savePNG(image, to: url)
-            let segments = try await ocrRecognizer.recognize(imagePath: url.path, languages: ["zh-Hant", "en-US"])
+            // 直接把裁好的影像餵 Vision——不落地存 PNG、不走 HTTP。
+            let segments = try await ocrRecognizer.recognize(image: image, languages: ["zh-Hant", "en-US"])
             guard session.mode != .idle, !Task.isCancelled else { return }
             let ratio = OCRCropPlanner.areaRatio(cropRect: crop,
                                                  screenWidth: display.width, screenHeight: display.height)
             let pct = Int((ratio * 100).rounded())   // M2 吞吐指標：目標 ≤ ~20%
-            let snippet = OCRTextDigest.snippet(from: segments)
+            // Vision 的 boundingBox 是左下原點——講明慣例，否則摘要會上下顛倒。
+            let snippet = OCRTextDigest.snippet(from: segments, origin: .bottomLeft)
             screenTextSummary = snippet.isEmpty
                 ? "畫面文字：（本次無辨識結果，焦點區 \(pct)%）"
                 : "畫面文字[\(pct)%]：\(snippet)"
-        } catch let error as OCRClientError {
-            screenTextSummary = "畫面文字：sidecar 未回應（\(error)）"
         } catch {
             screenTextSummary = "畫面文字：未啟用（\(error.localizedDescription)）"
         }
-    }
-
-    private static func savePNG(_ image: CGImage, to url: URL) throws {
-        guard let dest = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else {
-            throw OCRClientError.badResponse
-        }
-        CGImageDestinationAddImage(dest, image, nil)
-        guard CGImageDestinationFinalize(dest) else { throw OCRClientError.badResponse }
     }
 
     /// 啟動真螢幕擷取：SCShareableContent → SCKFrameProducer → CaptureEngine → 摘要。
