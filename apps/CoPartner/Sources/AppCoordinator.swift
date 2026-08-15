@@ -4,6 +4,7 @@ import AppKit
 import KeyboardShortcuts
 import CoreVideo
 import CoreMedia
+import ImageIO
 @preconcurrency import ScreenCaptureKit
 import CoPartnerCore
 import CaptureEngine
@@ -33,6 +34,7 @@ final class AppCoordinator: ObservableObject {
     @Published var lastStepSummary: String = "尚未開始觀察"
     @Published private(set) var recentLines: [String] = []
     @Published private(set) var captureSummary: String = "螢幕擷取：待真機啟用（step 18）"
+    @Published private(set) var screenTextSummary: String = "畫面文字：未啟用"
 
     var isIdle: Bool { session.mode == .idle }
     var statusIcon: String {
@@ -54,6 +56,11 @@ final class AppCoordinator: ObservableObject {
     private var captureProducer: SCKFrameProducer?
     private var captureEngine: CaptureEngine?
     private var captureStartTask: Task<Void, Never>?
+
+    // 局部 OCR（step 29）：截焦點畫面 → sidecar /ocr → 摘要。黑名單/自身 app 從 source 排除（§G）。
+    private let ocrRecognizer = SidecarOCRRecognizer()
+    private var ocrTask: Task<Void, Never>?
+    private lazy var ocrBlacklist = CaptureBlacklist(ownBundleID: Bundle.main.bundleIdentifier ?? "com.copartner.app")
 
     // 接手鏈（step 49）：世代時鐘為 token 作廢的單一權威（威脅 I7）。
     @Published private(set) var takeoverSummary: String = "接手：未啟動"
@@ -193,6 +200,57 @@ final class AppCoordinator: ObservableObject {
         inputTap = tap
 
         startCapture()   // 螢幕擷取（需 Screen Recording；失敗則不影響事件日誌）
+        startOCRLoop()   // 局部 OCR（需 sidecar 起著；失敗則不影響事件日誌與擷取）
+    }
+
+    /// 節流 OCR 迴圈：每 ~3s 截一次焦點顯示器 → 存暫存 PNG → sidecar /ocr → 摘要。
+    /// 全程 guarded：sidecar 沒起 / 截圖失敗 → 摘要顯示未啟用，其餘子系統照常。
+    private func startOCRLoop() {
+        screenTextSummary = "畫面文字：啟動中…"
+        ocrTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.session.mode != .idle else { return }
+                await self.ocrTick()
+                try? await Task.sleep(for: .seconds(3))
+            }
+        }
+    }
+
+    private func ocrTick() async {
+        do {
+            let content = try await SCShareableContent.current
+            guard session.mode != .idle, !Task.isCancelled else { return }
+            guard let display = content.displays.first else {
+                screenTextSummary = "畫面文字：找不到顯示器"; return
+            }
+            // 黑名單 + 自身 app 從截圖源頭排除（隱私 §G / step 56）。
+            let excluded = content.applications.filter {
+                ocrBlacklist.isBlocked(bundleID: $0.bundleIdentifier, appName: $0.applicationName)
+            }
+            let filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: [])
+            let config = SCStreamConfiguration()
+            config.width = display.width
+            config.height = display.height
+            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("copartner-ocr.png")
+            try Self.savePNG(image, to: url)
+            let segments = try await ocrRecognizer.recognize(imagePath: url.path, languages: ["zh-Hant", "en-US"])
+            guard session.mode != .idle, !Task.isCancelled else { return }
+            let snippet = OCRTextDigest.snippet(from: segments)
+            screenTextSummary = snippet.isEmpty ? "畫面文字：（本次無辨識結果）" : "畫面文字：\(snippet)"
+        } catch let error as OCRClientError {
+            screenTextSummary = "畫面文字：sidecar 未回應（\(error)）"
+        } catch {
+            screenTextSummary = "畫面文字：未啟用（\(error.localizedDescription)）"
+        }
+    }
+
+    private static func savePNG(_ image: CGImage, to url: URL) throws {
+        guard let dest = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else {
+            throw OCRClientError.badResponse
+        }
+        CGImageDestinationAddImage(dest, image, nil)
+        guard CGImageDestinationFinalize(dest) else { throw OCRClientError.badResponse }
     }
 
     /// 啟動真螢幕擷取：SCShareableContent → SCKFrameProducer → CaptureEngine → 摘要。
@@ -299,6 +357,9 @@ final class AppCoordinator: ObservableObject {
         captureStartTask = nil
         captureTask?.cancel()
         captureTask = nil
+        ocrTask?.cancel()
+        ocrTask = nil
+        screenTextSummary = "畫面文字：未啟用"
         captureProducer?.stop()
         captureProducer = nil
         let dyingEngine = captureEngine
