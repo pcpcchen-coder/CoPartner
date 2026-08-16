@@ -18,8 +18,13 @@ public struct SSEFrame: Sendable, Equatable {
 
 /// 增量 SSE 解析器。持有跨 chunk 的殘餘，餵多少吐多少完整 frame。
 public struct SSEFrameParser: Sendable {
-    /// 還沒湊成完整行的殘餘位元組（上次 chunk 尾巴被切斷的部分）。
-    private var buffer = ""
+    /// 殘餘以 **Unicode scalar** 而非 Character 保存。
+    ///
+    /// ⚠️ 這不是實作偏好，是正確性要求：Swift 的 `String` 把 `\r\n` 視為
+    /// **一個** Character（字素叢集），所以在 Character 層 `firstIndex(of: "\n")`
+    /// 對 CRLF 輸入**完全找不到換行**——一個 frame 都切不出來，而且悄無聲息地回空陣列。
+    /// 在 scalar 層 `\r` 與 `\n` 才是分開的兩個純量，切行才會正確。
+    private var buffer: [Unicode.Scalar] = []
     /// 目前累積中的 frame 欄位。
     private var currentEvent: String?
     private var currentData: [String] = []
@@ -28,14 +33,16 @@ public struct SSEFrameParser: Sendable {
 
     /// 餵一段（可能不完整的）文字，回傳這次湊齊的所有 frame。
     public mutating func feed(_ chunk: String) -> [SSEFrame] {
-        buffer += chunk
+        buffer.append(contentsOf: chunk.unicodeScalars)
         var frames: [SSEFrame] = []
 
         // 只處理已經有換行結尾的完整行；最後一段沒換行的留在 buffer 等下一個 chunk。
+        // buffer 只會殘留「當前這一行」，所以 removeFirst 的成本不會累積。
         while let newlineIndex = buffer.firstIndex(of: "\n") {
-            var line = String(buffer[buffer.startIndex..<newlineIndex])
-            buffer = String(buffer[buffer.index(after: newlineIndex)...])
-            if line.hasSuffix("\r") { line.removeLast() }   // CRLF
+            var lineScalars = Array(buffer[..<newlineIndex])
+            buffer.removeFirst(newlineIndex + 1)            // 連換行本身一起移除
+            if lineScalars.last == "\r" { lineScalars.removeLast() }   // CRLF
+            let line = String(String.UnicodeScalarView(lineScalars))
 
             if line.isEmpty {
                 // 空行 = frame 結束。沒有 data 的空 frame 忽略（純心跳）。
