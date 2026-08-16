@@ -1,8 +1,12 @@
 # Session 交接 — 從 M2 完成到 M4 開工
 
-> **上一個 session**：https://claude.ai/code/session_01ALsaZzaC9nMLDPG9uRCyXT
-> （全案 58 步 backlog 從零建起 → PR #1/#2/#3 合併 → M2 真機驗收通過 → M4 探針推出）
-> 需要查完整討論脈絡（為什麼這樣設計、踩過哪些坑）可回上面連結。
+> | | Session |
+> |---|---|
+> | **上一個**（建全案骨架 → M2 驗收）| https://claude.ai/code/session_01ALsaZzaC9nMLDPG9uRCyXT |
+> | **接續**（M4 本地敘事）| https://claude.ai/code/session_01CmetxvBBBY35hD9aMNjZds |
+>
+> 上一個 session 涵蓋：全案 58 步 backlog 從零建起 → PR #1/#2/#3 合併 → M2 真機驗收通過
+> → M4 探針推出。需要查完整討論脈絡（為什麼這樣設計、踩過哪些坑、使用者偏好）可回去看。
 > 本文件是**可獨立運作的交接包**：只看這份 + repo 就能無縫接續。
 
 ---
