@@ -235,7 +235,9 @@ final class AppCoordinator: ObservableObject {
     /// 全程 guarded：無 FoundationModels / 未開 Apple Intelligence → fm 層為 nil，
     /// 階梯自動降到規則式，敘事照樣有輸出（§5：降級但不中斷）。
     private func startNarrationLoop() {
-        rollupScheduler = L1RollupScheduler()
+        // 視窗 20 行（預設值）：行數越多 prompt 越長、模型也越容易寫得落落長，
+        // 兩者都直接推高延遲。一個 step 本來就只該涵蓋一小段操作。
+        rollupScheduler = L1RollupScheduler(windowLines: 20)
         hotBuffer = L1HotBuffer()
         lastRollupApp = nil
         l1Steps = []
@@ -243,9 +245,15 @@ final class AppCoordinator: ObservableObject {
 
         localModelSummary = LocalNarrationEnvironment.availability.displayText
 
+        // 階梯只建一次並長期存活。narrator 從日誌行推導 app（不再 init 綁定），
+        // 因此不需要每次 rollup 重建——重建會把 prewarm 過的狀態一起丟掉。
+        // Qwen MLX 層需 sidecar 起著；日常使用不預設啟動（見交接文件 §5），故不掛。
+        ladder = NarrationLadder(fm: LocalNarrationEnvironment.makeFoundationModelsBackend(app: "未知"),
+                                 qwen: nil,
+                                 rule: RuleBasedNarrator())
+
         rollupTask = Task { [weak self] in
-            // 預熱：把 3B 權重先載進記憶體，否則第一個 step 會吃到冷啟動延遲
-            // （M4 驗收要 L1 < ~300ms，冷啟動會遠超）。無框架時是 no-op。
+            // 預熱：把 3B 權重先載進記憶體，否則第一個 step 會吃到冷啟動延遲。無框架時是 no-op。
             await LocalNarrationEnvironment.prewarm()
             while !Task.isCancelled {
                 guard let self, self.session.mode != .idle else { return }
@@ -266,15 +274,6 @@ final class AppCoordinator: ObservableObject {
         // （runbook M4 第 4 步就是要驗這個切換不中斷）。
         let availability = LocalNarrationEnvironment.availability
         localModelSummary = availability.displayText
-
-        // 階梯每次重建，因為 FoundationModelsNarrator 的 app 是 init 時綁定的——
-        // 若沿用啟動時建好的那一份，使用者換 app 後 step.app 會永遠停在舊值。
-        // 成本只是 struct 配置，相對一次模型呼叫可忽略。
-        // Qwen MLX 層需 sidecar 起著；日常使用不預設啟動（見交接文件 §5），故不掛。
-        let app = currentApp ?? "未知"
-        ladder = NarrationLadder(fm: LocalNarrationEnvironment.makeFoundationModelsBackend(app: app),
-                                 qwen: nil,
-                                 rule: RuleBasedNarrator())
 
         // 用 ContinuousClock 而非 Date 差：後者是掛鐘時間，會被 NTP 校時扭曲，
         // 拿來量幾百 ms 的延遲不可靠。

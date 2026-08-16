@@ -4,15 +4,20 @@ import CoPartnerCore
 // 從 L0 事件日誌行（EventFormatter 格式：`[時間] KEYWORD app=… …`）以關鍵字/regex 推導欄位。
 
 public struct RuleBasedNarrator: NarrationBackend {
-    private let now: Date
-    public init(now: Date = Date()) { self.now = now }
+    /// 固定時鐘（測試注入）。nil = 每次敘事都取當下時間。
+    ///
+    /// ⚠️ 不可改回 `init(now: Date = Date())`：那會在**建構時**就把時間釘死。
+    /// app 端的階梯是長期存活的一份（建一次用整個觀察期），結果會是所有規則式 step
+    /// 共用啟動當下的時間戳，熱環的時間窗過濾與記憶層排序全毀。
+    private let fixedNow: Date?
+    public init(now: Date? = nil) { self.fixedNow = now }
 
     public func narrate(_ lines: [String]) async -> ActionStep? {
         let cleaned = lines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         guard !cleaned.isEmpty else { return nil }
         let joined = cleaned.joined(separator: "\n")
         return ActionStep(
-            startedAt: now,
+            startedAt: fixedNow ?? Date(),
             app: Self.inferApp(cleaned) ?? "未知",
             category: Self.inferCategory(joined),
             whatHappened: Self.describe(cleaned),

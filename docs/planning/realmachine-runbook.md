@@ -100,6 +100,29 @@
 **③ 回報**：canImport 區塊**能不能編譯**（貼任何 red error）；FoundationModels availability 狀態；L1 敘事像不像人話、意圖猜得準不準（主觀抽樣）；單次延遲 ms。
 **驗收標準**：本地敘事路徑 **sub-second**（L1 < ~300ms、prewarm 生效）；availability 檢測正確、關閉時 fallback 通。
 
+#### 🔬 第一次真機實測（2026-08-16）與延遲目標的再評估
+
+**過的**：availability 偵測正確（顯示「可用（Apple Intelligence）」）、階梯確實走 `本地 3B`
+（不是 fallback）、`MemoryStore` 有寫入、敘事讀起來像人話且推測合理。
+
+**沒過的**：單次延遲 **2659ms**，是 ~300ms 目標的 9 倍。
+
+**根因**：端上 3B 的生成是**逐 token 串行**的，總延遲幾乎與輸出長度成正比。實測那次輸出
+約 80+ 個中文字（`whatHappened` + `inferredGoal`）加 6 欄位的 JSON 結構 ≈ 100–150 tokens；
+以 3B 在 M 系列約 30–50 tok/s 計，2.5–3.7s 完全吻合。prefill 與 session 建立相比微不足道。
+
+**因此 ~300ms 對「6 欄位結構化 step」這個輸出形狀是達不到的**——300ms 大約只夠 12–15 個
+token，塞不下兩段散文欄位加一個陣列。這不是調校問題，是輸出形狀與模型吞吐的算術。
+
+**已做的優化**（待第二次實測）：`@Guide` 加硬性字數上限（20 字 / 15 字）、instructions
+要求極度簡潔、rollup 視窗 40 → 20 行。預期落在 ~800–1200ms。
+
+**⚠️ 待使用者裁決**：`~300ms` 是規劃期自訂的數字，並非外部約束。建議改為
+**「L1 < ~1.5s，且不阻塞 L0 即時劇本」**——真正的 UX 不變式是即時劇本永遠不卡，
+而 rollup 跑在背景 task、`await` 會讓出 MainActor，UI 不會凍結。
+若堅持 sub-second，替代路線是把 step 砍成 3 欄位（category / whatHappened / openLoop），
+`inferredGoal` 與 `artifacts` 移到 L2 批次階段再補。
+
 ---
 
 ## M5 — Step 53：接手全鏈（最關鍵的安全驗收）
