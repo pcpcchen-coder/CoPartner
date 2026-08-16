@@ -7,8 +7,10 @@ import SwiftUI
 //    改用橫排還順便省下約 110pt 縱向空間（原本 5 顆直排），全部讓給訊息區。
 // 2. **訊息區在下方捲動**，且 L1 敘事與操作劇本**各自獨立捲動**——單一捲動會讓你
 //    為了看劇本而把 L1 捲出畫面，兩邊無法同時盯。
-// 3. **不設 minHeight**。先前 L1 區設了 minHeight 170，只有兩筆 step 時仍硬佔滿高度，
-//    在畫面中間留下一大塊空白（真機截圖可見）。改為只設上限，內容少就縮，不浪費空間。
+// 3. **兩區用固定高度**（不是 minHeight、也不是只給 maxHeight）。這兩種都試過且都不對：
+//    只給 minHeight 會在內容少時硬撐出空白；只給 maxHeight 則會在內容少時縮成一條縫，
+//    連捲動區都看不見。固定高度讓兩區的大小與當下有幾筆內容無關——訊息少時留著空間等，
+//    訊息多時就在區內捲動，版面永遠穩定。
 struct MenuBarContentView: View {
     @EnvironmentObject var coordinator: AppCoordinator
 
@@ -61,7 +63,7 @@ struct MenuBarContentView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         VStack(alignment: .leading, spacing: 4) {
-                            ForEach(Array(coordinator.l1Steps.suffix(20).reversed())) { step in
+                            ForEach(Array(coordinator.l1Steps.suffix(40).reversed())) { step in
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text("\(step.app)・\(step.category)\(step.openLoop ? "・進行中" : "")")
                                         .font(.caption2).foregroundStyle(.tertiary)
@@ -77,7 +79,7 @@ struct MenuBarContentView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 220)
+                .frame(height: 240)
 
                 Divider()
 
@@ -90,7 +92,7 @@ struct MenuBarContentView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         VStack(alignment: .leading, spacing: 2) {
-                            ForEach(Array(coordinator.recentLines.suffix(80).reversed().enumerated()), id: \.offset) { _, line in
+                            ForEach(Array(coordinator.recentLines.suffix(150).reversed().enumerated()), id: \.offset) { _, line in
                                 Text(line)
                                     .font(.system(.caption2, design: .monospaced))
                                     .lineLimit(1).truncationMode(.tail)
@@ -99,7 +101,7 @@ struct MenuBarContentView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 320)
+                .frame(height: 350)
             }
             .padding(.horizontal, 14)
             .padding(.top, 10)
