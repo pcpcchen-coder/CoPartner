@@ -7,7 +7,13 @@
 //
 // 用法：在 macOS 26 的 Xcode ⌘B，把紅字連同「PROBE N」編號回報即可。
 // 校準完成後本檔可刪（或留著當 API 契約的可執行文件）。
+//
+// ⚠️ 下面的 #warning 是**編譯期證據**，不是待辦。
+// 沒有它時，`canImport` 為 false 會讓整檔靜默略過、build 照樣成功——
+// 「編譯通過」與「根本沒編譯」外觀完全一樣，正是本探針要防的失敗模式。
+// 兩個分支各放一個 warning，黃字內容直接說明走了哪條路，讓略過無法偽裝成通過。
 #if canImport(FoundationModels)
+#warning("✅ PROBE ACTIVE — canImport(FoundationModels) 為 true，以下 7 項簽章確實經過編譯器檢查")
 import Foundation
 import FoundationModels
 
@@ -65,4 +71,6 @@ enum FoundationModelsProbe {
         return response.content
     }
 }
+#else
+#warning("⚠️ PROBE SKIPPED — canImport(FoundationModels) 為 false，本檔整個略過，7 項簽章一項都沒驗到")
 #endif
