@@ -38,19 +38,48 @@ Phase A–G 的**CI 可測部分全部完成**（backlog step 1–57，扣延後
 | **M2 局部 OCR（step 29）** | ✅ 真機通過，吞吐 **18%**（目標 ≤20%）|
 | M1 影片 DYNAMIC + CPU（step 24）| 🔒 待做（前置 23.5 CPU 優化）|
 | M3 記憶真 vec0（step 36）| 🔒 待做 |
-| **M4 本地敘事（step 42）** | 🔒 **← 正在做，見 §3** |
+| **M4 本地敘事（step 42）** | 🔒 **← 正在做**：簽章校準 ✅、接線 ✅（PR #4）、待真機 dogfood，見 §3.3 |
 | M5 接手（step 53）| 🔒 待做 |
 | M6 隱私最終審查（step 58）| 🔒 待做 |
 
 ---
 
-## 3. ⏭️ 立即要做的事：M4 探針校準
+## 3. ⏭️ 立即要做的事：M4 真機 dogfood
 
-### 狀態
-探針已寫好並推送（commit `1b49a6e`）：
-`packages/CoPartnerKit/Sources/ScriptNarrator/FoundationModelsProbe.swift`
+> **2026-08-16 更新**：探針校準**已完成**，接線**已完成**（PR #4，CI 三 job 綠）。
+> 下面 §3.1 保留校準的來龍去脈作為方法論參考；當前待辦見 §3.3。
 
-**正在等使用者在 macOS 26 的 Xcode 按 ⌘B，回報編譯錯誤。**
+### 3.1 探針校準 ✅ 已完成
+探針（commit `1b49a6e`）：`packages/CoPartnerKit/Sources/ScriptNarrator/FoundationModelsProbe.swift`
+
+**結果：7 項簽章一次全過、零紅字**，`FoundationModelsNarrator` 無需任何修改。
+原本預估 1–3 輪校準，實際 0 輪——盲寫的 API 面完全命中。
+
+⚠️ **但第一輪 build 成功不等於驗證成功**：`canImport` 為 false 時整檔靜默略過、
+build 照樣綠，「編譯通過」與「根本沒編譯」在結果上完全無法分辨。於 `#if` / `#else`
+兩側各放一個 `#warning` 取得編譯期證據，看到黃字「PROBE ACTIVE」掛在
+ScriptNarrator → FoundationModelsProbe.swift 之下才算數。
+**這個手法值得記住**：任何 `canImport` / `#available` 隔離的程式碼要確認「真的編到了」，
+都得用同樣的方式取證，不能只看 build 綠。
+
+探針已移除 `#warning` 噪音，保留為 **API 契約的可執行文件**——未來 SDK 改簽章
+（macOS 27+）時，真機 build 會以「PROBE N」精準定位，而非讓 narrator 執行期才炸。
+
+### 3.2 M4 接線 ✅ 已完成（PR #4）
+見 §3.4 的設計摘要。
+
+### 3.3 🔒 待辦：真機 dogfood
+
+**使用者要跑**（不需 `bootstrap.sh`——沒有新增 app target 檔案）：
+`git pull` → Xcode ⌘R → 開始觀察 → 操作一陣子 → 看選單。
+
+驗收對照 `realmachine-runbook.md` M4 節：
+1. L1 敘事有沒有產出（劇本從「一行行事件」升級成「一句話 step + 推測目標」）
+2. 選單前綴 `[本地 3B 240ms/lineCount]` 的**延遲數字** — 目標 < ~300ms
+3. 前綴的**層級標籤**是不是「本地 3B」（不是「規則式」）
+4. 關掉 Apple Intelligence → 應自動變「規則式」且**不中斷**
+5. 敘事像不像人話、意圖猜得準不準（主觀抽樣）
+6. `/vlm`（可延後——需 sidecar + ~5–6GB 模型下載）
 
 ### 為什麼要探針（重要脈絡）
 `FoundationModelsNarrator.swift` 用到 **7 個從未被編譯過的 API 面**，而 **CI 永遠驗不到**——
@@ -70,19 +99,33 @@ macos-15 runner 沒有 FoundationModels 框架 → `canImport` 為 false → 整
 | 6 | `respond(to:generating:)` 的 async/throws、泛型位置、回傳值有無 `.content` |
 | 7 | 純文字 `respond(to:)` 的回傳型別 |
 
-### 收到編譯錯誤後怎麼做
-1. 依錯誤修正 `FoundationModelsProbe.swift` 與 `FoundationModelsNarrator.swift` 的簽章
-2. 請使用者再 ⌘B 確認（可能 1–3 輪）
-3. 簽章校準完成 → 寫**完整接線**（見下）
-4. 探針可刪，或留作 API 契約的可執行文件
+### 3.4 M4 接線的設計摘要（PR #4）
 
-### 校準後的 M4 完整接線（尚未做）
-- `AppCoordinator`：L0 劇本行 → `NarrationLadder`（已 CI 綠）→ L1 `ActionStep`
-  → 選單顯示「一句話 step + 推測目標」+ 存進 `L1HotBuffer` / `MemoryStore`
-- 目前 `triggerIntervention` 的 `steps: []` 是佔位（`AppCoordinator.swift` 約 116 行），
-  接線後要餵真 L1 steps
-- 驗收標準（`realmachine-runbook.md` M4 節）：L1 rollup < ~300ms、prewarm 生效、
-  availability 偵測正確、關閉 Apple Intelligence 時 fallback 到規則式不中斷
+新增三塊，都在 `packages/CoPartnerKit/Sources/ScriptNarrator/`：
+
+| 檔案 | 作用 |
+|---|---|
+| `LocalNarrationEnvironment.swift` | **平台門面**：把 `#if canImport(FoundationModels)` 收斂在單一檔案，`AppCoordinator` 一行條件編譯都不用寫。availability 三態（available / unavailable / frameworkAbsent）+ 生後端 + prewarm |
+| `L1RollupScheduler.swift` | 決定「**何時**該叫模型」的純邏輯，時鐘外部注入 → 完全確定性、CI 可測 |
+| `NarrationLadder.narrateReportingTier` | 回報**實際命中的階梯層級** |
+
+**三個踩過或繞過的坑**（維持它們）：
+
+1. **新活動偵測不能用行數差**。兩個各自獨立的原因：`EventLog.record` 會**就地改寫最後
+   一行**（同欄位打字合併、同向 scroll 聚合），使用者打一整段字行數完全不動；
+   `EventLogFeed` 又是 ring buffer，飽和後行數固定在 capacity。兩者各自都足以讓
+   「count 差」永久歸零、rollup 再也不觸發。改用 `(行數, 末行內容)` 指紋，
+   兩條 regression 測試釘住。
+2. **階梯必須回報用了哪一層**。只看 `ActionStep` 分不出是 3B 產的還是模板湊的，
+   除非比對 `inferredGoal` 的固定字串——文案一改就默默失效，而且失效方式是
+   「看起來還是綠的」。
+3. **availability 刻意不細分 unavailable 的原因**。`.unavailable` 的關聯值與 reason
+   case 名稱是探針**沒驗過**的 API 面。要顯示原因請先加 PROBE 8 驗過再說。
+
+其他：階梯每次 rollup 重建（`FoundationModelsNarrator` 的 `app` 是 init 時綁定的，
+沿用同一份會讓 `step.app` 在換 app 後永遠停在舊值）；延遲用 `ContinuousClock` 量
+（`Date` 是掛鐘時間，會被 NTP 校時扭曲）；`triggerIntervention` 的 `steps: []` 佔位
+已換成 `hotBuffer.recentSteps`，open loop 改用 L1 推測。
 
 ---
 

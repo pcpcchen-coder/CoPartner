@@ -425,6 +425,11 @@
 #### Step 42 — 🔒 M4 真機驗收（前置：38–41）
 - 在你的 Mac 上：本地敘事路徑 **sub-second**（L1 rollup < ~300ms、prewarm 生效）；FoundationModels 實際 `availability`（只有真機／Apple Intelligence 開啟能驗，含 canImport 區塊真編譯）；L1 意圖推測主觀準確率抽樣評估；真 `/vlm`（mlx-vlm Qwen2.5-VL）對焦點拼接圖產出合理語意。你在 Mac 上執行、回報。
 
+**進度**：
+- ✅ **canImport 區塊真編譯**（2026-08-16，macOS 26 + Xcode 26）——`FoundationModelsProbe` 的 7 項簽章**一次全過、零紅字**，`FoundationModelsNarrator` 無需修改。以 `#if`/`#else` 兩側各一個 `#warning` 取得編譯期證據，確認不是 `canImport` 為 false 的靜默略過。探針保留為 API 契約的可執行文件。
+- ✅ **接線完成**（PR #4）：`AppCoordinator` rollup 迴圈 → `NarrationLadder` → `ActionStep` → `L1HotBuffer` + `MemoryStore` + 選單 + 接手信封（`steps: []` 佔位已移除）。
+- 🔒 **待真機 dogfood**：L1 延遲數字、prewarm 是否生效、敘事品質抽樣、關閉 Apple Intelligence 的 fallback、`/vlm`。
+
 ---
 
 ## Phase F — 雲端 + 動作 + 接手互動（rolling-wave，第二高風險）
