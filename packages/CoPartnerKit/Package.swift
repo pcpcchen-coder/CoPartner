@@ -13,8 +13,9 @@ let package = Package(
         .library(name: "ActionExecutor", targets: ["ActionExecutor"]),
     ],
     dependencies: [
-        // 全域熱鍵（V2-B.5）
-        .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0"),
+        // 註：全域熱鍵（V2-B.5）的 KeyboardShortcuts 只有 app target 用得到，由
+        // apps/CoPartner/project.yml 直接宣告；這裡不重複宣告，否則 SPM 會警告
+        // 「dependency 'keyboardshortcuts' is not used by any target」。
         // 註：sqlite-vec 透過 system library / SQLite 擴充載入，於 MemoryStore 內處理
     ],
     targets: [

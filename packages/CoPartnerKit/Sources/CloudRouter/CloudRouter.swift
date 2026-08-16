@@ -3,17 +3,20 @@ import CoPartnerCore
 // 設計：docs/design/v2_smart-capture-engine.md §E + §E.1（ADR-0007）+ v1 §D
 // 本地優先的分層推理階梯：小範圍辨識留在本地（OCR / FM 3B / Qwen），
 // 只有「大變動 / 本地信心不足 / 跨視窗多步任務」才升級雲端 Claude；敏感內容一律不出境。
-// TODO: 經 LiteLLM Gateway 呼叫 Claude（computer-use-2025-11-24, computer_20251124）
+// TODO: 經 LiteLLM Gateway 呼叫 Claude（computer-use-2025-11-24 / computer_20251124；
+//       契約已於 2026-08-16 對齊查證，見 HandoffRequestBuilder）
 // TODO: prompt caching（reference / 系統 prompt 穩定前綴）
 // TODO: PIPL guard — 含上海團隊個資/敏感 tile → 強制 local-only，不出境
 
 public actor CloudRouter {
     private var policy = EscalationPolicy()
     private let transport: (any HandoffTransport)?
-    private let requestBuilder: HandoffRequestBuilder
+    /// nil = 尚未設定。builder 需要真實顯示器尺寸（見 `HandoffError.noRequestBuilder`），
+    /// 給不出安全的預設值，所以與 transport 一樣走「未接線就明確失敗」而非靜默假成功。
+    private let requestBuilder: HandoffRequestBuilder?
 
     public init(transport: (any HandoffTransport)? = nil,
-                requestBuilder: HandoffRequestBuilder = HandoffRequestBuilder()) {
+                requestBuilder: HandoffRequestBuilder? = nil) {
         self.transport = transport
         self.requestBuilder = requestBuilder
     }
@@ -32,6 +35,9 @@ public actor CloudRouter {
                         referencePrefix: String = "") -> AsyncThrowingStream<ProposedAction, Error> {
         guard let transport else {
             return AsyncThrowingStream { $0.finish(throwing: HandoffError.noTransport) }
+        }
+        guard let requestBuilder else {
+            return AsyncThrowingStream { $0.finish(throwing: HandoffError.noRequestBuilder) }
         }
         let request = requestBuilder.build(envelope: envelope,
                                            systemPrompt: systemPrompt,

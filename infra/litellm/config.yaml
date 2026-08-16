@@ -1,12 +1,17 @@
 # LiteLLM Gateway — 設計：docs/design/v1_full-design.md §D.3
+#
+# ⚠️ 這裡的模型必須落在 computer_20251124 的支援清單內，並與
+# HandoffRequestBuilder.supportedModels 一致（2026-08-16 對齊 live 契約時查證）。
+# 較舊的模型（Sonnet 4.5 / Haiku 4.5 / Opus 4.1）需搭配 computer-use-2025-01-24 header，
+# 屬於另一份契約——換模型前先確認 header 也跟著換，否則會被 API 拒絕。
 model_list:
   - model_name: claude-sonnet
     litellm_params:
-      model: anthropic/claude-sonnet-4-6
+      model: anthropic/claude-sonnet-5
       api_key: os.environ/ANTHROPIC_API_KEY
   - model_name: claude-opus
     litellm_params:
-      model: anthropic/claude-opus-4-7
+      model: anthropic/claude-opus-5
       api_key: os.environ/ANTHROPIC_API_KEY
   - model_name: local-qwen-vl
     litellm_params:

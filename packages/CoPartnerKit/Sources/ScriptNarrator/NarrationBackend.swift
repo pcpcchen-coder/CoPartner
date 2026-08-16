@@ -14,4 +14,13 @@ public enum NarrationTier: Sendable, Equatable {
     case foundationModels
     case qwenMLX
     case ruleBased
+
+    /// 選單顯示用的短標籤——讓使用者一眼看出這句敘事是誰產的（M4 fallback 驗收要看）。
+    public var displayLabel: String {
+        switch self {
+        case .foundationModels: return "本地 3B"
+        case .qwenMLX: return "Qwen MLX"
+        case .ruleBased: return "規則式"
+        }
+    }
 }

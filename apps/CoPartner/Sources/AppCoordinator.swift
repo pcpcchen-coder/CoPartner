@@ -8,6 +8,7 @@ import CoreMedia
 import CoPartnerCore
 import CaptureEngine
 import ScriptNarrator
+import MemoryStore
 import CloudRouter
 import ActionExecutor
 // 串接各子系統的協調者（🔒 真機膠水：實際觀察 / 熱鍵行為於 step 10 dogfood 驗收）。
@@ -62,6 +63,20 @@ final class AppCoordinator: ObservableObject {
     private var ocrTask: Task<Void, Never>?
     private lazy var ocrBlacklist = CaptureBlacklist(ownBundleID: Bundle.main.bundleIdentifier ?? "com.copartner.app")
 
+    // L1 本地敘事（step 42）：L0 劇本行 → NarrationLadder → ActionStep → 熱環 + 記憶。
+    // 階梯每次 rollup 重建（見 narrationTick）；模型不可用時 fm 層為 nil → 自動走規則式。
+    @Published private(set) var l1Summary: String = "本地敘事：未啟用"
+    @Published private(set) var l1Steps: [ActionStep] = []
+    @Published private(set) var localModelSummary: String = LocalNarrationAvailability.frameworkAbsent.displayText
+    private var ladder = NarrationLadder()
+    private var rollupScheduler = L1RollupScheduler()
+    private var hotBuffer = L1HotBuffer()
+    private let memory = MemoryStore()
+    private var rollupTask: Task<Void, Never>?
+    private var lastRollupApp: String?
+    /// 最近一次觀察到的前景 app；rollup 以它與 `lastRollupApp` 的差異判斷 step 邊界。
+    private var currentApp: String?
+
     // 接手鏈（step 49）：世代時鐘為 token 作廢的單一權威（威脅 I7）。
     @Published private(set) var takeoverSummary: String = "接手：未啟動"
     private let handoffGeneration = HandoffGeneration()
@@ -111,11 +126,19 @@ final class AppCoordinator: ObservableObject {
             return
         }
         let lines = recentLines
+        let now = Date()
+        // 真 L1 取材（step 42 接線）：熱環裡時間窗內的 ActionStep 就是劇本主體。
+        // EnvelopeBuilder 自己會截到 maxRecentSteps，這裡不預先裁。
+        let steps = hotBuffer.recentSteps(now: now)
+        // open loop 優先用 L1 的推測——「使用者正在做什麼」比最後一行原始事件更有資訊量；
+        // 還沒有任何 step（剛開始觀察）才退回 L0 末行。
+        let openLoop = steps.last.map { "\($0.whatHappened)（推測目標：\($0.inferredGoal)）" }
+            ?? lines.last ?? "（無最近操作）"
         let envelope = EnvelopeBuilder().build(
-            now: Date(),
-            steps: [],                                   // 真 L1 取材待 Narrator 接入 app 管線（Phase E 接線）
+            now: now,
+            steps: steps,
             sessionSummary: lines.suffix(10).joined(separator: "\n"),
-            openLoop: lines.last ?? "（無最近操作）",
+            openLoop: openLoop,
             clipboard: NSPasteboard.general.string(forType: .string))
         let gate = EgressGate(
             scrubber: PIIMaskerScrubber(),
@@ -146,8 +169,12 @@ final class AppCoordinator: ObservableObject {
                     self.session.endIntervention()
                 } catch {
                     guard let self else { return }
-                    let message = (error as? HandoffError == .noTransport)
-                        ? "雲端傳輸尚未接線（step 53）" : error.localizedDescription
+                    let message: String
+                    switch error as? HandoffError {
+                    case .noTransport:      message = "雲端傳輸尚未接線（step 53）"
+                    case .noRequestBuilder: message = "交棒請求未設定顯示器尺寸（step 53）"
+                    case .none:             message = error.localizedDescription
+                    }
                     self.takeoverSummary = "接手：\(message)"
                     self.takeoverModel = nil
                     self.session.endIntervention()       // 失敗 → 回觀察，事件日誌不中斷
@@ -181,6 +208,8 @@ final class AppCoordinator: ObservableObject {
                 guard let self else { return }
                 self.recentLines = lines
                 if let last = lines.last { self.lastStepSummary = last }
+                // 餵新穎度偵測器（不能用行數差 — 見 L1RollupScheduler 的說明）。
+                self.rollupScheduler.observe(snapshot: lines, at: Date())
             }
         }
 
@@ -200,7 +229,83 @@ final class AppCoordinator: ObservableObject {
         inputTap = tap
 
         startCapture()   // 螢幕擷取（需 Screen Recording；失敗則不影響事件日誌）
-        startOCRLoop()   // 局部 OCR（需 sidecar 起著；失敗則不影響事件日誌與擷取）
+        startOCRLoop()   // 局部 OCR（走 macOS Vision；失敗則不影響事件日誌與擷取）
+        startNarrationLoop()   // L1 本地敘事（模型不可用則降級規則式，永不中斷）
+    }
+
+    // MARK: - L1 本地敘事（step 42）
+
+    /// 組裝敘事階梯 + 預熱模型 + 啟動 rollup 迴圈。
+    /// 全程 guarded：無 FoundationModels / 未開 Apple Intelligence → fm 層為 nil，
+    /// 階梯自動降到規則式，敘事照樣有輸出（§5：降級但不中斷）。
+    private func startNarrationLoop() {
+        // 視窗 20 行（預設值）：行數越多 prompt 越長、模型也越容易寫得落落長，
+        // 兩者都直接推高延遲。一個 step 本來就只該涵蓋一小段操作。
+        rollupScheduler = L1RollupScheduler(windowLines: 20)
+        hotBuffer = L1HotBuffer()
+        lastRollupApp = nil
+        l1Steps = []
+        l1Summary = "本地敘事：等待第一個 step…"
+
+        localModelSummary = LocalNarrationEnvironment.availability.displayText
+
+        // 階梯只建一次並長期存活。narrator 從日誌行推導 app（不再 init 綁定），
+        // 因此不需要每次 rollup 重建——重建會把 prewarm 過的狀態一起丟掉。
+        // Qwen MLX 層需 sidecar 起著；日常使用不預設啟動（見交接文件 §5），故不掛。
+        ladder = NarrationLadder(fm: LocalNarrationEnvironment.makeFoundationModelsBackend(app: "未知"),
+                                 qwen: nil,
+                                 rule: RuleBasedNarrator())
+
+        rollupTask = Task { [weak self] in
+            // 預熱：把 3B 權重先載進記憶體，否則第一個 step 會吃到冷啟動延遲。無框架時是 no-op。
+            await LocalNarrationEnvironment.prewarm()
+            while !Task.isCancelled {
+                guard let self, self.session.mode != .idle else { return }
+                await self.narrationTick()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    /// 一次 rollup 判斷：該捲就把最近的 L0 行餵階梯，產 L1 step 存進熱環 + 記憶。
+    private func narrationTick() async {
+        let now = Date()
+        let appChanged = (currentApp != nil && currentApp != lastRollupApp && lastRollupApp != nil)
+        guard let trigger = rollupScheduler.evaluate(now: now, appChanged: appChanged) else { return }
+
+        let window = rollupScheduler.window(of: recentLines)
+        // availability 每次重查：使用者可能在觀察途中開/關 Apple Intelligence
+        // （runbook M4 第 4 步就是要驗這個切換不中斷）。
+        let availability = LocalNarrationEnvironment.availability
+        localModelSummary = availability.displayText
+
+        // 用 ContinuousClock 而非 Date 差：後者是掛鐘時間，會被 NTP 校時扭曲，
+        // 拿來量幾百 ms 的延遲不可靠。
+        let started = ContinuousClock.now
+        let result = await ladder.narrateReportingTier(window,
+                                                       fmAvailable: availability.canUseFoundationModels,
+                                                       qwenReachable: false)
+        let elapsed = ContinuousClock.now - started
+        // Duration.components 把秒與次秒分開；只取 attoseconds 會讓 >1s 的延遲顯示成錯的小數字。
+        let elapsedMS = Int(elapsed.components.seconds * 1000
+                            + elapsed.components.attoseconds / 1_000_000_000_000_000)
+        rollupScheduler.complete()
+        lastRollupApp = currentApp
+
+        guard session.mode != .idle, !Task.isCancelled else { return }
+
+        let step = result.step
+        hotBuffer.append(step, at: now)
+        l1Steps = hotBuffer.recentSteps(now: now)
+        // 延遲同時顯示在選單：M4 驗收要量「單次 L1 rollup 延遲」，
+        // 讓使用者直接讀數字，不必去翻 Console log。
+        l1Summary = "[\(result.tier.displayLabel) \(elapsedMS)ms/\(trigger.rawValue)] "
+            + "\(step.whatHappened) — \(step.inferredGoal)"
+        await memory.insert(step: step)
+        // 把已存筆數也顯示出來：否則「有沒有真的進記憶層」在真機上完全看不出來，
+        // 而 M4 驗收要的就是這條鏈確實接上了。
+        let stored = await memory.count
+        localModelSummary = availability.displayText + "・記憶 \(stored) 筆"
     }
 
     /// 節流 OCR 迴圈：每 ~3s 截一次焦點顯示器 → 存暫存 PNG → sidecar /ocr → 摘要。
@@ -309,6 +414,7 @@ final class AppCoordinator: ObservableObject {
     /// 讀一次焦點、更新 FOCUS/SWITCH，回傳目前焦點元件（供 TYPE 判斷欄位與安全性）。
     @discardableResult
     private func pollFocus(app: String) -> AXFocusedElement? {
+        currentApp = app        // L1 rollup 以 app 變動當 step 邊界（見 narrationTick）
         let element = axProvider.focusedElement()
         // 焦點識別用**視窗標題**（fallback: role）。
         // ⚠️ 不可用 element.value——那是欄位內容，終端機每輸出一字就變，會狂噴 FOCUS（step 29 dogfood 實測）。
@@ -380,6 +486,11 @@ final class AppCoordinator: ObservableObject {
         ocrTask?.cancel()
         ocrTask = nil
         screenTextSummary = "畫面文字：未啟用"
+        rollupTask?.cancel()
+        rollupTask = nil
+        l1Summary = "本地敘事：未啟用"
+        // l1Steps / hotBuffer 刻意**不清空**：停止觀察後劇本仍要看得到（操作時間機器），
+        // 下次 startNarrationLoop 才重置。
         captureProducer?.stop()
         captureProducer = nil
         let dyingEngine = captureEngine
