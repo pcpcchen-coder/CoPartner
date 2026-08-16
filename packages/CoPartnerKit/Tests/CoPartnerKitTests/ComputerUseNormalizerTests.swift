@@ -12,25 +12,26 @@ final class ComputerUseNormalizerTests: XCTestCase {
     // MARK: - 座標陣列（真 API 形狀）
 
     func testLeftClickCoordinateArrayBecomesXY() throws {
-        let out = try ComputerUseNormalizer.normalizeComputer(
-            ["action": "left_click", "coordinate": [500, 300]])
+        let input: [String: Any] = ["action": "left_click", "coordinate": [500, 300]]
+        let out = try ComputerUseNormalizer.normalizeComputer(input)
         XCTAssertEqual(out, ["action": "left_click", "x": "500", "y": "300"])
     }
 
     /// JSONSerialization 依數值形式可能給 Int 或 Double，兩者都要接。
     func testCoordinateAcceptsDoubles() throws {
-        let out = try ComputerUseNormalizer.normalizeComputer(
-            ["action": "left_click", "coordinate": [500.0, 300.0]])
+        let input: [String: Any] = ["action": "left_click", "coordinate": [500.0, 300.0]]
+        let out = try ComputerUseNormalizer.normalizeComputer(input)
         XCTAssertEqual(out["x"], "500")
         XCTAssertEqual(out["y"], "300")
     }
 
     func testMalformedCoordinateThrows() {
-        for bad: [String: Any] in [
+        let cases: [[String: Any]] = [
             ["action": "left_click"],                              // 缺 coordinate
             ["action": "left_click", "coordinate": [500]],         // 只有一個值
             ["action": "left_click", "coordinate": "500,300"],     // 型別不對
-        ] {
+        ]
+        for bad in cases {
             XCTAssertThrowsError(try ComputerUseNormalizer.normalizeComputer(bad)) { e in
                 XCTAssertEqual(e as? ComputerUseNormalizeError, .malformedField("coordinate"))
             }
@@ -46,19 +47,21 @@ final class ComputerUseNormalizerTests: XCTestCase {
             ("right", 5, "5", "0"), ("left", 5, "-5", "0"),
         ]
         for (dir, amount, dx, dy) in cases {
-            let out = try ComputerUseNormalizer.normalizeComputer([
+            let input: [String: Any] = [
                 "action": "scroll", "coordinate": [500, 400],
                 "scroll_direction": dir, "scroll_amount": amount,
-            ])
+            ]
+            let out = try ComputerUseNormalizer.normalizeComputer(input)
             XCTAssertEqual(out["dx"], dx, "direction=\(dir)")
             XCTAssertEqual(out["dy"], dy, "direction=\(dir)")
         }
     }
 
     func testUnknownScrollDirectionThrows() {
-        XCTAssertThrowsError(try ComputerUseNormalizer.normalizeComputer([
+        let input: [String: Any] = [
             "action": "scroll", "scroll_direction": "sideways", "scroll_amount": 1,
-        ]))
+        ]
+        XCTAssertThrowsError(try ComputerUseNormalizer.normalizeComputer(input))
     }
 
     // MARK: - 修飾鍵：刻意拒絕而非忽略
@@ -67,29 +70,33 @@ final class ComputerUseNormalizerTests: XCTestCase {
     /// Kind 沒有修飾鍵的表示法，靜默丟掉會讓執行的動作與 HUD 顯示的、與 Claude 提議的都不一致。
     func testModifierClickIsRejectedNotSilentlyDropped() {
         for modifier in ["shift", "ctrl", "alt", "super"] {
-            XCTAssertThrowsError(try ComputerUseNormalizer.normalizeComputer([
+            let input: [String: Any] = [
                 "action": "left_click", "coordinate": [500, 300], "text": modifier,
-            ])) { e in
+            ]
+            XCTAssertThrowsError(try ComputerUseNormalizer.normalizeComputer(input)) { e in
                 XCTAssertEqual(e as? ComputerUseNormalizeError, .unsupportedModifier(modifier))
             }
         }
     }
 
     func testModifierScrollIsRejected() {
-        XCTAssertThrowsError(try ComputerUseNormalizer.normalizeComputer([
+        let input: [String: Any] = [
             "action": "scroll", "coordinate": [500, 400],
             "scroll_direction": "down", "scroll_amount": 3, "text": "shift",
-        ])) { e in
+        ]
+        XCTAssertThrowsError(try ComputerUseNormalizer.normalizeComputer(input)) { e in
             XCTAssertEqual(e as? ComputerUseNormalizeError, .unsupportedModifier("shift"))
         }
     }
 
     /// 但 type / key 的 `text` 是**內容**不是修飾鍵——不可誤擋。
     func testTypeAndKeyTextIsNotTreatedAsModifier() throws {
-        let typed = try ComputerUseNormalizer.normalizeComputer(["action": "type", "text": "shift"])
-        XCTAssertEqual(typed, ["action": "type", "text": "shift"])
-        let key = try ComputerUseNormalizer.normalizeComputer(["action": "key", "text": "cmd+s"])
-        XCTAssertEqual(key, ["action": "key", "text": "cmd+s"])
+        let typeInput: [String: Any] = ["action": "type", "text": "shift"]
+        XCTAssertEqual(try ComputerUseNormalizer.normalizeComputer(typeInput),
+                       ["action": "type", "text": "shift"])
+        let keyInput: [String: Any] = ["action": "key", "text": "cmd+s"]
+        XCTAssertEqual(try ComputerUseNormalizer.normalizeComputer(keyInput),
+                       ["action": "key", "text": "cmd+s"])
     }
 
     // MARK: - 不支援的 action 一律 throw（不猜）
@@ -97,7 +104,8 @@ final class ComputerUseNormalizerTests: XCTestCase {
     func testUnsupportedActionsThrow() {
         // zoom 是 computer_20251124 新增；其餘是 Kind 還沒有表示法的動作。
         for action in ["zoom", "right_click", "double_click", "left_click_drag", "hold_key", "wait"] {
-            XCTAssertThrowsError(try ComputerUseNormalizer.normalizeComputer(["action": action]),
+            let input: [String: Any] = ["action": action]
+            XCTAssertThrowsError(try ComputerUseNormalizer.normalizeComputer(input),
                                  "\(action) 應被拒絕而非硬湊成別的動作") { e in
                 XCTAssertEqual(e as? ComputerUseNormalizeError, .unsupportedAction(action))
             }
@@ -105,8 +113,8 @@ final class ComputerUseNormalizerTests: XCTestCase {
     }
 
     func testScreenshotPassesThrough() throws {
-        XCTAssertEqual(try ComputerUseNormalizer.normalizeComputer(["action": "screenshot"]),
-                       ["action": "screenshot"])
+        let input: [String: Any] = ["action": "screenshot"]
+        XCTAssertEqual(try ComputerUseNormalizer.normalizeComputer(input), ["action": "screenshot"])
     }
 
     // MARK: - tool 名分派
@@ -114,28 +122,27 @@ final class ComputerUseNormalizerTests: XCTestCase {
     /// 現行 text_editor_20250728 的 name 是 str_replace_based_edit_tool——
     /// parser 原本只認舊名，真 transport 接上會整組打不中。
     func testCurrentEditorToolNameIsAccepted() throws {
-        let out = try ComputerUseNormalizer.normalize(
-            toolName: "str_replace_based_edit_tool",
-            input: ["command": "view", "path": "/tmp/a.txt"])
+        let input: [String: Any] = ["command": "view", "path": "/tmp/a.txt"]
+        let out = try ComputerUseNormalizer.normalize(toolName: "str_replace_based_edit_tool", input: input)
         XCTAssertEqual(out["command"], "view")
         XCTAssertEqual(out["path"], "/tmp/a.txt")
     }
 
     func testComputerToolNameMatchesContract() throws {
-        let out = try ComputerUseNormalizer.normalize(
-            toolName: "computer", input: ["action": "screenshot"])
+        let input: [String: Any] = ["action": "screenshot"]
+        let out = try ComputerUseNormalizer.normalize(toolName: "computer", input: input)
         XCTAssertEqual(out, ["action": "screenshot"])
     }
 
     func testBashCommandPassesThrough() throws {
-        let out = try ComputerUseNormalizer.normalize(
-            toolName: "bash", input: ["command": "ls -la"])
+        let input: [String: Any] = ["command": "ls -la"]
+        let out = try ComputerUseNormalizer.normalize(toolName: "bash", input: input)
         XCTAssertEqual(out, ["command": "ls -la"])
     }
 
     func testUnknownToolThrows() {
-        XCTAssertThrowsError(try ComputerUseNormalizer.normalize(
-            toolName: "some_other_tool", input: [:]))
+        let input: [String: Any] = [:]
+        XCTAssertThrowsError(try ComputerUseNormalizer.normalize(toolName: "some_other_tool", input: input))
     }
 
     // MARK: - 端到端：正規化後 parser 一定吃得下
