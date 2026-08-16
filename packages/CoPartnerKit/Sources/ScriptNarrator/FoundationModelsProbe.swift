@@ -5,15 +5,15 @@
 // 一次編譯整個 narrator 會噴出互相牽連的錯誤，難判斷根因；這裡把每個 API 面**逐項隔離**
 // 成獨立函式並編號，編譯錯誤會直接指向「第 N 項簽章不對」，一輪就能全部校準。
 //
-// 用法：在 macOS 26 的 Xcode ⌘B，把紅字連同「PROBE N」編號回報即可。
-// 校準完成後本檔可刪（或留著當 API 契約的可執行文件）。
+// ✅ 2026-08-16 校準結果：在 macOS 26 + Xcode 26 真機 ⌘B，**7 項全數一次通過、零紅字**。
+// 當時以 #if/#else 兩側各放一個 #warning 確認走的是 canImport 為 true 的分支
+//（否則整檔靜默略過，「編譯通過」與「根本沒編譯」外觀完全一樣）；黃字實測顯示
+// 「PROBE ACTIVE」掛在 ScriptNarrator → 本檔之下，證據確鑿後移除該噪音。
 //
-// ⚠️ 下面的 #warning 是**編譯期證據**，不是待辦。
-// 沒有它時，`canImport` 為 false 會讓整檔靜默略過、build 照樣成功——
-// 「編譯通過」與「根本沒編譯」外觀完全一樣，正是本探針要防的失敗模式。
-// 兩個分支各放一個 warning，黃字內容直接說明走了哪條路，讓略過無法偽裝成通過。
+// 本檔因此從「一次性校準工具」轉為**API 契約的可執行文件**：留著讓未來 SDK 若改簽章
+// （macOS 27+）能在真機 build 時以「PROBE N」精準定位，而非讓 narrator 在執行期才炸。
+// 成本僅是編譯期型別檢查，無執行期開銷。
 #if canImport(FoundationModels)
-#warning("✅ PROBE ACTIVE — canImport(FoundationModels) 為 true，以下 7 項簽章確實經過編譯器檢查")
 import Foundation
 import FoundationModels
 
@@ -71,6 +71,4 @@ enum FoundationModelsProbe {
         return response.content
     }
 }
-#else
-#warning("⚠️ PROBE SKIPPED — canImport(FoundationModels) 為 false，本檔整個略過，7 項簽章一項都沒驗到")
 #endif
