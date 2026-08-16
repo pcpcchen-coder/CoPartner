@@ -64,7 +64,8 @@ public struct SSEFrameParser: Sendable {
     }
 
     /// `field: value`——規範規定冒號後若有**一個**空格要去掉，多的空格要保留。
-    static func splitField(_ line: String) -> (field: String, value: String) {
+    /// public 是為了讓跨 module 的測試釘住這個容易寫錯的細節（測試 target 看不到 internal）。
+    public static func splitField(_ line: String) -> (field: String, value: String) {
         guard let colon = line.firstIndex(of: ":") else { return (line, "") }
         let field = String(line[line.startIndex..<colon])
         var value = String(line[line.index(after: colon)...])

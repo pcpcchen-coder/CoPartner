@@ -112,11 +112,18 @@ final class SSEHandoffTransportTests: XCTestCase {
         XCTAssertEqual(done.first?.rationale, "先截圖確認畫面")
     }
 
-    func testMalformedToolInputThrows() {
+    /// 寫法注意：`feed` 是 mutating，不要包進 `XCTAssertThrowsError` 的 autoclosure，
+    /// 那會在區域 var 上疊出獨佔存取的疑慮。攤成 do/catch 最單純。
+    func testMalformedToolInputThrows() throws {
         var d = AnthropicStreamDecoder()
-        _ = try? d.feed(frame(#"{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"t","name":"computer","input":{}}}"#))
-        _ = try? d.feed(frame(#"{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{not json"}}"#))
-        XCTAssertThrowsError(try d.feed(frame(#"{"type":"content_block_stop","index":0}"#)))
+        _ = try d.feed(frame(#"{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"t","name":"computer","input":{}}}"#))
+        _ = try d.feed(frame(#"{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{not json"}}"#))
+        do {
+            _ = try d.feed(frame(#"{"type":"content_block_stop","index":0}"#))
+            XCTFail("收齊後不是合法 JSON，應 throw")
+        } catch {
+            XCTAssertEqual(error as? AnthropicStreamDecodeError, .malformedToolInput("{not json"))
+        }
     }
 
     func testStopReasonCaptured() throws {
