@@ -38,16 +38,15 @@ Phase A–G 的**CI 可測部分全部完成**（backlog step 1–57，扣延後
 | **M2 局部 OCR（step 29）** | ✅ 真機通過，吞吐 **18%**（目標 ≤20%）|
 | M1 影片 DYNAMIC + CPU（step 24）| 🔒 待做（前置 23.5 CPU 優化）|
 | M3 記憶真 vec0（step 36）| 🔒 待做 |
-| **M4 本地敘事（step 42）** | 🔒 **← 正在做**：簽章校準 ✅、接線 ✅（PR #4）、待真機 dogfood，見 §3.3 |
-| M5 接手（step 53）| 🔒 待做 |
+| **M4 本地敘事（step 42）** | ✅ **真機通過**，延遲 1373–2388ms、fallback 驗證通過（`/vlm` 延後）|
+| **M5 接手（step 53）** | 🔒 **← 正在做**：computer-use 契約已對齊 ✅，見 §7 |
 | M6 隱私最終審查（step 58）| 🔒 待做 |
 
 ---
 
-## 3. ⏭️ 立即要做的事：M4 真機 dogfood
+## 3. M4 本地敘事 ✅ 已完成（2026-08-16 真機驗收通過）
 
-> **2026-08-16 更新**：探針校準**已完成**，接線**已完成**（PR #4，CI 三 job 綠）。
-> 下面 §3.1 保留校準的來龍去脈作為方法論參考；當前待辦見 §3.3。
+> 本節保留 M4 的完整過程作為方法論參考。**當前待辦是 M5，見 §7。**
 
 ### 3.1 探針校準 ✅ 已完成
 探針（commit `1b49a6e`）：`packages/CoPartnerKit/Sources/ScriptNarrator/FoundationModelsProbe.swift`
@@ -68,18 +67,26 @@ ScriptNarrator → FoundationModelsProbe.swift 之下才算數。
 ### 3.2 M4 接線 ✅ 已完成（PR #4）
 見 §3.4 的設計摘要。
 
-### 3.3 🔒 待辦：真機 dogfood
+### 3.3 真機驗收結果 ✅
 
-**使用者要跑**（不需 `bootstrap.sh`——沒有新增 app target 檔案）：
-`git pull` → Xcode ⌘R → 開始觀察 → 操作一陣子 → 看選單。
+| 驗收項 | 結果 |
+|---|---|
+| L1 敘事產出 | ✅ 事件 → 一句話 step + 推測目標，品質合理 |
+| availability 偵測 | ✅ 正確 |
+| 走本地 3B（非 fallback）| ✅ |
+| `MemoryStore` 寫入 | ✅ 累加正常 |
+| **關 Apple Intelligence → 規則式** | ✅ 標籤確實切換，不中斷 |
+| 延遲 | ✅ **1373–2388ms**，符合修訂後的 ~2.5s |
+| `/vlm` | 🔒 延後（需 sidecar + ~5–6GB 模型，日常不依賴）|
 
-驗收對照 `realmachine-runbook.md` M4 節：
-1. L1 敘事有沒有產出（劇本從「一行行事件」升級成「一句話 step + 推測目標」）
-2. 選單前綴 `[本地 3B 240ms/lineCount]` 的**延遲數字** — 目標 < ~300ms
-3. 前綴的**層級標籤**是不是「本地 3B」（不是「規則式」）
-4. 關掉 Apple Intelligence → 應自動變「規則式」且**不中斷**
-5. 敘事像不像人話、意圖猜得準不準（主觀抽樣）
-6. `/vlm`（可延後——需 sidecar + ~5–6GB 模型下載）
+**延遲目標從 ~300ms 改成 ~2.5s 的理由**（重要，別再改回去）：端上 3B 逐 token 串行生成，
+延遲幾乎與輸出長度成正比。300ms 的預算只夠 12–15 個 token，塞不下 6 欄位結構化
+step 裡的兩段散文欄位加一個陣列。**這是輸出形狀與模型吞吐的算術，不是調校問題。**
+壓過一輪（2659 → 1373ms，靠 `@Guide` 字數上限 + 視窗縮減）就到頭了；
+再壓要砍欄位，代價是失去 `inferredGoal`——L1 的價值所在。使用者已裁決維持資訊量。
+
+⚠️ 另一個發現：**`@Guide` 的字數上限模型只當參考、不嚴格遵守**（設 20 字，實測輸出 35 字），
+所以延遲會在 1373–2388ms 間浮動。想要穩定收斂得換手段，不是把數字調更小。
 
 ### 為什麼要探針（重要脈絡）
 `FoundationModelsNarrator.swift` 用到 **7 個從未被編譯過的 API 面**，而 **CI 永遠驗不到**——
@@ -185,16 +192,61 @@ macos-15 runner 沒有 FoundationModels 框架 → `canImport` 為 false → 整
 
 ---
 
-## 7. 之後的路線
+## 7. ⏭️ 當前待辦：M5 接手全鏈（step 53）
 
-M4 完成後可選：
+使用者已選定 M5 為 M4 後的下一個里程碑（產品的頭號功能——現在只會「看懂」，M5 才會「動手」）。
+
+### 7.1 computer-use 契約對齊 ✅ 已完成（2026-08-16）
+
+⚠️ 交接文件原本警告「預設值很可能過時」。**查證結果相反：兩個值都是對的。**
+
+| 項目 | 值 | 狀態 |
+|---|---|---|
+| beta header | `computer-use-2025-11-24` | ✅ 現行 |
+| tool type | `computer_20251124` | ✅ 現行 |
+
+真正的缺口是 `HandoffRequestBuilder` 少了 API **必填**欄位，只帶 header 與 type 組不出合法請求：
+- `name` — 必須**恰好**是 `"computer"`，不是可自由命名的欄位
+- `display_width_px` / `display_height_px`
+
+**支援模型**：`claude-opus-5`、`claude-sonnet-5`、`claude-opus-4-8`、`claude-opus-4-7`、
+`claude-opus-4-6`、`claude-sonnet-4-6`、`claude-opus-4-5-20251101`。
+較舊模型（Sonnet 4.5 / Haiku 4.5 / Opus 4.1）走**另一份契約** `computer-use-2025-01-24`。
+
+**companion tools**（官方 quick start 的組合）：`text_editor_20250728` /
+`str_replace_based_edit_tool`、`bash_20250124` / `bash`——與威脅模型的 argv-only + 沙箱相容。
+
+**設計決定**：`display_width_px` / `display_height_px` **刻意不給預設值**。填錯不會報錯，
+只會讓 Claude 回傳的座標全部偏掉（再經 Retina 換算放大，極難歸因）。改為 init 必填；
+`CloudRouter.requestBuilder` 連帶改為 optional，未設定拋 `.noRequestBuilder`——
+與 `.noTransport` 同一個「未接線就明確失敗」的模式。
+
+**effort 注意**：官方對 computer-use 的 `effort` 建議只涵蓋到 Opus 4.7（`high`）與
+4.6/Sonnet 4.6（`medium`，且明講 `max` 只增成本不提準確度）。**Opus 5 不在建議清單裡**——
+真機驗收時這是要實測的參數，不是照抄的。
+
+### 7.2 🔒 M5 剩下的四塊
+
+1. **⚠️ 先驗 `sandbox-exec` 在 macOS 26 還能不能用**——它被 Apple 標 deprecated 多年。
+   一行測試：`sandbox-exec -p '(version 1)(allow default)(deny network*)' /usr/bin/curl -s -m 5 https://example.com`
+   （預期網路被擋、非零退出）。**失效的話威脅模型 §6 備援要提前啟用，而那會改變下面三塊的設計**，
+   所以排在寫程式之前。
+2. **真 `HandoffTransport`** — LiteLLM gateway（`cd infra/litellm && litellm --config config.yaml`，
+   設 `ANTHROPIC_API_KEY`）→ Claude computer-use → SSE `tool_use` 正規化成 `ProposedAction`。
+   純網路膠水、風險低，可與 1 併行。
+3. **真 `ActionExecutor.performer`** — XPC service（`_ambient` 低權 user）+ code-signing
+   requirement 驗證（只收主 app）+ `sandbox-exec` sbpl + `posix_spawn` argv 直呼（無 shell）。
+4. **接手 HUD** — SwiftUI 常駐浮層：提議動作原文 + 風險原因 + Approve/Skip/Stop。
+
+驗收清單見 `realmachine-runbook.md` M5 節（對照威脅模型 I1–I10 逐項勾）。
+
+## 8. 更之後的路線
+
 - **M3 記憶真 vec0**（step 36）— 盲寫風險低（sqlite-vec C API 穩定），但要裝 sqlite-vec + 跑 8hr 驗磁碟量
-- **M5 接手**（step 53）— 頭號功能，膠水最多。⚠️ **開工第一件事**：用 `/claude-api` skill
-  對齊 live computer-use 契約（`HandoffRequestBuilder` 的 `betaHeader`/`toolType` 預設值是
-  開發時 docs 連不上暫定的，很可能過時），再接真 transport + XPC executor + sandbox-exec
 - **M1 影片 CPU**（step 24）— 前置 step 23.5 擷取 CPU 優化（只 hash dirty tile + async GPU
   + 自適應幀率），建議配 Instruments 抓真熱點
 - **M6 隱私最終審查**（step 58）
+- **真 `/vlm`**（M4 延後項）— 需 sidecar + ~5–6GB Qwen2.5-VL 下載
 
 以及使用者提出但尚未做的產品需求：**sidecar 打包/託管**（app 自己 spawn 子程序、
 結束時收掉、健康檢查重啟），讓 `/vlm` 也不需使用者手動啟動。

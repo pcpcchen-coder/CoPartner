@@ -82,7 +82,22 @@
 
 ---
 
-## M4 — Step 42：本地敘事 sub-second + FoundationModels availability
+## M4 — Step 42：本地敘事 + FoundationModels availability ✅ **真機通過（2026-08-16）**
+
+> **驗收結果**
+>
+> | 項目 | 結果 |
+> |---|---|
+> | canImport 區塊真編譯（7 項簽章）| ✅ 一次全過、零紅字 |
+> | L1 敘事產出（事件 → 一句話 step + 推測目標）| ✅ 品質合理 |
+> | availability 偵測 | ✅ 正確 |
+> | 走本地 3B（非 fallback）| ✅ |
+> | `MemoryStore` 寫入 | ✅ 累加正常 |
+> | **關閉 Apple Intelligence → fallback 規則式** | ✅ **標籤確實從「本地 3B」變「規則式」，不中斷** |
+> | L1 延遲 | ✅ 1373–2388ms，符合修訂後的 ~2.5s 標準 |
+> | 真 `/vlm`（mlx-vlm Qwen2.5-VL）| 🔒 **延後**——需 sidecar + ~5–6GB 模型下載，且日常使用不依賴它 |
+>
+> 未做的只有 `/vlm`，它不阻擋 M4 的核心價值（本地敘事鏈路），列入後續。
 
 **現況**：規則式 Narrator + fallback 階梯 + L2 摘要 + sidecar `/vlm` 接線都 CI 綠。`FoundationModelsNarrator` 用 `#if canImport(FoundationModels)` 隔離，**CI 根本沒編譯它**——真機（macOS 26 + Apple Intelligence 開啟）才第一次編譯與執行。
 
