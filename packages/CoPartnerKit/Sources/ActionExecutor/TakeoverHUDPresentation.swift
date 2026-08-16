@@ -58,7 +58,10 @@ public struct TakeoverHUDPresentation: Sendable, Equatable {
             approveWillExecute: willExecute)
     }
 
-    static func label(for risk: ActionRisk) -> String {
+    /// public 而非 internal：測試在別的 module，看不到 internal 成員。
+    /// （同 `SSEFrameParser.splitField`——這個坑踩過兩次了，新增給測試用的
+    /// helper 時記得檢查可見性。）
+    public static func label(for risk: ActionRisk) -> String {
         switch risk {
         case .low: return "低風險"
         case .medium: return "中風險"
