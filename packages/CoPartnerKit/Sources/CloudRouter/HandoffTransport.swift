@@ -9,4 +9,8 @@ public protocol HandoffTransport: Sendable {
 
 public enum HandoffError: Error, Equatable {
     case noTransport
+    /// 沒有設定 `HandoffRequestBuilder`。computer-use 的 `display_width_px` /
+    /// `display_height_px` 是必填、且**無法安全給預設值**——填錯不會報錯，只會讓
+    /// Claude 回傳的座標全部偏掉。寧可在這裡明確失敗，也不要拿假的螢幕尺寸矇混過去。
+    case noRequestBuilder
 }

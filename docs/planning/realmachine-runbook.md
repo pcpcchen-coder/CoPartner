@@ -98,7 +98,8 @@
 4. 關掉 Apple Intelligence 再試 → 應自動 fallback 到規則式（不中斷）。
 
 **③ 回報**：canImport 區塊**能不能編譯**（貼任何 red error）；FoundationModels availability 狀態；L1 敘事像不像人話、意圖猜得準不準（主觀抽樣）；單次延遲 ms。
-**驗收標準**：本地敘事路徑 **sub-second**（L1 < ~300ms、prewarm 生效）；availability 檢測正確、關閉時 fallback 通。
+**驗收標準**（2026-08-16 依實測修訂，原為 ~300ms，見下方分析）：
+L1 rollup **< ~2.5s 且不阻塞 L0 即時劇本**；prewarm 生效；availability 檢測正確、關閉時 fallback 通。
 
 #### 🔬 第一次真機實測（2026-08-16）與延遲目標的再評估
 
@@ -117,11 +118,18 @@ token，塞不下兩段散文欄位加一個陣列。這不是調校問題，是
 **已做的優化**（待第二次實測）：`@Guide` 加硬性字數上限（20 字 / 15 字）、instructions
 要求極度簡潔、rollup 視窗 40 → 20 行。預期落在 ~800–1200ms。
 
-**⚠️ 待使用者裁決**：`~300ms` 是規劃期自訂的數字，並非外部約束。建議改為
-**「L1 < ~1.5s，且不阻塞 L0 即時劇本」**——真正的 UX 不變式是即時劇本永遠不卡，
-而 rollup 跑在背景 task、`await` 會讓出 MainActor，UI 不會凍結。
-若堅持 sub-second，替代路線是把 step 砍成 3 欄位（category / whatHappened / openLoop），
-`inferredGoal` 與 `artifacts` 移到 L2 批次階段再補。
+**第二 / 三次實測**：1373ms → 2388ms。優化有效（2659 → 1373）但**不穩定**——
+關鍵發現：**`@Guide` 的字數上限模型只當參考、不嚴格遵守**。2388ms 那次輸出約 35 字，
+遠超設定的 20 字上限。延遲與輸出長度成正比這點被反覆印證，但光靠 prompt 壓不穩定。
+
+**✅ 已裁決（使用者，2026-08-16）**：驗收標準放寬到 **~2.5s，維持 6 欄位資訊量**。
+理由：真正的 UX 不變式是 L0 即時劇本永不卡，而 rollup 跑在背景 task、`await` 會讓出
+MainActor，UI 不凍結（真機截圖印證劇本持續即時更新）。`inferredGoal`（推測目標）
+正是 L1 的價值所在，不值得為了帳面數字砍掉。
+
+被否決的替代路線（留作記錄）：砍成 3 欄位（category / whatHappened / openLoop）、
+把 `inferredGoal` 與 `artifacts` 移到 L2 批次階段，可望壓到 500–800ms，
+代價是選單上「↳ 推測目標」即時消失。
 
 ---
 

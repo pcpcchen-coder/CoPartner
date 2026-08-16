@@ -169,8 +169,12 @@ final class AppCoordinator: ObservableObject {
                     self.session.endIntervention()
                 } catch {
                     guard let self else { return }
-                    let message = (error as? HandoffError == .noTransport)
-                        ? "雲端傳輸尚未接線（step 53）" : error.localizedDescription
+                    let message: String
+                    switch error as? HandoffError {
+                    case .noTransport:      message = "雲端傳輸尚未接線（step 53）"
+                    case .noRequestBuilder: message = "交棒請求未設定顯示器尺寸（step 53）"
+                    case .none:             message = error.localizedDescription
+                    }
                     self.takeoverSummary = "接手：\(message)"
                     self.takeoverModel = nil
                     self.session.endIntervention()       // 失敗 → 回觀察，事件日誌不中斷

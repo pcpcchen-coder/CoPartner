@@ -10,14 +10,50 @@ final class HandoffPipelineTests: XCTestCase {
     }
 
     // MARK: 請求組裝
+    /// 一個 1440×900 的顯示器（測試用）。真機由呼叫端從實際顯示器取值。
+    private func builder(model: String = "claude-opus-5", enableZoom: Bool = false) -> HandoffRequestBuilder {
+        HandoffRequestBuilder(model: model, displayWidthPx: 1440, displayHeightPx: 900, enableZoom: enableZoom)
+    }
+
+    /// 這兩個值於 2026-08-16 對照 live computer-use 文件查證過。
+    /// 改動它們前請先重查 Compatibility 區塊——搭錯 header 與 tool 版本會被 API 拒絕。
     func testBetaHeaderAndToolVersion() {
-        let b = HandoffRequestBuilder()
+        let b = builder()
         XCTAssertEqual(b.betaHeader, "computer-use-2025-11-24")
         XCTAssertEqual(b.toolType, "computer_20251124")
     }
 
+    /// API 規定 tool 的 `name` 必須恰好是 "computer"，不是可自由命名的欄位。
+    func testToolNameIsExactlyComputer() {
+        XCTAssertEqual(builder().toolName, "computer")
+        XCTAssertEqual(HandoffRequestBuilder.requiredToolName, "computer")
+    }
+
+    /// 顯示器尺寸必須原封不動傳到請求裡——它決定 Claude 回傳座標的意義，
+    /// 填錯不會報錯，只會讓每次點擊落在錯的位置。
+    func testDisplaySizeCarriedIntoRequest() {
+        let req = builder().build(envelope: envelope(), systemPrompt: "SYS", referencePrefix: "REF")
+        XCTAssertEqual(req.displayWidthPx, 1440)
+        XCTAssertEqual(req.displayHeightPx, 900)
+    }
+
+    func testEnableZoomDefaultsOffAndIsCarried() {
+        XCTAssertFalse(builder().build(envelope: envelope(), systemPrompt: "S", referencePrefix: "R").enableZoom)
+        XCTAssertTrue(builder(enableZoom: true)
+            .build(envelope: envelope(), systemPrompt: "S", referencePrefix: "R").enableZoom)
+    }
+
+    /// 支援模型清單（2026-08-16 查證）。較舊的模型要走 computer-use-2025-01-24 那份契約。
+    func testModelSupportCheck() {
+        XCTAssertTrue(builder(model: "claude-opus-5").isModelSupported)
+        XCTAssertTrue(builder(model: "claude-sonnet-5").isModelSupported)
+        XCTAssertFalse(builder(model: "claude-sonnet-4-5").isModelSupported,
+                       "Sonnet 4.5 需 computer-use-2025-01-24，不在本 builder 的契約內")
+        XCTAssertFalse(builder(model: "gpt-4").isModelSupported)
+    }
+
     func testStablePrefixOrdering() {
-        let req = HandoffRequestBuilder().build(envelope: envelope(), systemPrompt: "SYS", referencePrefix: "REF")
+        let req = builder().build(envelope: envelope(), systemPrompt: "SYS", referencePrefix: "REF")
         XCTAssertEqual(req.stablePrefix, ["SYS", "REF"])          // 穩定前綴在前
         XCTAssertTrue(req.volatileSuffix.contains("open_loop"))    // 易變劇本在後
     }
@@ -84,7 +120,8 @@ final class HandoffPipelineTests: XCTestCase {
     func testFakeTransportStreamsActions() async throws {
         let a1 = ProposedAction(kind: .screenshot)
         let a2 = ProposedAction(kind: .typeText("x"))
-        let router = CloudRouter(transport: FakeTransport(actions: [a1, a2]))
+        let router = CloudRouter(transport: FakeTransport(actions: [a1, a2]),
+                                 requestBuilder: builder())
         let stream = await router.handoff(envelope(), systemPrompt: "s", referencePrefix: "r")
         var got: [ProposedAction] = []
         for try await x in stream { got.append(x) }
@@ -98,6 +135,19 @@ final class HandoffPipelineTests: XCTestCase {
             XCTFail("無 transport 應 throw")
         } catch {
             XCTAssertEqual(error as? HandoffError, .noTransport)
+        }
+    }
+
+    /// 有 transport 但沒設定 builder → 明確失敗，不可拿假的螢幕尺寸矇混過去
+    /// （填錯 display size 不會報錯，只會讓 Claude 的座標全部偏掉）。
+    func testHandoffWithoutRequestBuilderThrows() async {
+        let router = CloudRouter(transport: FakeTransport(actions: [ProposedAction(kind: .screenshot)]))
+        let stream = await router.handoff(envelope())
+        do {
+            for try await _ in stream { XCTFail("不應吐出動作") }
+            XCTFail("無 requestBuilder 應 throw")
+        } catch {
+            XCTAssertEqual(error as? HandoffError, .noRequestBuilder)
         }
     }
 }
