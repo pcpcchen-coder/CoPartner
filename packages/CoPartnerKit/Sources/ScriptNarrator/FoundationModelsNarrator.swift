@@ -41,7 +41,9 @@ public struct FoundationModelsNarrator: NarrationBackend {
     private static let instructions = """
         你是螢幕操作敘事器。輸入是低階事件日誌，輸出一個 step：客觀描述 + 謹慎的意圖推測。
         禁止臆測日誌沒有的資訊。**極度簡潔**：每個欄位都要壓到字數上限內，不要補充說明、
-        不要舉例、不要重複日誌內容。只輸出結構化結果。
+        不要舉例、不要重複日誌內容。
+        用**台灣繁體中文用語**（視訊不是視頻、程式不是程序、檔案不是文件、網路不是網絡）。
+        只輸出結構化結果。
         """
 
     public func narrate(_ lines: [String]) async -> ActionStep? {
