@@ -82,6 +82,19 @@ final class AppCoordinator: ObservableObject {
     private let handoffGeneration = HandoffGeneration()
     private var takeoverModel: TakeoverSessionModel?
     private var handoffTask: Task<Void, Never>?
+
+    // 接手 HUD（step 53）：常駐浮層顯示提議 → Approve/Skip/Stop。
+    private let hudPanel = TakeoverHUDPanel()
+    private let riskClassifier = RiskClassifier()
+    /// 每次接手依當次 contract 重建——`SandboxPolicy` 來自 `TakeoverContract.allowedTools`，
+    /// 是 per-handoff 的值，不能在 init 就固定死。
+    private var actionExecutor: ActionExecutor?
+    /// 等待使用者按鍵的 continuation。
+    ///
+    /// ⚠️ **中止時務必 resume**：CheckedContinuation 沒被 resume 就走掉會洩漏
+    /// （Swift 執行期會抱怨，而且那條 handoff task 永遠卡住不會結束）。
+    /// 所以 `abortHandoff` 一定要把它以 `.stop` 收掉——見該方法。
+    private var pendingDecision: CheckedContinuation<TakeoverHUDPresentation.Decision, Never>?
     private let cloudRouter = CloudRouter()   // 無 transport：真雲端傳輸 🔒 step 53
 
     init() { registerHotkeys() }
@@ -153,6 +166,13 @@ final class AppCoordinator: ObservableObject {
             model.begin()
             takeoverModel = model
             takeoverSummary = "接手：交棒中…"
+            // executor 依**這次的 contract** 建：allowedTools 是 per-handoff 的值（T4）。
+            // 共用同一個世代時鐘 → Stop 一撥，在途 token 全部作廢（I7 單一權威）。
+            // performer 為 nil：真執行端（XPC + sandbox-exec）🔒 待接，execute 會 throw
+            // .notWired 而非靜默假裝執行——HUD 因此會誠實顯示「尚未接線」。
+            actionExecutor = ActionExecutor(clock: handoffGeneration,
+                                            policy: .from(contract: cleanEnvelope.takeover),
+                                            allowlist: Self.defaultPathAllowlist())
             let router = cloudRouter
             handoffTask = Task { [weak self] in
                 do {
@@ -161,14 +181,17 @@ final class AppCoordinator: ObservableObject {
                                                       referencePrefix: "")
                     for try await proposal in stream {
                         guard let self else { return }
-                        self.takeoverSummary = "接手提議：\(proposal.kind.summary)"
+                        let keepGoing = await self.handle(proposal: proposal)
+                        if !keepGoing { return }        // 使用者按了停止接手
                     }
                     guard let self else { return }
+                    self.hudPanel.hide()
                     self.takeoverModel?.complete()
                     self.takeoverSummary = "接手：完成"
                     self.session.endIntervention()
                 } catch {
                     guard let self else { return }
+                    self.hudPanel.hide()
                     let message: String
                     switch error as? HandoffError {
                     case .noTransport:      message = "雲端傳輸尚未接線（step 53）"
@@ -183,10 +206,106 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
+    // MARK: - 接手 HUD 迴圈（step 53）
+
+    /// 處理一個提議。回傳「是否繼續接手」——false 代表使用者按了停止。
+    ///
+    /// 流程刻意是：**本地風險分級 → 狀態機決定要不要問人 → HUD → 執行**。
+    /// 風險分級在最前面且與模型推理無關，是 T1 提示注入的最後防線。
+    private func handle(proposal: ProposedAction) async -> Bool {
+        guard var model = takeoverModel else { return false }
+        let risk = riskClassifier.classify(proposal)
+        takeoverSummary = "接手提議：\(proposal.kind.summary)"
+
+        // autoBounded + low + 未達上限 → 狀態機自動核並回 token；其餘回 nil、要問人。
+        if let token = model.receive(proposal, risk: risk) {
+            takeoverModel = model
+            await execute(proposal, token: token)
+            return true
+        }
+        takeoverModel = model
+
+        let presentation = TakeoverHUDPresentation.make(action: proposal,
+                                                        risk: risk,
+                                                        policy: model.policy,
+                                                        classifier: riskClassifier)
+        let decision = await awaitDecision(showing: presentation)
+
+        guard var m = takeoverModel else { return false }
+        switch decision {
+        case .approve:
+            let token = m.approve()      // suggestOnly 回 nil——按了也不執行
+            takeoverModel = m
+            if let token {
+                await execute(proposal, token: token)
+            } else {
+                takeoverSummary = "接手：僅建議，未執行 \(proposal.kind.summary)"
+            }
+            return true
+        case .skip:
+            m.skip()
+            takeoverModel = m
+            takeoverSummary = "接手：略過 \(proposal.kind.summary)"
+            return true
+        case .stop:
+            m.stop()                     // 內含 generation.abort()——在途 token 全失效
+            takeoverModel = m
+            hudPanel.hide()
+            takeoverSummary = "接手：已停止"
+            session.endIntervention()
+            return false
+        }
+    }
+
+    /// 顯示 HUD 並等使用者按鍵。
+    private func awaitDecision(showing presentation: TakeoverHUDPresentation) async
+        -> TakeoverHUDPresentation.Decision {
+        await withCheckedContinuation { continuation in
+            pendingDecision = continuation
+            hudPanel.show(presentation) { [weak self] decision in
+                MainActor.assumeIsolated { self?.resolveDecision(decision) }
+            }
+        }
+    }
+
+    /// 收下使用者的決定並喚醒等待中的 handoff task。**只會 resume 一次**——
+    /// 先取出再清空，避免連按兩下造成重複 resume（那會直接 crash）。
+    private func resolveDecision(_ decision: TakeoverHUDPresentation.Decision) {
+        guard let continuation = pendingDecision else { return }
+        pendingDecision = nil
+        continuation.resume(returning: decision)
+    }
+
+    /// 執行一個已核准的動作。真執行端未接時 throw `.notWired`，HUD 誠實顯示而非假裝成功。
+    private func execute(_ action: ProposedAction, token: ApprovalToken) async {
+        guard let executor = actionExecutor else { return }
+        do {
+            try await executor.execute(action, token: token)
+            takeoverSummary = "接手：已執行 \(action.kind.summary)"
+        } catch {
+            let reason = (error as? ExecutionError) == .notWired
+                ? "真執行端尚未接線（XPC + sandbox-exec 待接）"
+                : String(describing: error)
+            takeoverSummary = "接手：未執行 \(action.kind.summary) — \(reason)"
+        }
+        takeoverModel?.finishExecution()
+    }
+
+    /// 路徑白名單（I5）。目前給保守的預設值；使用者可設定的版本待做。
+    private static func defaultPathAllowlist() -> PathAllowlist {
+        let home = NSHomeDirectory()
+        return PathAllowlist(allowedRoots: ["\(home)/Documents", "\(home)/Desktop"])
+    }
+
     /// 中止接手鏈：取消串流、作廢世代 token（I7）、回觀察/停止。冪等。
     private func abortHandoff(reason: String) {
         handoffTask?.cancel()
         handoffTask = nil
+        // ⚠️ 先把等待中的 HUD 決定以 .stop 收掉，再取消 task。
+        // CheckedContinuation 沒被 resume 就走掉會洩漏——執行期會抱怨，而且那條
+        // handoff task 會永遠停在 await 不結束（緊急停止就變成停不掉）。
+        resolveDecision(.stop)
+        hudPanel.hide()
         if takeoverModel != nil {
             takeoverModel?.stop()                        // 內含 generation.abort()
             takeoverModel = nil
