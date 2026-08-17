@@ -17,7 +17,15 @@ public final class SystemAXFocusProvider: AXFocusProviding {
         let value = copyString(focused, kAXValueAttribute as CFString)
         let frame = copyFrame(focused) ?? .zero
         return AXFocusedElement(role: role, subrole: subrole, frame: frame,
-                                value: value, windowTitle: windowTitle(of: focused))
+                                value: value, windowTitle: windowTitle(of: focused),
+                                ownerPID: pid(of: focused))
+    }
+
+    /// 焦點元件屬於哪個程序。用來跟 NSWorkspace 的前景 app 對帳（見 `AXFocusedElement.ownerPID`）。
+    private func pid(of element: AXUIElement) -> Int32? {
+        var owner: pid_t = 0
+        guard AXUIElementGetPid(element, &owner) == .success, owner > 0 else { return nil }
+        return Int32(owner)
     }
 
     /// 沿 AXParent 往上找 AXWindow，讀其 AXTitle（焦點識別用；value 會隨內容變動不適合）。

@@ -562,7 +562,15 @@ final class AppCoordinator: ObservableObject {
         let element = axProvider.focusedElement()
         // 焦點識別用**視窗標題**（fallback: role）。
         // ⚠️ 不可用 element.value——那是欄位內容，終端機每輸出一字就變，會狂噴 FOCUS（step 29 dogfood 實測）。
-        let window = element?.windowTitle ?? element?.role ?? ""
+        //
+        // app 名稱來自 NSWorkspace、視窗標題來自 AX，兩條是獨立來源，切換瞬間會不同步。
+        // 先用焦點元件的擁有者對帳，對不上就當作沒讀到標題（step 54 dogfood 第二輪）。
+        let axOwnerApp = element?.ownerPID
+            .flatMap { NSRunningApplication(processIdentifier: $0)?.localizedName }
+        let window = FocusChangeTracker.reconciledWindow(frontmostApp: app,
+                                                         axOwnerApp: axOwnerApp,
+                                                         axWindowTitle: element?.windowTitle,
+                                                         axRoleFallback: element?.role)
         if let event = focusTracker.event(app: app, window: window) {
             let currentFeed = feed
             Task { await currentFeed.record(event) }

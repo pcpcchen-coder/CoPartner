@@ -11,10 +11,19 @@ public struct AXFocusedElement: Sendable, Equatable {
     /// 所屬視窗標題（AXWindow 的 AXTitle）。**焦點識別用這個，不要用 value**——
     /// value 是欄位內容（終端機每輸出一字就變），拿來判斷「換視窗了嗎」會狂噴 FOCUS。
     public var windowTitle: String?
+    /// 擁有這個焦點元件的程序（AXUIElementGetPid）。nil = 讀不到。
+    ///
+    /// 存在的理由是**對帳**：app 名稱來自 NSWorkspace，視窗標題來自 AX，兩條是獨立來源，
+    /// 在切換的那一瞬間會不同步（AX 已經指到新 app，NSWorkspace 還說舊 app）。
+    /// 有了擁有者才能發現「這兩個欄位不是在講同一個 app」，見
+    /// `FocusChangeTracker.reconciledWindow`。
+    public var ownerPID: Int32?
     public init(role: String, subrole: String? = nil, frame: CGRect,
-                value: String? = nil, windowTitle: String? = nil) {
+                value: String? = nil, windowTitle: String? = nil,
+                ownerPID: Int32? = nil) {
         self.role = role; self.subrole = subrole; self.frame = frame
         self.value = value; self.windowTitle = windowTitle
+        self.ownerPID = ownerPID
     }
 }
 
