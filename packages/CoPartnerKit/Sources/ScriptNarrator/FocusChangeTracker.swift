@@ -53,6 +53,28 @@ public struct FocusChangeTracker: Sendable {
         return previous == identity ? nil : .focus(app: app, window: window)
     }
 
+    /// 把兩個**獨立來源**的觀測收斂成一個可信的視窗字串。
+    ///
+    /// step 54 dogfood 第二輪抓到的：app 名稱來自 NSWorkspace，視窗標題來自 AX，
+    /// 在切換的那一瞬間兩者不同步——AX 已經指到新 app，NSWorkspace 還說舊 app：
+    ///   [22:22:58.065] FOCUS  app=備忘錄 win="新增連線"   ← "新增連線" 是 AnyDesk 的視窗
+    ///   [22:22:58.067] SWITCH app=AnyDesk win="新增連線"  ← 2ms 後 NSWorkspace 才跟上
+    /// 前面那筆是假的：備忘錄的視窗身分被換成了 AnyDesk 的標題，於是噴一筆 FOCUS。
+    ///
+    /// 規則：**擁有者對不上就當作沒讀到標題**。配合「未知不是新視窗」，這種不同步
+    /// 就完全不產生事件——比猜哪個來源才對安全，而且資訊不會真的遺失：
+    /// 下一次觀測（幾毫秒後）兩邊就一致了。
+    ///
+    /// 讀不到擁有者（`axOwnerApp` 為 nil）時**不擋**：那是資訊不足，不是矛盾。
+    /// 擋掉會讓所有讀不到 pid 的 app 永遠不產生 FOCUS——漏記比噪音更糟。
+    public static func reconciledWindow(frontmostApp: String,
+                                        axOwnerApp: String?,
+                                        axWindowTitle: String?,
+                                        axRoleFallback: String?) -> String {
+        if let axOwnerApp, axOwnerApp != frontmostApp { return "" }   // 來源不同步 → 當未知
+        return axWindowTitle ?? axRoleFallback ?? ""
+    }
+
     /// 標題等於「沒有資訊」——AX 讀不到時回空字串（某些 Electron / 全螢幕 app 常態如此）。
     ///
     /// 判斷用**原始標題**而非正規化後的值：正規化把標題剝光時會退回原值（見 `windowIdentity`），
