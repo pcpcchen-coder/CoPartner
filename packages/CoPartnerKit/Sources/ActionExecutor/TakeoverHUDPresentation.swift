@@ -28,10 +28,17 @@ public struct TakeoverHUDPresentation: Sendable, Equatable {
     /// 什麼都不會執行。若 HUD 仍畫成「執行」，使用者會以為自己核准了某件事而它沒發生——
     /// 反過來也一樣危險：以為沒事發生但其實執行了。按鈕文字必須誠實反映後果。
     public let approveWillExecute: Bool
+    /// 這是除錯預覽，不是真提議。
+    ///
+    /// 存在的理由是安全而不是方便：預覽浮層和真浮層長得一模一樣。
+    /// 使用者若把預覽當成真的（或反過來把真的當成預覽），確認閘門的意義就沒了——
+    /// 所以 UI **必須**依這個旗標畫出無法忽略的標示，而且預覽的主要按鈕不可寫「執行」。
+    public let isPreview: Bool
 
     public init(actionSummary: String, modelRationale: String, risk: ActionRisk,
                 riskLabel: String, localRiskReason: String?,
-                approveTitle: String, approveWillExecute: Bool) {
+                approveTitle: String, approveWillExecute: Bool,
+                isPreview: Bool = false) {
         self.actionSummary = actionSummary
         self.modelRationale = modelRationale
         self.risk = risk
@@ -39,14 +46,18 @@ public struct TakeoverHUDPresentation: Sendable, Equatable {
         self.localRiskReason = localRiskReason
         self.approveWillExecute = approveWillExecute
         self.approveTitle = approveTitle
+        self.isPreview = isPreview
     }
 
     /// 由待確認的提議組出顯示內容。
     public static func make(action: ProposedAction,
                             risk: ActionRisk,
                             policy: TakeoverContract.Policy,
-                            classifier: RiskClassifier = RiskClassifier()) -> TakeoverHUDPresentation {
-        let willExecute = (policy != .suggestOnly)
+                            classifier: RiskClassifier = RiskClassifier(),
+                            isPreview: Bool = false) -> TakeoverHUDPresentation {
+        // 預覽一律不執行——不管 policy 是什麼。這條 && 是預覽不會變成真動作的第一道保險
+        // （第二道在 AppCoordinator：預覽的決定回呼根本碰不到 executor）。
+        let willExecute = (policy != .suggestOnly) && !isPreview
         return TakeoverHUDPresentation(
             actionSummary: action.kind.summary,          // 本地產生，非雲端描述
             modelRationale: action.rationale,
@@ -54,8 +65,37 @@ public struct TakeoverHUDPresentation: Sendable, Equatable {
             riskLabel: Self.label(for: risk),
             // high 一律附本地原因；medium/low 沒有也正常。
             localRiskReason: classifier.reasonForHigh(action),
-            approveTitle: willExecute ? "執行" : "僅建議（不會執行）",
-            approveWillExecute: willExecute)
+            approveTitle: Self.approveTitle(willExecute: willExecute, isPreview: isPreview),
+            approveWillExecute: willExecute,
+            isPreview: isPreview)
+    }
+
+    private static func approveTitle(willExecute: Bool, isPreview: Bool) -> String {
+        if isPreview { return "關閉預覽（不會執行）" }
+        return willExecute ? "執行" : "僅建議（不會執行）"
+    }
+
+    /// 除錯預覽用的假提議（step 54）。
+    ///
+    /// 真執行端（XPC + sandbox-exec）接上之前，這是唯一能目視驗證浮層的方式：
+    /// 版面、位置、按鈕、跨 app 浮動與跨 Space 行為都得在真機上看過才算數。
+    ///
+    /// 刻意**走完整條真的產生路徑**——同一個 `RiskClassifier`、同一個 `make`——
+    /// 而不是手寫一組漂亮的欄位。手寫的預覽只證明「假資料畫得出來」，
+    /// 證明不了真提議會長成什麼樣；那種預覽通過了也不代表什麼。
+    ///
+    /// 選 `rm -rf` 當樣本是因為它會踩到 high 分級**並帶出本地原因**，
+    /// 一次驗到最需要目視確認的那條路徑（紅色標頭與原因文字都得出現）。
+    public static func previewFixture(classifier: RiskClassifier = RiskClassifier())
+        -> TakeoverHUDPresentation {
+        let action = ProposedAction(
+            kind: .shell(argv: ["rm", "-rf", "~/Documents/專案備份"]),
+            rationale: "（預覽假資料）看你剛在整理專案，先把舊備份資料夾清掉可以釋出空間。")
+        return make(action: action,
+                    risk: classifier.classify(action),
+                    policy: .confirmEach,
+                    classifier: classifier,
+                    isPreview: true)
     }
 
     /// public 而非 internal：測試在別的 module，看不到 internal 成員。

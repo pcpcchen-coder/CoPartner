@@ -13,6 +13,7 @@ struct TakeoverHUDView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if presentation.isPreview { previewBanner }
             header
 
             // 實際會執行什麼——本地從結構化欄位產生，不是模型的描述。
@@ -41,6 +42,22 @@ struct TakeoverHUDView: View {
         }
         .padding(16)
         .frame(width: 460)
+    }
+
+    /// 除錯預覽的橫幅。**刻意做得刺眼**：預覽浮層和真浮層長得一樣，
+    /// 分不出來的話，使用者要嘛把預覽當真的（白緊張），要嘛把真的當預覽（盲按執行）——
+    /// 後者直接毀掉確認閘門。所以這條放在最上面、滿版、不可摺疊。
+    private var previewBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "eyedropper")
+            Text("版面預覽 — 假提議，按任何按鈕都不會執行任何事")
+                .font(.caption).bold()
+        }
+        .foregroundStyle(.black)
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.yellow)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
     private var header: some View {

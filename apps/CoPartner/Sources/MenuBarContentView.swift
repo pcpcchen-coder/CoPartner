@@ -23,6 +23,9 @@ struct MenuBarContentView: View {
                     coordinator.toggleObserving()
                 }
                 Button("介入（⌃⌥⌘Space）") { coordinator.triggerIntervention() }
+                // 除錯入口：真執行端接上前，唯一能目視驗證接手浮層的方式（step 54）。
+                // 走的是完全獨立的路徑，按下去不會建立任何接手狀態。
+                Button("HUD 預覽") { coordinator.previewHUD() }
                 SettingsLink { Text("熱鍵…") }
                 Spacer()
                 Button("緊急停止") { coordinator.stopAll() }

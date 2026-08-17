@@ -225,18 +225,21 @@ macos-15 runner 沒有 FoundationModels 框架 → `canImport` 為 false → 整
 4.6/Sonnet 4.6（`medium`，且明講 `max` 只增成本不提準確度）。**Opus 5 不在建議清單裡**——
 真機驗收時這是要實測的參數，不是照抄的。
 
-### 7.2 🔒 M5 剩下的四塊
+### 7.2 M5 的四塊
 
-1. **⚠️ 先驗 `sandbox-exec` 在 macOS 26 還能不能用**——它被 Apple 標 deprecated 多年。
-   一行測試：`sandbox-exec -p '(version 1)(allow default)(deny network*)' /usr/bin/curl -s -m 5 https://example.com`
-   （預期網路被擋、非零退出）。**失效的話威脅模型 §6 備援要提前啟用，而那會改變下面三塊的設計**，
-   所以排在寫程式之前。
-2. **真 `HandoffTransport`** — LiteLLM gateway（`cd infra/litellm && litellm --config config.yaml`，
-   設 `ANTHROPIC_API_KEY`）→ Claude computer-use → SSE `tool_use` 正規化成 `ProposedAction`。
-   純網路膠水、風險低，可與 1 併行。
-3. **真 `ActionExecutor.performer`** — XPC service（`_ambient` 低權 user）+ code-signing
+1. ✅ **`sandbox-exec` 在 macOS 26 仍可用**（2026-08-17 真機實測）。
+   對照測試：無沙箱 `curl` exit=0、加 `(deny network*)` 後 exit=6。
+   威脅模型 §6 備援**不需提前啟用**。
+2. ✅ **假 SSE `HandoffTransport`**（PR #5）— `SSEFrameParser` + `AnthropicStreamDecoder`
+   + `ComputerUseNormalizer`，`SSEByteSource` 可注入。🔒 剩真的 LiteLLM 位元組來源
+   （`cd infra/litellm && litellm --config config.yaml`，設 `ANTHROPIC_API_KEY`）。
+3. 🔒 **真 `ActionExecutor.performer`** — XPC service（`_ambient` 低權 user）+ code-signing
    requirement 驗證（只收主 app）+ `sandbox-exec` sbpl + `posix_spawn` argv 直呼（無 shell）。
-4. **接手 HUD** — SwiftUI 常駐浮層：提議動作原文 + 風險原因 + Approve/Skip/Stop。
+   **M5 只剩這塊是真的沒開始。**
+4. ✅ **接手 HUD**（PR #6）— NSPanel 常駐浮層 + 確認閘門接線。
+   附「HUD 預覽」除錯入口（step 54）：真執行端接上前唯一能目視驗證浮層的方式。
+   預覽走**完全獨立的路徑**——不建狀態機、不建 executor、不碰 `pendingDecision`，
+   決定回呼只關浮層。否則一顆除錯按鈕就成了繞過確認閘門的後門。
 
 驗收清單見 `realmachine-runbook.md` M5 節（對照威脅模型 I1–I10 逐項勾）。
 

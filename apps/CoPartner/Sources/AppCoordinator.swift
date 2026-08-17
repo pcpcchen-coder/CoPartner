@@ -257,6 +257,31 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
+    // MARK: - HUD 版面預覽（step 54，除錯入口）
+
+    /// 用假提議叫出浮層，目視驗證版面 / 位置 / 按鈕 / 跨 app 浮動行為。
+    /// 真執行端（XPC + sandbox-exec）接上之前，這是唯一能看到 HUD 的方式。
+    ///
+    /// **這條路徑刻意完全繞開接手狀態機**：不建 `takeoverModel`、不建 `actionExecutor`、
+    /// 不碰 `pendingDecision`、不動世代時鐘。決定回呼只做「關掉浮層」一件事。
+    /// 預覽若能走進 `handle(proposal:)`，一顆除錯按鈕就成了繞過確認閘門的後門。
+    ///
+    /// 接手進行中時**拒絕預覽**：浮層只有一個，蓋掉真提議會讓使用者對著假的按下去，
+    /// 而真的那筆還卡在 `pendingDecision` 等回應（連 continuation 也會被搞混）。
+    func previewHUD() {
+        guard takeoverModel == nil, pendingDecision == nil else {
+            takeoverSummary = "接手：進行中，預覽已略過（避免蓋掉真提議）"
+            return
+        }
+        hudPanel.show(.previewFixture()) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.hudPanel.hide()               // 三顆按鈕在預覽下都只是關掉
+                self?.takeoverSummary = "接手：未啟動（版面預覽已關閉）"
+            }
+        }
+        takeoverSummary = "接手：版面預覽中（假提議，不會執行）"
+    }
+
     /// 顯示 HUD 並等使用者按鍵。
     private func awaitDecision(showing presentation: TakeoverHUDPresentation) async
         -> TakeoverHUDPresentation.Decision {
