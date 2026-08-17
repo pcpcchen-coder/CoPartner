@@ -39,14 +39,58 @@ public struct RuleBasedNarrator: NarrationBackend {
         "png", "jpg", "jpeg", "pdf", "html", "css", "rs", "go", "java", "c", "cpp", "h", "m",
     ]
 
-    /// 從含 `app=…` 的行取第一個 app 名（到下一個空白為止）。
-    static func inferApp(_ lines: [String]) -> String? {
-        for line in lines {
-            guard let r = line.range(of: "app=") else { continue }
-            let name = line[r.upperBound...].prefix { $0 != " " }
-            if !name.isEmpty { return String(name) }
+    /// 這段視窗裡**佔比最高**的 app；平手時取較晚出現的那個。
+    ///
+    /// ⚠️ 原本取的是「第一行的 app」，step 54 dogfood 證明那是錯的：
+    /// 視窗是舊到新排的，第一行是這段時間的**最舊**事件，於是每個 step 都被標成
+    /// 「這段開始時你在哪」而不是「這段主要在哪」——真機上整串 step 都掛著 `CoPartner`，
+    /// 內容講的卻是 AnyDesk 和系統設定。
+    ///
+    /// 這不只是顯示難看：`MemoryStore` 依 app 存放 step，標錯等於之後全部查錯戶。
+    ///
+    /// 平手取較晚者，是因為一個 step 通常結束在使用者**當下**所在的 app，
+    /// 那也是接手時最可能相關的那個。
+    ///
+    /// public 而非 internal：測試在別的 module 看不到 internal 成員
+    /// （`SSEFrameParser.splitField`、`TakeoverHUDPresentation.label` 都踩過這坑）。
+    public static func inferApp(_ lines: [String]) -> String? {
+        var counts: [String: Int] = [:]
+        var lastSeen: [String: Int] = [:]
+        for (index, line) in lines.enumerated() {
+            guard let name = appName(in: line) else { continue }
+            counts[name, default: 0] += 1
+            lastSeen[name] = index
         }
-        return nil
+        return counts.max {
+            ($0.value, lastSeen[$0.key] ?? 0) < ($1.value, lastSeen[$1.key] ?? 0)
+        }?.key
+    }
+
+    /// 從一行日誌取 app 名。
+    ///
+    /// 不能單純「切到第一個空白」——app 名稱本身可以有空白（"Google Chrome"、
+    /// "Visual Studio Code"），那樣會把 Chrome 切成 "Google"。改成切在**下一個看起來像
+    /// 欄位鍵的 token**（`win=` / `dir=` / `dist=`）之前，那才是 EventFormatter 的真實格式。
+    public static func appName(in line: String) -> String? {
+        guard let r = line.range(of: "app=") else { return nil }
+        let rest = line[r.upperBound...]
+        var end = rest.endIndex
+        var cursor = rest.startIndex
+        while let space = rest[cursor...].firstIndex(of: " ") {
+            let afterSpace = rest.index(after: space)
+            if looksLikeFieldKey(rest[afterSpace...]) { end = space; break }
+            guard afterSpace < rest.endIndex else { break }
+            cursor = afterSpace
+        }
+        let name = rest[..<end].trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? nil : name
+    }
+
+    /// `win="…"` 這種欄位開頭：第一個 `=` 之前全是小寫英文字母。
+    private static func looksLikeFieldKey(_ s: Substring) -> Bool {
+        guard let eq = s.firstIndex(of: "=") else { return false }
+        let key = s[..<eq]
+        return !key.isEmpty && key.allSatisfy { $0.isLetter && $0.isLowercase }
     }
 
     /// 依關鍵字優先序推類別（debugging 最優先，operating 保底）。

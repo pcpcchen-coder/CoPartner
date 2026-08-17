@@ -7,9 +7,15 @@ import Foundation
 //   2. M5 dogfood：`windowTitle` 本身也會變——終端機把尺寸寫進標題
 //      （"CoPartner — -zsh — 110×33"），拉一次視窗大小就在 0.1 秒內噴 6 行 FOCUS。
 //      修法：比對身分前先剝掉易變尾巴，見 `windowIdentity`。
+//   3. step 54 dogfood：AX **有時候整個讀不到標題**，回空字串。空字串被當成一個合法身分，
+//      於是標題在「讀得到 / 讀不到」之間跳的時候來回噴 FOCUS：
+//        SWITCH app=系統設定 win=""
+//        FOCUS  app=系統設定 win="隱私權與安全性"   ← "" → 有標題
+//        FOCUS  app=系統設定 win=""                ← 有標題 → ""
+//      修法：**空標題代表「沒有資訊」，不是「新視窗」**，見 `isUnknownTitle`。
 //
 // 教訓：**視窗標題是給人看的顯示字串，不是身分。** 終端機把尺寸寫進去、編輯器把髒標記
-// 寫進去、瀏覽器把未讀數寫進去、播放器把時間碼寫進去。
+// 寫進去、瀏覽器把未讀數寫進去、播放器把時間碼寫進去，而且它隨時可能整個讀不到。
 //
 // 曾考慮加「同 app 內 FOCUS 最小間隔」的時間節流當通用後備，**刻意不採用**：
 // 它會靜默吃掉真實的快速切換，而漏記的事件是看不見的；噪音至少看得見、下次 dogfood
@@ -25,12 +31,34 @@ public struct FocusChangeTracker: Sendable {
 
     /// 餵入一次焦點觀測，回傳應記錄的事件；無變化回 nil。
     /// 事件裡帶的是**原始標題**（給人看），比對身分用的是正規化後的值。
+    ///
+    /// 核心規則：**只有「已知 → 另一個已知」才算換視窗。**
+    /// 任何一端是未知（AX 讀不到標題）都只更新狀態、不發事件——
+    /// 「我不知道現在是哪個視窗」跟「換到了另一個視窗」是兩件完全不同的事，
+    /// 把前者當成後者就是 step 54 那串來回噴的 FOCUS。
     public mutating func event(app: String, window: String) -> L0Event? {
-        let identity = Self.windowIdentity(window)
-        defer { lastApp = app; lastWindowIdentity = identity }
-        if app != lastApp { return .switchApp(app: app, window: window) }
-        if identity != lastWindowIdentity { return .focus(app: app, window: window) }
-        return nil
+        // 未知標題不參與比對，也**不覆蓋**已知的身分——否則下次標題讀回來時
+        // 又會被判成「換視窗」，一來一回就是兩筆假 FOCUS。
+        let identity: String? = Self.isUnknownTitle(window) ? nil : Self.windowIdentity(window)
+
+        if app != lastApp {
+            lastApp = app
+            lastWindowIdentity = identity     // 換 app 時一律重設基準（未知就是 nil）
+            return .switchApp(app: app, window: window)
+        }
+        guard let identity else { return nil }              // 讀不到 → 沿用舊身分，不發事件
+        let previous = lastWindowIdentity
+        lastWindowIdentity = identity
+        guard let previous else { return nil }              // 未知 → 已知：只是補上資訊，不是換視窗
+        return previous == identity ? nil : .focus(app: app, window: window)
+    }
+
+    /// 標題等於「沒有資訊」——AX 讀不到時回空字串（某些 Electron / 全螢幕 app 常態如此）。
+    ///
+    /// 判斷用**原始標題**而非正規化後的值：正規化把標題剝光時會退回原值（見 `windowIdentity`），
+    /// 那種情況是「標題只剩易變樣式」，不是「讀不到標題」，兩者不該混為一談。
+    public static func isUnknownTitle(_ title: String) -> Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// 視窗標題 → 可用來比對的身分。剝掉已知會自行變動的部分。
