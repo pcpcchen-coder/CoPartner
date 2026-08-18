@@ -97,6 +97,9 @@ final class XPCActionPerformer {
         }
     }
 
+    /// 單次 XPC 往返的等待上限。
+    private static let timeoutSeconds: Double = 10
+
     /// 主 app 要求 service 必須是「同 Team 簽的、bundle id 為 executor」。
     /// 組不出來（ad-hoc 組建）→ nil，由呼叫端決定怎麼辦。
     private static func serviceRequirement() -> String? {
@@ -130,6 +133,14 @@ final class XPCActionPerformer {
             // ⚠️ reply、錯誤處理器、中斷、失效**四條路都可能觸發**，而
             // CheckedContinuation 重複 resume 會直接 crash。用 box 保證只 resume 一次。
             let box = ContinuationBox(continuation)
+            // ⏱ 逾時保險。service 若在**啟動時**就崩潰並被 launchd 反覆重啟，
+            // reply、錯誤處理器、中斷處理器可能一個都不會來——真機上就這樣讓自檢
+            // 永遠卡在「檢測中…」。沒有回應本身也是一種結果，必須報得出來。
+            // box 保證只 resume 一次，所以這裡與正常回覆競爭是安全的。
+            DispatchQueue.global().asyncAfter(deadline: .now() + Self.timeoutSeconds) {
+                box.fail(Failure.cannotConnect(
+                    "逾時（\(Int(Self.timeoutSeconds)) 秒無回應——service 可能一啟動就崩潰）"))
+            }
             // 每個閉包都明標 @Sendable——見檔頭，這是當機的直接修法。
             connection.interruptionHandler = { @Sendable in
                 box.fail(Failure.cannotConnect("連線中斷（service 可能崩潰）"))
