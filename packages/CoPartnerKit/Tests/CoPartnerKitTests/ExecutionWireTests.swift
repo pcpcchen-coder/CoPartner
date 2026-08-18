@@ -1,4 +1,5 @@
 import XCTest
+import Foundation
 import CoPartnerCore
 import ActionExecutor
 
@@ -116,6 +117,53 @@ final class ExecutionWireTests: XCTestCase {
         for outcome in outcomes {
             XCTAssertEqual(try ExecutionWire.decodeOutcome(ExecutionWire.encode(outcome)), outcome)
         }
+    }
+
+    // MARK: - 探測腳本與線上型別必須對得起來
+
+    /// `scripts/xpc-probe.swift` 裡的 JSON 是**手寫**的（那個腳本刻意獨立，
+    /// 不依賴 CoPartnerKit，才能用 swiftc 單獨編成 ad-hoc 簽章的外部程序）。
+    ///
+    /// 手寫就會漂：Kind 一旦改名或改形狀，腳本會靜默送出解不開的請求，
+    /// 而失敗長得像「service 拒收」——看起來像防線生效，其實是腳本壞了。
+    /// 那正好會讓拒絕路徑的驗收得出**假的通過**。
+    ///
+    /// 這條測試直接讀那個檔、抽出裡面的 JSON 字面值來解，讓 CI 綁住兩者。
+    func testProbeScriptPayloadStillDecodes() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // CoPartnerKitTests
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // CoPartnerKit
+            .deletingLastPathComponent()   // packages
+            .deletingLastPathComponent()   // repo root
+        let script = repoRoot.appendingPathComponent("scripts/xpc-probe.swift")
+        let source = try String(contentsOf: script, encoding: .utf8)
+
+        // 抽出 `let payload = Data(#"…"#.utf8)` 裡的字面值。
+        guard let line = source.split(separator: "\n").first(where: { $0.contains("let payload") }),
+              let start = line.range(of: "#\""),
+              let end = line.range(of: "\"#", range: start.upperBound..<line.endIndex) else {
+            return XCTFail("在 \(script.path) 找不到 payload 字面值——腳本結構變了，請同步更新這條測試")
+        }
+        let json = String(line[start.upperBound..<end.lowerBound])
+
+        let request = try ExecutionWire.decodeRequest(Data(json.utf8))
+        XCTAssertEqual(request.kind, .selfTest,
+                       "探測腳本送的必須仍是 selfTest（絕不可變成真動作）")
+    }
+
+    /// 反向釘住合成編碼的實際形狀。
+    ///
+    /// 上面那條保證腳本解得開，但若哪天 `Kind` 的編碼形狀變了、而腳本也「剛好」
+    /// 被一起改對，就看不出契約已經不同。這條把形狀本身寫死成期望值——
+    /// Swift 對 enum 的 Codable 合成規則是外部行為，不該只存在於我腦中的假設。
+    func testSelfTestEncodesAsSingleEmptyKeyedCase() throws {
+        let data = try ExecutionWire.encode(ExecutionRequest.selfTest())
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let kind = try XCTUnwrap(object["kind"] as? [String: Any])
+        XCTAssertEqual(Array(kind.keys), ["selfTest"])
+        XCTAssertEqual((kind["selfTest"] as? [String: Any])?.count, 0,
+                       "無關聯值的 case 應編成空物件")
     }
 
     /// 壞資料要 throw，不可解出一個「看起來正常」的結果。

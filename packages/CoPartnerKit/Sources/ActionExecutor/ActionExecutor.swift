@@ -40,20 +40,34 @@ public actor ActionExecutor {
     }
 
     public func execute(_ action: ProposedAction, token: ApprovalToken, now: Date = Date()) async throws {
-        guard clock.isCurrent(token.generation) else { throw ExecutionError.staleToken }
-        guard token.actionID == action.id else { throw ExecutionError.tokenActionMismatch }
+        // ⚠️ **被擋下來的動作也要留紀錄**（I9：「每個提議**無論核准與否**都落 audit log」）。
+        //
+        // 這裡原本六條拒絕路徑全都在寫任何稽核之前就 throw，於是留下零痕跡——
+        // 而那六條正好是**最需要事後查得到**的情況：用了作廢的 token、token 綁錯動作、
+        // 用了 contract 沒授權的工具、想碰白名單外的路徑、連發、迴圈。
+        // 稽核只記成功的話，等於「一切正常」與「有人一直被擋」在紀錄上長得一樣。
+        func blocked(_ reason: String) { auditLog.append("blocked \(action.kind.summary) — \(reason)") }
+
+        guard clock.isCurrent(token.generation) else {
+            blocked("token 世代已作廢（I7）"); throw ExecutionError.staleToken
+        }
+        guard token.actionID == action.id else {
+            blocked("token 綁定的是別的動作"); throw ExecutionError.tokenActionMismatch
+        }
         guard policy.allows(action.kind) else {
+            blocked("contract 未授權此工具（T4）")
             throw ExecutionError.toolNotAllowed(action.kind.summary)
         }
         if let path = Self.pathTouched(action.kind), !allowlist.permits(path) {
+            blocked("路徑在白名單外（I5）：\(path)")
             throw ExecutionError.pathOutsideAllowlist(path)
         }
         switch limiter.record(action.kind.summary, at: now) {
-        case .rateLimited: throw ExecutionError.rateLimited
-        case .loopDetected: throw ExecutionError.loopDetected
+        case .rateLimited: blocked("超過速率上限（I8）"); throw ExecutionError.rateLimited
+        case .loopDetected: blocked("偵測到重複迴圈（I8）"); throw ExecutionError.loopDetected
         case .allow: break
         }
-        // 稽核分成「嘗試」與「結果」兩筆（I9）。
+        // 通過所有閘門後，稽核分成「嘗試」與「結果」兩筆（I9）。
         // 以前只記一筆 "execute …"，在 performer 為 nil 時就已經略嫌含糊；
         // step 55 ① 接上 XPC 之後更不能這樣寫——service 現在會例行地回「收到但沒做」，
         // 若稽核只留一筆 "execute"，紀錄上會顯示執行過、實際上什麼都沒發生。
