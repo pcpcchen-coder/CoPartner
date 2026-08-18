@@ -13,7 +13,9 @@ public enum ExecutionError: Error, Equatable {
     case pathOutsideAllowlist(String)     // 路徑白名單外（I5）
     case rateLimited                      // 超過動作速率上限（I8）
     case loopDetected                     // 同一動作連續重複（I8）
-    case notWired                         // 真執行 🔒 step 53
+    case notWired                         // service 回覆「收到但沒做」——第 ① 段骨架的預期結果
+    case xpcUnavailable(String)           // 連不上 / 連線中斷 / 回覆格式不對
+    case notSandboxable(String)           // UI 類動作不走沙箱路徑（R2），該在主程序內執行
 }
 
 public actor ActionExecutor {
@@ -51,9 +53,22 @@ public actor ActionExecutor {
         case .loopDetected: throw ExecutionError.loopDetected
         case .allow: break
         }
-        auditLog.append("execute \(action.kind.summary)")
-        guard let performer else { throw ExecutionError.notWired }
-        try await performer(action)
+        // 稽核分成「嘗試」與「結果」兩筆（I9）。
+        // 以前只記一筆 "execute …"，在 performer 為 nil 時就已經略嫌含糊；
+        // step 55 ① 接上 XPC 之後更不能這樣寫——service 現在會例行地回「收到但沒做」，
+        // 若稽核只留一筆 "execute"，紀錄上會顯示執行過、實際上什麼都沒發生。
+        auditLog.append("attempt \(action.kind.summary)")
+        guard let performer else {
+            auditLog.append("notExecuted \(action.kind.summary) — 執行端未接線")
+            throw ExecutionError.notWired
+        }
+        do {
+            try await performer(action)
+        } catch {
+            auditLog.append("notExecuted \(action.kind.summary) — \(error)")
+            throw error
+        }
+        auditLog.append("executed \(action.kind.summary)")
     }
 
     static func pathTouched(_ kind: ProposedAction.Kind) -> String? {

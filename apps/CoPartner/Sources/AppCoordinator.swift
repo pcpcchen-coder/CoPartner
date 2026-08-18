@@ -97,6 +97,11 @@ final class AppCoordinator: ObservableObject {
     private var pendingDecision: CheckedContinuation<TakeoverHUDPresentation.Decision, Never>?
     private let cloudRouter = CloudRouter()   // 無 transport：真雲端傳輸 🔒 step 53
 
+    // 執行端 XPC（step 55 ①）：主 app ↔ service 的連線。
+    // service 目前**沒有執行能力**，回覆一律是「收到但沒做」→ 轉成 throw，不假裝成功。
+    private let xpcPerformer = XPCActionPerformer()
+    @Published private(set) var xpcSummary: String = "執行端：未檢測"
+
     init() { registerHotkeys() }
 
     /// ⌃⌥⌘O 切換觀察、⌃⌥⌘. 緊急停止（全域熱鍵；實際觸發需真機驗收）。
@@ -168,11 +173,18 @@ final class AppCoordinator: ObservableObject {
             takeoverSummary = "接手：交棒中…"
             // executor 依**這次的 contract** 建：allowedTools 是 per-handoff 的值（T4）。
             // 共用同一個世代時鐘 → Stop 一撥，在途 token 全部作廢（I7 單一權威）。
-            // performer 為 nil：真執行端（XPC + sandbox-exec）🔒 待接，execute 會 throw
-            // .notWired 而非靜默假裝執行——HUD 因此會誠實顯示「尚未接線」。
-            actionExecutor = ActionExecutor(clock: handoffGeneration,
-                                            policy: .from(contract: cleanEnvelope.takeover),
-                                            allowlist: Self.defaultPathAllowlist())
+            // performer 接上 XPC（step 55 ①）。service 尚無執行能力 → 回「收到但沒做」，
+            // 客戶端轉成 throw .notWired，HUD 因此顯示「未執行」而非靜默假裝成功。
+            // generation 只是稽核關聯用；真正的世代驗證在 execute 裡（I7）。
+            let performer = xpcPerformer
+            let generation = handoffGeneration.current
+            actionExecutor = ActionExecutor(
+                clock: handoffGeneration,
+                policy: .from(contract: cleanEnvelope.takeover),
+                allowlist: Self.defaultPathAllowlist(),
+                performer: { action in
+                    try await performer.perform(action, generation: generation)
+                })
             let router = cloudRouter
             handoffTask = Task { [weak self] in
                 do {
@@ -282,6 +294,33 @@ final class AppCoordinator: ObservableObject {
         takeoverSummary = "接手：版面預覽中（假提議，不會執行）"
     }
 
+    /// 執行端 XPC 自檢（step 55 ①，除錯入口）。
+    ///
+    /// 真雲端傳輸接上之前沒有辦法產生真提議，也就沒有辦法驗證這條線——
+    /// 同 HUD 預覽的處境。送的是**專屬的 `.selfTest` kind**，不是借用一個 shell 動作，
+    /// 所以第 ④ 段接上真執行之後，這個入口仍然不可能夾帶真動作。
+    ///
+    /// 報告刻意顯示 pid 與 euid：「有回應」不等於「跑在另一個程序」，
+    /// 這件事要看到數字才算驗過。
+    func runXPCSelfTest() {
+        xpcSummary = "執行端：檢測中…"
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let report = try await self.xpcPerformer.selfTest()
+                let ownPID = ProcessInfo.processInfo.processIdentifier
+                let separate = report.servicePID != ownPID ? "獨立程序" : "⚠️ 同一程序"
+                self.xpcSummary = "執行端：已連線・\(separate)"
+                    + "（service pid \(report.servicePID) / app pid \(ownPID)）"
+                    + "・euid \(report.serviceEUID)"
+                    + "・會執行動作：\(report.willExecuteActions ? "是" : "否")"
+                    + "・驗呼叫者簽章：\(report.verifiesCallerSignature ? "是" : "否（第 ② 段）")"
+            } catch {
+                self.xpcSummary = "執行端：連不上（\(error)）"
+            }
+        }
+    }
+
     /// 顯示 HUD 並等使用者按鍵。
     private func awaitDecision(showing presentation: TakeoverHUDPresentation) async
         -> TakeoverHUDPresentation.Decision {
@@ -308,9 +347,17 @@ final class AppCoordinator: ObservableObject {
             try await executor.execute(action, token: token)
             takeoverSummary = "接手：已執行 \(action.kind.summary)"
         } catch {
-            let reason = (error as? ExecutionError) == .notWired
-                ? "真執行端尚未接線（XPC + sandbox-exec 待接）"
-                : String(describing: error)
+            let reason: String
+            switch error as? ExecutionError {
+            case .notWired:
+                reason = "XPC 已連線，但 service 尚無執行能力（第 ① 段骨架的預期結果）"
+            case .xpcUnavailable(let detail):
+                reason = "XPC 連線問題：\(detail)"
+            case .notSandboxable(let summary):
+                reason = "UI 類動作不走沙箱路徑，主程序內執行端待接（\(summary)）"
+            default:
+                reason = String(describing: error)
+            }
             takeoverSummary = "接手：未執行 \(action.kind.summary) — \(reason)"
         }
         takeoverModel?.finishExecution()

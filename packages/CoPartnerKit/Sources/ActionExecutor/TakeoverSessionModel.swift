@@ -26,7 +26,11 @@ public final class HandoffGeneration: @unchecked Sendable {
     /// 作廢目前世代（bump——既有 token 全部失配）。冪等安全。
     public func abort() { lock.lock(); defer { lock.unlock() }; value += 1 }
     public func isCurrent(_ g: Int) -> Bool { lock.lock(); defer { lock.unlock() }; return g == value }
-    var current: Int { lock.lock(); defer { lock.unlock() }; return value }
+    /// 目前世代號。**唯讀且 public**：稽核關聯需要它（跨程序的執行請求要標明是哪一次 handoff）。
+    ///
+    /// 讀得到世代號**不會**讓任何人繞過閘門——`ApprovalToken` 的 init 是 internal，
+    /// 模組外拿不到鑄造能力（I1），知道號碼也組不出 token。
+    public var current: Int { lock.lock(); defer { lock.unlock() }; return value }
 }
 
 /// 接手 HUD 狀態機（純值、決定性測試）。
