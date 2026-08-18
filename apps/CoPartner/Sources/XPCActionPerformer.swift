@@ -16,6 +16,13 @@ import ActionExecutor
 //     Thread 4  Queue: com.apple.NSXPCConnection…CoPartnerExecutor (serial)
 //     0  _dispatch_assert_queue_fail
 // 連線相關的程式碼因此整段做成 `nonisolated static`，不讓任何閉包沾到 actor 隔離。
+/// 單次 XPC 往返的等待上限。
+///
+/// 放在檔案層而不是 `XPCActionPerformer` 的 static 屬性：那個型別是 `@MainActor`，
+/// 它的 static 屬性也跟著被 MainActor 隔離，而逾時閉包跑在全域佇列上、
+/// `exchange` 又是 `nonisolated`——從那裡讀就是跨隔離存取，Swift 6 直接擋下來。
+private let xpcTimeoutSeconds: Double = 10
+
 @MainActor
 final class XPCActionPerformer {
 
@@ -130,6 +137,14 @@ final class XPCActionPerformer {
             // ⚠️ reply、錯誤處理器、中斷、失效**四條路都可能觸發**，而
             // CheckedContinuation 重複 resume 會直接 crash。用 box 保證只 resume 一次。
             let box = ContinuationBox(continuation)
+            // ⏱ 逾時保險。service 若在**啟動時**就崩潰並被 launchd 反覆重啟，
+            // reply、錯誤處理器、中斷處理器可能一個都不會來——真機上就這樣讓自檢
+            // 永遠卡在「檢測中…」。沒有回應本身也是一種結果，必須報得出來。
+            // box 保證只 resume 一次，所以這裡與正常回覆競爭是安全的。
+            DispatchQueue.global().asyncAfter(deadline: .now() + xpcTimeoutSeconds) {
+                box.fail(Failure.cannotConnect(
+                    "逾時（\(Int(xpcTimeoutSeconds)) 秒無回應——service 可能一啟動就崩潰）"))
+            }
             // 每個閉包都明標 @Sendable——見檔頭，這是當機的直接修法。
             connection.interruptionHandler = { @Sendable in
                 box.fail(Failure.cannotConnect("連線中斷（service 可能崩潰）"))
