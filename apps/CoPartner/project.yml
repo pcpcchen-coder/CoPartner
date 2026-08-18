@@ -11,6 +11,20 @@ settings:
     MARKETING_VERSION: "0.0.1"
     CURRENT_PROJECT_VERSION: "1"
     ENABLE_HARDENED_RUNTIME: YES
+    # 簽章設定放在 base，**兩個 target 都要吃到**（step 55 ② dogfood）。
+    #
+    # 原本這裡沒有任何簽章設定，app 靠 Xcode 自動簽得到身分，但新加的 XPC service
+    # 沒跟上——真機 codesign 顯示 service 是 ad-hoc（`TeamIdentifier=not set`、
+    # 一條 Authority 都沒有）。後果有兩個：service 自己組不出 code-signing
+    # requirement（驗呼叫者永遠停在「未啟用」），主 app 反向驗它也必然失敗。
+    #
+    # 巢狀程式碼跟外層不同身分，在正式發佈同樣是壞的——公證要求 app 內所有
+    # 巢狀程式碼用同一個身分簽。所以這不是為了開發方便，是本來就該這樣。
+    #
+    # 寫死 Team ID 的取捨：它不是機密（每個簽過的 app 都帶著它），而
+    # bootstrap.sh 每次都重生專案，手動在 Xcode UI 設會被蓋掉——寫在這裡才留得住。
+    DEVELOPMENT_TEAM: DR9KS7PHHM
+    CODE_SIGN_STYLE: Automatic
 packages:
   CoPartnerKit:
     path: ../../packages/CoPartnerKit
