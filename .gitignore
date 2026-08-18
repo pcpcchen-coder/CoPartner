@@ -16,6 +16,7 @@ build/
 apps/CoPartner/CoPartner.xcodeproj/
 apps/CoPartner/Sources/Info.plist
 apps/CoPartner/Sources/CoPartner.entitlements
+apps/CoPartner/Executor/Info.plist
 
 # ── Swift Package Manager ──
 .build/

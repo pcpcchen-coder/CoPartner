@@ -21,8 +21,16 @@ targets:
   CoPartner:
     type: application
     platform: macOS
-    sources: [Sources]
+    sources: [Sources, Shared]      # Shared/ 是與 XPC service 共用的協定定義
     dependencies:
+      # XPC service 內嵌到 Contents/XPCServices，NSXPCConnection(serviceName:) 才找得到。
+      # subpath 明寫而不依賴預設值：放錯位置時連線會在執行期才失敗，訊息也不明顯。
+      - target: CoPartnerExecutor
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/XPCServices
       - package: CoPartnerKit
         product: CoPartnerCore
       - package: CoPartnerKit
@@ -47,10 +55,30 @@ targets:
       properties:
         com.apple.security.app-sandbox: false   # 需跨程序 AX / CGEvent，無法沙箱化
         com.apple.security.network.client: true
+
+  # 執行端 XPC service（step 55 ①）。獨立程序、獨立 bundle。
+  # 第 ① 段刻意**沒有任何執行能力**——見 Executor/ExecutorService.swift 檔頭。
+  CoPartnerExecutor:
+    type: xpc-service
+    platform: macOS
+    sources: [Executor, Shared]
+    dependencies:
+      - package: CoPartnerKit
+        product: CoPartnerCore
+      - package: CoPartnerKit
+        product: ActionExecutor
+    info:
+      path: Executor/Info.plist
+      properties:
+        CFBundlePackageType: XPC!
+        XPCService:
+          ServiceType: Application   # 每個主 app 一份實例，由 launchd 依需求啟動與回收
+
 schemes:
   CoPartner:                    # 明確的 shared scheme，讓 headless CI 的 xcodebuild -scheme 可靠找到
     build:
       targets:
         CoPartner: all
+        CoPartnerExecutor: all
     run:
       config: Debug

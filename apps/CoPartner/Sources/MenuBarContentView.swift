@@ -26,6 +26,9 @@ struct MenuBarContentView: View {
                 // 除錯入口：真執行端接上前，唯一能目視驗證接手浮層的方式（step 54）。
                 // 走的是完全獨立的路徑，按下去不會建立任何接手狀態。
                 Button("HUD 預覽") { coordinator.previewHUD() }
+                // 除錯入口：真雲端傳輸接上前，唯一能驗證執行端 XPC 這條線的方式（step 55 ①）。
+                // 送的是專屬的 selfTest kind，夾帶不了真動作。
+                Button("XPC 自檢") { coordinator.runXPCSelfTest() }
                 SettingsLink { Text("熱鍵…") }
                 Spacer()
                 Button("緊急停止") { coordinator.stopAll() }
@@ -46,6 +49,7 @@ struct MenuBarContentView: View {
                     Text(coordinator.captureSummary).lineLimit(1)
                     Text(coordinator.screenTextSummary).lineLimit(2)
                     Text(coordinator.takeoverSummary).lineLimit(1)
+                    Text(coordinator.xpcSummary).lineLimit(2)
                     Text(coordinator.localModelSummary).lineLimit(1)
                 }
                 .font(.caption2).foregroundStyle(.tertiary)
@@ -110,6 +114,8 @@ struct MenuBarContentView: View {
             .padding(.top, 10)
             .padding(.bottom, 14)
         }
-        .frame(width: 620)
+        // 680 而非 620：又多了兩顆除錯按鈕，橫排在 620 下已經逼到邊。
+        // 按鈕被擠出畫面這件事真機上重演過兩次，寧可先留寬。
+        .frame(width: 680)
     }
 }

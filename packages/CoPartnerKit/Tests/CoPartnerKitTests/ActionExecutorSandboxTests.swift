@@ -182,8 +182,37 @@ final class ActionExecutorSandboxTests: XCTestCase {
         let a2 = ProposedAction(kind: .typeText("hi"))
         try await executor.execute(a2, token: approvedToken(&model, for: a2))
         let log = await executor.auditLog
+        // 每次執行留兩筆：嘗試 + 結果。
+        XCTAssertEqual(log, ["attempt screenshot", "executed screenshot",
+                             "attempt type(2 chars)", "executed type(2 chars)"])
+    }
+
+    /// 稽核不可把「沒執行成功」記成執行過（I9）。
+    ///
+    /// step 55 ① 之後這條特別重要：XPC service 會**例行地**回「收到但沒做」，
+    /// 若稽核只留一筆 "execute …"，紀錄上會顯示執行過、實際上什麼都沒發生。
+    func testAuditLogDistinguishesAttemptFromExecution() async {
+        var (model, executor) = makeStack(performer: { _ in throw ExecutionError.notWired })
+        model.begin()
+        let a = ProposedAction(kind: .screenshot)
+        let token = approvedToken(&model, for: a)        // 先取 token，避免在 async 閉包裡改 model
+        await expectError(.notWired) { try await executor.execute(a, token: token) }
+        let log = await executor.auditLog
+        XCTAssertEqual(log.first, "attempt screenshot")
         XCTAssertEqual(log.count, 2)
-        XCTAssertEqual(log[0], "execute screenshot")
+        XCTAssertTrue(log[1].hasPrefix("notExecuted screenshot"), "實際內容：\(log[1])")
+        XCTAssertFalse(log.contains { $0.hasPrefix("executed ") }, "沒執行就不可記成 executed")
+    }
+
+    /// performer 未接線時同樣不可記成執行過。
+    func testAuditLogHonestWhenPerformerMissing() async {
+        var (model, executor) = makeStack(performer: nil)
+        model.begin()
+        let a = ProposedAction(kind: .screenshot)
+        let token = approvedToken(&model, for: a)
+        await expectError(.notWired) { try await executor.execute(a, token: token) }
+        let log = await executor.auditLog
+        XCTAssertFalse(log.contains { $0.hasPrefix("executed ") })
     }
 
     func testNotWiredWithoutPerformer() async {
