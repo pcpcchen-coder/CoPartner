@@ -314,7 +314,7 @@ final class AppCoordinator: ObservableObject {
                     + "（service pid \(report.servicePID) / app pid \(ownPID)）"
                     + "・euid \(report.serviceEUID)"
                     + "・會執行動作：\(report.willExecuteActions ? "是" : "否")"
-                    + "・驗呼叫者簽章：\(report.verifiesCallerSignature ? "是" : "否（第 ② 段）")"
+                    + "・驗呼叫者：\(report.callerVerificationDetail)"
             } catch {
                 self.xpcSummary = "執行端：連不上（\(error)）"
             }

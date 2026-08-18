@@ -247,10 +247,19 @@ macos-15 runner 沒有 FoundationModels 框架 → `canImport` 為 false → 整
 而 XPC 連線、code-signing 驗證、sandbox profile 這三樣在 Linux 容器裡一行都跑不到。
 所以刻意切成四段，每段都能單獨真機驗，**前三段不執行任何真動作**：
 
-1. **XPC 骨架** — 主 app ↔ service 通得了、傳得了結構化 argv、`ApprovalToken` 過得去。
-   service 收到就回「收到但沒做」。驗的是連線本身。
-2. **code-signing requirement 驗證** — service 只收簽章對得上的主 app。
-   **必須故意用別的程序去連並確認被拒**——沒驗過拒絕路徑就等於沒有這道防線。
+1. ✅ **XPC 骨架**（PR #11，2026-08-18 真機通過）— service pid 與 app pid 不同，
+   回報「會執行動作：否」。**`ApprovalToken` 最後決定不過線**：跨程序的值可以被偽造，
+   誰連得上誰就能自己編一個。授權留在偽造不了的地方（主 app 內驗 token），
+   線上只帶 `actionID` / `generation` 當稽核關聯。
+   ⚠️ 同時實測到 service euid = 501（使用者本人）——見威脅模型 §6 修正與 R5。
+2. **code-signing requirement 驗證** — 用 `NSXPCListener.setConnectionCodeSigningRequirement`
+   交給系統在連線層強制（不要自己查 pid——pid 會被回收再利用，是有名的 TOCTOU 弱點）。
+   requirement 從**本組建自己的簽章**推導（同 Team + 指定 bundle id），
+   ad-hoc 開發組建沒有 Team ID → 組不出來 → `.unavailable`。
+   關鍵不變式寫在 `CallerVerification`：**沒有驗證就不可以有執行能力**——
+   第 ④ 段翻開執行能力的那一刻，未驗證的連線自動開始被拒，不依賴任何人記得回來改。
+   **必須故意用別的程序去連並確認被拒**（`scripts/xpc-probe.swift`）——
+   沒驗過拒絕路徑就等於沒有這道防線。
 3. **`sandbox-exec` sbpl** — 產生 profile 並確認限制真的生效。
    沿用 §7.2 那個對照法：無沙箱 exit=0、有沙箱被擋。
 4. **`posix_spawn` argv 直呼**（無 shell）— 接上去，第一次真的執行東西。

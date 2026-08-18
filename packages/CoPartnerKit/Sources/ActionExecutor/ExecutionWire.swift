@@ -76,16 +76,22 @@ public struct SelfTestReport: Codable, Sendable, Equatable {
     public let serviceBundleID: String
     /// service 自述它目前**會不會執行任何東西**。第 ① 段固定為 false。
     public let willExecuteActions: Bool
-    /// 呼叫者驗簽是否已啟用（第 ② 段才會變 true）。
+    /// 呼叫者驗簽是否已啟用。
     public let verifiesCallerSignature: Bool
+    /// 驗證狀態的一行說明（含實際使用的 requirement，或組不出來的原因）。
+    /// 印出來是為了讓 bundle id / Team ID 打錯這種錯誤**看得見**——
+    /// 否則只會表現成「連線莫名其妙被拒」。
+    public let callerVerificationDetail: String
 
     public init(servicePID: Int32, serviceEUID: UInt32, serviceBundleID: String,
-                willExecuteActions: Bool, verifiesCallerSignature: Bool) {
+                willExecuteActions: Bool, verifiesCallerSignature: Bool,
+                callerVerificationDetail: String) {
         self.servicePID = servicePID
         self.serviceEUID = serviceEUID
         self.serviceBundleID = serviceBundleID
         self.willExecuteActions = willExecuteActions
         self.verifiesCallerSignature = verifiesCallerSignature
+        self.callerVerificationDetail = callerVerificationDetail
     }
 }
 
