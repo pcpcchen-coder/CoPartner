@@ -54,7 +54,7 @@
 | **T4** | **越權**：提議 contract `allowed_tools` 以外的工具，或 autoBounded 下連發動作 | B3 | SandboxPolicy 對照 `TakeoverContract.allowedTools` 硬擋（51）；autoBounded 上限（動作數/時間窗）超限自動降回 confirm-each（48/51） |
 | **T5** | **資料外洩型動作**：提議 `curl -d @~/.ssh/id_rsa`、開瀏覽器帶 data URL、讀 Keychain 後貼到網頁 | B2→B4 | executor 沙箱 network 全拒（出網只走使用者自己的 app，不走沙箱 shell）（51）；秘密路徑黑名單（`~/.ssh`、Keychain、瀏覽器 profile、`.env`）任何讀寫 → high（50）；對外通訊類動作（寄信/送出表單）→ 一律 high + confirm（50） |
 | **T6** | **PII 出境**：envelope 帶了未遮罩個資/上海團隊資料 | B1 | EgressGate：出境前逐欄位掃描+遮罩，PIPL 命中→**整包拒出**、只准本地階（45）；LiteLLM presidio pre_call 第二道（46）；`RoutingSignal.containsSensitive` 在 route 端已封頂本地（ADR-0007，已實作）；稽核日誌記「實際送出的完整 payload + context_hash」（v2.1 §6） |
-| **T7** | **繞過確認閘門**：程式路徑直呼 `execute`、或另一個本地程序打 XPC | B3 | `ActionExecutor.execute` 需要 **`ApprovalToken`**——只有 HUD 狀態機在使用者按下 Approve（或 autoBounded 低風險自動核）時能鑄造（token init 為 `internal`，同模組才可建）（48/51）；XPC 端驗 code-signing requirement，只接受主 app（🔒 53） |
+| **T7** | **繞過確認閘門**：程式路徑直呼 `execute`、或另一個本地程序打 XPC | B3 | 「另一個本地程序打 XPC」已實測**不可行**：內嵌 XPC service 外部定址不到（見 R6）。`ActionExecutor.execute` 需要 **`ApprovalToken`**——只有 HUD 狀態機在使用者按下 Approve（或 autoBounded 低風險自動核）時能鑄造（token init 為 `internal`，同模組才可建）（48/51）；XPC 端驗 code-signing requirement，只接受主 app（🔒 53） |
 | **T8** | **失控迴圈/成本**：模型連續提議、重複同動作、token 燒錢 | B2 | rate limit（每分鐘動作數上限）+ loop 偵測（同 action 連續 k 次 → halt）（51）；LiteLLM `max_budget` $5/day 熔斷（46）；kill-switch ⌃⌥⌘. → handoff 立即 abort、串流取消、executor 拒收新 token（49，接 step 9 既有機制） |
 | **T9** | **不可復原動作**：undo 失敗或根本不可 undo（寄信、付款） | B3 | UndoStack 記錄反操作；**不可 undo 的動作標記為 barrier**，HUD 顯示「⚠️ 無法復原」且永遠強制 confirm（50/52） |
 | **T10** | **設定漂移**：litellm config 被改壞（guardrail 掉了、budget 沒了、PIPL guard 缺席） | B1/B2 | config 不變式 pytest：presidio pre_call 存在、max_budget 存在、PIPL local-only 規則存在、fallback 鏈合法（46）——CI 擋 |
@@ -117,10 +117,18 @@
 - **R5**：XPC service 與主 app **同 uid**（見 §6 修正）。程序隔離不等於權限降級——
   service 被打穿等同主 app 被打穿。目前接受此風險：service 的邏輯面極窄（收請求 → 驗 → spawn），
   且真正的限制在 sbpl profile。若日後 service 變複雜，應重新評估 launchd daemon + 低權帳號。
-- **R6**：內嵌 XPC service 的 endpoint **外部程序是否定址得到**尚未實測（step 55 ② 的探測腳本
-  `scripts/xpc-probe.swift` 就是要問這件事）。若外部根本連不到，T7 的主要防線其實是 service 的
-  **類型**而非 code-signing requirement，驗簽只是縱深防禦——那應該誠實寫下來，
-  而不是讓文件看起來像「驗簽擋住了一切」。
+- ~~**R6**~~ **已實測解答（2026-08-18，`scripts/xpc-probe.swift`）**：外部程序**定址不到**
+  內嵌的 XPC service。一個 ad-hoc 簽章的獨立執行檔以 `NSXPCConnection(serviceName:)`
+  連 `com.pcpcchen.copartner.CoPartnerExecutor`，得到的是「連線失效（invalidated）」。
+
+  這次測量的結論之所以乾淨，是因為**當時 service 端的驗簽根本還沒啟用**（service 被 ad-hoc
+  簽、組不出 requirement）。所以拒絕不可能來自 code-signing 檢查，只可能來自定址本身。
+  修好簽章之後兩道機制會同時生效，反而**分不出**是哪一道擋的——這個實驗只有在那個
+  中間狀態做得成。
+
+  **因此 T7 的主要防線是 XPC service 的「內嵌」類型，不是 code-signing requirement。**
+  驗簽是縱深防禦，價值在於：(a) 若日後改成 launchd Mach service（對外可見）它就變成主防線，
+  (b) 擋掉同 bundle 內被替換的執行檔。文件不該讓人以為「驗簽擋住了一切」。
 - **R4**：模型供應商側變更（beta header / tool 版本）使防線假設失效——step 46 註記已要求開工時對齊；config 測試（I10）擋掉最壞的靜默漂移。
 
 ## 8. 與 backlog 的對映

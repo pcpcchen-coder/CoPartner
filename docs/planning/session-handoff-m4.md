@@ -260,6 +260,18 @@ macos-15 runner 沒有 FoundationModels 框架 → `canImport` 為 false → 整
    第 ④ 段翻開執行能力的那一刻，未驗證的連線自動開始被拒，不依賴任何人記得回來改。
    **必須故意用別的程序去連並確認被拒**（`scripts/xpc-probe.swift`）——
    沒驗過拒絕路徑就等於沒有這道防線。
+
+   **真機實測結果（2026-08-18）**：
+   - 外部程序**定址不到**內嵌 service（連線直接 invalidated）→ T7 主防線是 service 的
+     「內嵌」類型，驗簽是縱深防禦。威脅模型 R6 已據此改寫，不再含糊。
+   - `codesign` 顯示內嵌 `.xpc` 原本是 **ad-hoc 簽**（`TeamIdentifier=not set`），
+     app 卻是 Apple Development 簽的 → service 組不出 requirement、主 app 反向驗也必敗。
+     修法：`DEVELOPMENT_TEAM` / `CODE_SIGN_STYLE` 移到 `settings.base`，兩個 target 都吃到。
+     手動在 Xcode UI 設沒用——`bootstrap.sh` 每次重生專案會蓋掉。
+   - **XPC 回呼一律要標 `@Sendable`**。Swift 6 會把 `@MainActor` 環境裡寫的、
+     API 沒標 `@Sendable` 的閉包推斷成 MainActor 隔離並插入佇列斷言，
+     XPC 從自己的 serial queue 呼叫時 → `_dispatch_assert_queue_fail` 當掉整個 app。
+     CI 看不到：編譯得過，要真的有回呼進來才炸。
 3. **`sandbox-exec` sbpl** — 產生 profile 並確認限制真的生效。
    沿用 §7.2 那個對照法：無沙箱 exit=0、有沙箱被擋。
 4. **`posix_spawn` argv 直呼**（無 shell）— 接上去，第一次真的執行東西。
