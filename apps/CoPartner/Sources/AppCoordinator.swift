@@ -307,7 +307,8 @@ final class AppCoordinator: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             do {
-                let report = try await self.xpcPerformer.selfTest()
+                let result = try await self.xpcPerformer.selfTest()
+                let report = result.report
                 let ownPID = ProcessInfo.processInfo.processIdentifier
                 let separate = report.servicePID != ownPID ? "獨立程序" : "⚠️ 同一程序"
                 self.xpcSummary = "執行端：已連線・\(separate)"
@@ -315,6 +316,7 @@ final class AppCoordinator: ObservableObject {
                     + "・euid \(report.serviceEUID)"
                     + "・會執行動作：\(report.willExecuteActions ? "是" : "否")"
                     + "・驗呼叫者：\(report.callerVerificationDetail)"
+                    + "・驗 service：\(result.serviceVerification)"
             } catch {
                 self.xpcSummary = "執行端：連不上（\(error)）"
             }
