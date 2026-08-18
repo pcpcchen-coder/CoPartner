@@ -301,6 +301,46 @@ CI 的 `app` job 會跑 `xcodegen generate` + `xcodebuild build`，所以
 正規化只處理有把握的樣式、剝光時退回原值、讀不到擁有者時不擋。
 也因此**刻意不用時間節流**當通用後備：它會靜默吃掉真實的快速切換。
 
+### 7.4.1 ⚠️ 未解事件：主 app 被系統以「記憶體過多」終止（2026-08-18 12:50Z）
+
+**紀錄在案，尚未處理**（使用者裁決先記錄、之後再查）。
+
+現象：Xcode 跳「The process has been terminated by the operating system because it is
+using too much memory」，`Code 9 / IDEDebugSessionErrorDomain 11`，
+`operation_duration_ms = 42668`（跑約 42 秒就被砍）。
+
+**事後量測（同一天稍後、同樣操作）一切正常**：主 app 在 160–210 MB 之間浮動、
+XPC service 8.4 MB。所以不是穩態就會發生的事。
+
+**最可能的成因（未證實）**：出事當下跑的是 **PR #15 之前**的 build——那個版本的
+XPC service 一啟動就死在 `listener.setConnectionCodeSigningRequirement`，
+launchd 反覆重啟，而 Xcode 設定是 `param_debugger_attachToXPC = 1`，
+每次重啟都附加一次除錯 session。#15 合併後崩潰迴圈消失，這個現象也沒再出現。
+時間軸完全吻合，但**沒有直接證據**。
+
+**其他尚未排除的候選**（都與 XPC 無關，是既有結構）：
+- `CaptureEngine` 的 `AsyncStream<TileEvent>` 預設是**無上限緩衝**。消費端在 MainActor
+  更新 UI，若生產快於消費就會無限堆積。
+- `FoundationModelsNarrator.narrate` **每次呼叫都新建 `LanguageModelSession`**，
+  session 是否持有 KV cache、由誰回收，沒查證過。
+
+**下次再遇到要收集的**：哪一個程序在飆（主 app / service）、被砍時到多少 GB、
+以及是否有按「開始觀察」（那決定是不是觀察管線造成的——不按就只有 XPC 路徑在跑）。
+
+### 7.4.2 第 ② 段的實測結論
+
+- **崩潰位置已確認**：死掉的 service 程序 Thread 1 堆疊是
+  `xpc_connection_set_peer_code_signing_requirement` ← `-[NSXPCListener
+  setConnectionCodeSigningRequirement:]` ← `main`。
+  **內嵌 XPC service 不可在 listener 層設 requirement**，改成在
+  `shouldAcceptNewConnection` 裡對每條連線設（PR #15）。
+  ⚠️ 確認的是**位置**，不是 Apple 為何如此設計——這個理解缺口留著，
+  第 ③④ 段之前若能補上更好。
+- **簽章修好後驗呼叫者真的啟用了**：自檢顯示「驗呼叫者：已啟用：identifier …」。
+- **顯示順序的教訓**：這行曾被截斷，而被吃掉的正好是最該看的「驗 service」。
+  **診斷輸出要按「驗收要看什麼」排序**，不是按程式裡的欄位順序——
+  長字串（requirement 原文）一律放最後。
+
 ### 7.5 已知但刻意未處理
 
 **L1 會編故事。** 真機實例：終端機視窗標題是 `CoPartner — -zsh — 100×34`，

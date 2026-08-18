@@ -49,7 +49,7 @@ struct MenuBarContentView: View {
                     Text(coordinator.captureSummary).lineLimit(1)
                     Text(coordinator.screenTextSummary).lineLimit(2)
                     Text(coordinator.takeoverSummary).lineLimit(1)
-                    Text(coordinator.xpcSummary).lineLimit(2)
+                    Text(coordinator.xpcSummary).lineLimit(3)   // requirement 原文自成一行
                     Text(coordinator.localModelSummary).lineLimit(1)
                 }
                 .font(.caption2).foregroundStyle(.tertiary)
