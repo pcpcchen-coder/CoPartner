@@ -39,7 +39,7 @@ Phase A–G 的**CI 可測部分全部完成**（backlog step 1–57，扣延後
 | M1 影片 DYNAMIC + CPU（step 24）| 🔒 待做（前置 23.5 CPU 優化）|
 | M3 記憶真 vec0（step 36）| 🔒 待做 |
 | **M4 本地敘事（step 42）** | ✅ **真機通過**，延遲 1373–2388ms、fallback 驗證通過（`/vlm` 延後）|
-| **M5 接手（step 53）** | 🔒 **← 正在做**：computer-use 契約已對齊 ✅，見 §7 |
+| **M5 接手（step 53–54）** | 🔒 **← 正在做**：契約 ✅、假 SSE ✅、HUD ✅ 真機通過；剩真執行端，見 §7 |
 | M6 隱私最終審查（step 58）| 🔒 待做 |
 
 ---
@@ -233,15 +233,66 @@ macos-15 runner 沒有 FoundationModels 框架 → `canImport` 為 false → 整
 2. ✅ **假 SSE `HandoffTransport`**（PR #5）— `SSEFrameParser` + `AnthropicStreamDecoder`
    + `ComputerUseNormalizer`，`SSEByteSource` 可注入。🔒 剩真的 LiteLLM 位元組來源
    （`cd infra/litellm && litellm --config config.yaml`，設 `ANTHROPIC_API_KEY`）。
-3. 🔒 **真 `ActionExecutor.performer`** — XPC service（`_ambient` 低權 user）+ code-signing
-   requirement 驗證（只收主 app）+ `sandbox-exec` sbpl + `posix_spawn` argv 直呼（無 shell）。
-   **M5 只剩這塊是真的沒開始。**
+3. 🔒 **真 `ActionExecutor.performer`** — **M5 只剩這塊沒開始**，見 §7.3。
 4. ✅ **接手 HUD**（PR #6）— NSPanel 常駐浮層 + 確認閘門接線。
    附「HUD 預覽」除錯入口（step 54）：真執行端接上前唯一能目視驗證浮層的方式。
    預覽走**完全獨立的路徑**——不建狀態機、不建 executor、不碰 `pendingDecision`，
    決定回呼只關浮層。否則一顆除錯按鈕就成了繞過確認閘門的後門。
 
 驗收清單見 `realmachine-runbook.md` M5 節（對照威脅模型 I1–I10 逐項勾）。
+
+### 7.3 ⏭️ 下一步：真執行端，切成四段（2026-08-17 使用者已同意此順序）
+
+這塊跟 M5 前面幾塊性質不同：**它是唯一會真的動使用者電腦的程式碼**，
+而 XPC 連線、code-signing 驗證、sandbox profile 這三樣在 Linux 容器裡一行都跑不到。
+所以刻意切成四段，每段都能單獨真機驗，**前三段不執行任何真動作**：
+
+1. **XPC 骨架** — 主 app ↔ service 通得了、傳得了結構化 argv、`ApprovalToken` 過得去。
+   service 收到就回「收到但沒做」。驗的是連線本身。
+2. **code-signing requirement 驗證** — service 只收簽章對得上的主 app。
+   **必須故意用別的程序去連並確認被拒**——沒驗過拒絕路徑就等於沒有這道防線。
+3. **`sandbox-exec` sbpl** — 產生 profile 並確認限制真的生效。
+   沿用 §7.2 那個對照法：無沙箱 exit=0、有沙箱被擋。
+4. **`posix_spawn` argv 直呼**（無 shell）— 接上去，第一次真的執行東西。
+
+CI 的 `app` job 會跑 `xcodegen generate` + `xcodebuild build`，所以
+**project.yml 加 XPC target 若寫錯，CI 會擋下來**（但 code-signing 相關一律測不到，
+`CODE_SIGNING_ALLOWED=NO`）。
+
+### 7.4 step 53–54 dogfood 抓到的四個 focus bug（全部已修並真機驗過）
+
+`FocusChangeTracker` 這個檔在整個專案裡踩坑最多，四次都是**同一個本質**：
+拿一個不可靠的東西當視窗身分。留在這裡當之後改動的警示。
+
+| # | 成因 | 症狀 | 修法 |
+|---|---|---|---|
+| 1 (M2) | 拿 AX `value`（欄位內容）當身分 | 終端機每輸出一字就判定換視窗 | 改用 `windowTitle` |
+| 2 (PR #6) | 標題**自己會變**（終端機把尺寸寫進去）| 拉一次視窗 0.1 秒噴 6 行 FOCUS | `windowIdentity` 剝掉易變樣式 |
+| 3 (PR #8) | 把「**讀不到**」當成一個身分（空字串）| 標題讀失敗又讀回來，來回噴假 FOCUS | 只有「已知 → 另一個已知」才算換視窗 |
+| 4 (PR #9) | **兩個欄位不是在講同一個 app** | `app=備忘錄 win="新增連線"`（AnyDesk 的視窗）| `ownerPID` 對帳，對不上就當未知 |
+
+一併修掉的還有 `inferApp`（PR #8）：原本取視窗**第一行**的 app，而視窗是舊到新排的，
+於是每個 step 標的是「這段開始時你在哪」。真機上整串 step 掛著 `CoPartner`，
+內容講的卻是 AnyDesk。改成取佔比最高、平手取較晚。
+`MemoryStore` 依 app 存 step，這條標錯等於之後全部查錯戶。
+
+**貫穿四次的原則**：漏記看不見、噪音看得見，所以一律**保守偏留**——
+正規化只處理有把握的樣式、剝光時退回原值、讀不到擁有者時不擋。
+也因此**刻意不用時間節流**當通用後備：它會靜默吃掉真實的快速切換。
+
+### 7.5 已知但刻意未處理
+
+**L1 會編故事。** 真機實例：終端機視窗標題是 `CoPartner — -zsh — 100×34`，
+模型把它當成「一台叫 CoPartner 的遠端機器」，配上 AnyDesk 就腦補出
+「與 CoPartner 進行**視訊會議**」——日誌裡沒有任何視訊訊號。
+指令已明寫「禁止臆測日誌沒有的資訊」，3B 壓不住。
+
+這不是膠水的 bug（事件本身乾淨），是 L1 品質調校，與 M5 是兩條線。
+真要處理大概是收緊 prompt，或給 `inferredGoal` 一個「證據不足就寫不確定」的硬約束。
+
+**同一個 app 內換視窗仍會記 FOCUS** 這條路徑只有 CI 測試蓋到，
+step 54 的 dogfood 沒驗到（那次全程沒在同 app 內換視窗）。
+下次 dogfood 開兩個終端機視窗切一下就能補驗。
 
 ## 8. 更之後的路線
 
