@@ -98,13 +98,29 @@
 (deny file-write* (subpath HOME-secrets))
 ```
 
-搭配：專用低權 helper（XPC service，non-root）、`posix_spawn` 直接帶 argv（無 shell）、逾時 kill、stdout/stderr 截斷收集進 audit log。**注意**：`sandbox-exec` 為 Apple 半棄用 API——若日後不可用，備援路徑是 App Sandbox extension / 更嚴的 argv 白名單 + 靜態檢查，威脅模型不變。
+搭配：獨立 XPC service 程序、`posix_spawn` 直接帶 argv（無 shell）、逾時 kill、stdout/stderr 截斷收集進 audit log。
+
+> **修正（2026-08-18，step 55 ① 真機實測）**：本節原本寫「專用**低權** helper（XPC service，non-root）」，
+> 那是錯的假設。內嵌在 `Contents/XPCServices/` 的 XPC service **必然與主 app 同一個使用者、
+> 同一個 session 執行**——真機自檢量到 service 的 euid 就是使用者本人的 501。
+> 要換成低權帳號得改成 launchd daemon + `SMAppService`/`SMJobBless`，需管理員授權並多一整套安裝流程。
+>
+> 因此這道 XPC 邊界買到的是**程序隔離**（崩潰隔離、很窄的型別化介面、單一驗呼叫者的地方），
+> **不是權限降級**。service 若被打穿，它能碰的檔案與主 app 完全相同。
+> **真正的圍籬必須來自套在被 spawn 出來那個命令上的 sbpl profile**，不能指望 service 自己的 uid。**注意**：`sandbox-exec` 為 Apple 半棄用 API——若日後不可用，備援路徑是 App Sandbox extension / 更嚴的 argv 白名單 + 靜態檢查，威脅模型不變。
 
 ## 7. 殘餘風險（明知未解，記錄在案）
 
 - **R1**：使用者 Approve 了一個他沒看懂的動作——HUD 只能盡量讓動作可讀（顯示原文 + 風險原因），無法替使用者判斷。緩解：高風險動作附「這會做什麼」的一句白話（由本地模型產生，不信任雲端的自述）。
 - **R2**：AX/CGEvent 類 UI 動作（點按、輸入）不經 shell 沙箱——它們天生在使用者 session 權限內。緩解：這類動作走 I2（高風險判定含「對外送出」語意）+ confirm + undo 盡力（AX tree snapshot）。
 - **R3**：`sandbox-exec` 棄用風險（見 §6）。
+- **R5**：XPC service 與主 app **同 uid**（見 §6 修正）。程序隔離不等於權限降級——
+  service 被打穿等同主 app 被打穿。目前接受此風險：service 的邏輯面極窄（收請求 → 驗 → spawn），
+  且真正的限制在 sbpl profile。若日後 service 變複雜，應重新評估 launchd daemon + 低權帳號。
+- **R6**：內嵌 XPC service 的 endpoint **外部程序是否定址得到**尚未實測（step 55 ② 的探測腳本
+  `scripts/xpc-probe.swift` 就是要問這件事）。若外部根本連不到，T7 的主要防線其實是 service 的
+  **類型**而非 code-signing requirement，驗簽只是縱深防禦——那應該誠實寫下來，
+  而不是讓文件看起來像「驗簽擋住了一切」。
 - **R4**：模型供應商側變更（beta header / tool 版本）使防線假設失效——step 46 註記已要求開工時對齊；config 測試（I10）擋掉最壞的靜默漂移。
 
 ## 8. 與 backlog 的對映

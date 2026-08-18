@@ -61,6 +61,13 @@ final class XPCActionPerformer {
         let payload = try ExecutionWire.encode(request)
         let connection = NSXPCConnection(serviceName: ExecutorXPCService.name)
         connection.remoteObjectInterface = NSXPCInterface(with: ExecutorXPCProtocol.self)
+        // 反向也驗一次：確認接電話的真的是我們自己簽的那個 service。
+        // 單向驗證只擋得住「假的呼叫者」，擋不住「假的 service」——
+        // 而後者拿得到的是我們要執行什麼，同樣是資訊外洩。
+        if case .enforced(let requirement) =
+            CodeSigningIdentity.requirement(forBundleIdentifier: ExecutorXPCService.name) {
+            connection.setCodeSigningRequirement(requirement)
+        }
         defer { connection.invalidate() }
 
         let replyData: Data = try await withCheckedThrowingContinuation { continuation in

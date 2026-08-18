@@ -110,7 +110,8 @@ final class ExecutionWireTests: XCTestCase {
             .diagnostics(SelfTestReport(servicePID: 1234, serviceEUID: 501,
                                         serviceBundleID: "com.example.svc",
                                         willExecuteActions: false,
-                                        verifiesCallerSignature: false)),
+                                        verifiesCallerSignature: false,
+                                        callerVerificationDetail: "未啟用（無 Team ID）")),
         ]
         for outcome in outcomes {
             XCTAssertEqual(try ExecutionWire.decodeOutcome(ExecutionWire.encode(outcome)), outcome)
