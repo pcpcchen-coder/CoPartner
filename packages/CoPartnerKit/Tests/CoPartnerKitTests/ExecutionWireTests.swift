@@ -3,7 +3,7 @@ import Foundation
 import CoPartnerCore
 import ActionExecutor
 
-/// step 55 ①：主 app ↔ XPC service 的線上契約。
+/// step 53.1：主 app ↔ XPC service 的線上契約。
 ///
 /// 這組測試守的是**沙箱防線的前提**。跨程序連線本身盲寫、只能真機驗，
 /// 但「線上到底能承載什麼」是純值問題，必須在 CI 就釘死——

@@ -511,6 +511,54 @@
 #### Step 53 — 🔒 M5 真機驗收（前置：44–52）
 - 在你的 Mac 上：熱鍵後 Claude 正確接續 open loop（不貼說明文字）；高風險動作 HUD 強制確認、危險指令被攔；⌃⌥⌘. 全鏈中止（串流斷、token 作廢、executor 停）；XPC code-signing 驗證擋外來呼叫；sbpl 沙箱實際 deny network/越界寫入；LiteLLM budget 熔斷觸發一次驗證。你在 Mac 上執行、回報。**（併入真機 runbook 清單：24/29/36/42/53）**
 
+> **⚠️ Step 53 展開（2026-08-18/19）**：原本 step 53 只是一句「真機驗收」，
+> 但真做下去才發現**真執行端根本還不存在**——step 51 只做到「政策與型別」，
+> XPC service、sandbox profile 的實際套用、`posix_spawn` 全是佔位。
+> 因此 53 展開成五個子步，每一步都能單獨真機驗收。
+>
+> 這個展開本身是個教訓：**「驗收」步驟的前置若含未實作的平台膠水，它就不是驗收步驟，
+> 是一個沒被估算的實作步驟。** 排 backlog 時，凡是標 🔒 的前置都要問一句
+> 「那塊真的寫完了嗎，還是只有型別？」
+
+#### Step 53.1 — XPC 骨架 ✅（PR #11、#13、#15）
+- 主 app ↔ service 連得上、傳得了結構化 argv、回得了誠實的答案。**service 刻意沒有執行能力**。
+- 順序原則：**先讓 endpoint 無害，再讓它有能力**——驗簽補上之前，安全性靠「根本沒有那個能力」而非檢查。
+- `ApprovalToken` **不過線**：跨程序的值可以偽造，授權留在偽造不了的地方（主 app 內驗 token）。
+- 真機：service pid ≠ app pid ✅；**euid = 501**（→ 程序隔離而非權限降級，威脅模型 §6 已據此修正）。
+- **DoD**：✅ CI ＋ 真機自檢
+
+#### Step 53.2 — 呼叫者 code-signing 驗證 ✅（PR #12、#14）
+- `NSXPCConnection.setCodeSigningRequirement` **逐連線**設定（listener 層會崩，見交接文件）。
+- requirement 從**本組建自己的簽章**推導，不寫死 Team ID。
+- 關鍵不變式（`CallerVerification`）：**沒有驗證就不可以有執行能力**，且主 app 側對稱
+  （驗不了 service 身分就不送真動作）。第 53.5 翻開開關時自動生效。
+- 真機：`驗呼叫者 已啟用・驗 service 通過` ✅；`xpc-probe` 確認外部程序**定址不到**內嵌 service。
+- **DoD**：✅ CI ＋ 真機自檢 ＋ 拒絕路徑實測
+
+#### Step 53.3 — sandbox-exec profile 真機驗證 ✅（PR #19、#20）
+- `scripts/sandbox-verify.sh` 成對驗證：**7 項全綠、0 失敗、0 無效**。
+- **驗證方式比 profile 內容重要**：只測「擋得住」會得到假通過（deny-default 下什麼都跑不起來）。
+  負向結果**依賴**正向基準；基準沒過時全部標「無效」。
+- 實測確認：sbpl「最後一條相符的規則勝出」✅；路徑必須先 `realpath` 解符號連結
+  （`URL.resolvingSymlinksInPath()` 會把 `/private` 再拿掉）。
+- **DoD**：✅ CI ＋ 真機成對驗證
+
+#### Step 53.4 — `posix_spawn` 真執行
+- **53.4-A 純值層 ✅**（PR #23）：`SandboxedCommand`（argv 組成、絕對路徑、`-f` 不用 `-p`）、
+  結果分類、輸出截斷。安全性幾乎全在這層——`posix_spawn` 不會出錯，錯的是餵給它什麼。
+- **53.4-B 🔒**：XPC service 端的 `posix_spawn` + 逾時 kill + 輸出收集。有程式碼但仍不啟用。
+- **DoD**：CI（A）＋ 真機（B）
+
+#### Step 53.5 — 🔒 翻開 `willExecuteActions = true`
+- **單獨一個改動、只有一行。** 理由：翻開執行能力若混在一大包程式碼裡，沒有人能真的審完。
+- 前置門禁清單見 `session-handoff-m4.md` §7.6.5。
+- **DoD**：真機——第一次真的執行一個沙箱內的無害命令並看到稽核紀錄
+
+#### Step 53.6 — 🔒 AX / CGEvent 執行端（UI 動作）
+- 使用者裁決納入 M5（2026-08-19）。點按/輸入/捲動/截圖**不經 shell 沙箱**（威脅模型 R2）。
+- 防線只有本地風險分級 + confirm-each + undo；額外風險是**座標語意**（Retina／多螢幕原點錯了不會報錯，只會點到別的地方）。
+- **DoD**：真機
+
 ---
 
 ## Phase G — 隱私 + 黑名單（rolling-wave）

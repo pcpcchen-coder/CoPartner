@@ -1,5 +1,7 @@
 # CoPartner
 
+*繁體中文 · [English](README.en.md)*
+
 > 一個在 macOS 上持續觀察你的操作、用本地模型把行為寫成「操作劇本」、並在你按下熱鍵時由雲端大模型接手完成任務的 **Ambient AI Assistant**。 (補上全日語音錄音後的文字轉換摘要，並且可以透過語音互動交棒!)
 
 **首要目標平台**：Mac Mini M4 / Apple Silicon，macOS 26 Tahoe（向下相容 Sequoia 15 為次要目標）。
@@ -40,8 +42,33 @@ CoPartner/
 
 ## 開發狀態
 
-🚧 **規劃 / 骨架階段**。目前 repo 包含完整設計文件與專案骨架，尚未有可執行實作。
-見 [`docs/roadmap.md`](docs/roadmap.md) 的 milestone 規劃（M0 擷取引擎原型起步）。
+**可運作的軟體，開發中。** 不再是骨架——app 跑得起來，在真機上持續觀察並敘事。
+標 ✅ 的是**真機 dogfood 驗過**的，不只是 CI 綠。
+
+| 里程碑 | 狀態 |
+|---|---|
+| 操作時間機器（事件日誌 → 可讀劇本）| ✅ 真機通過 |
+| 焦點區局部 OCR | ✅ 真機通過，吞吐 18%（目標 ≤20%）|
+| FoundationModels 本地 L1 敘事 | ✅ 真機通過，1373–2388ms／step；關掉 Apple Intelligence 自動降級規則式 |
+| 雲端接手——契約、串流、確認 HUD | ✅ 真機通過 |
+| 雲端接手——沙箱執行 | 🚧 進行中（見 backlog step 53.1–53.6）|
+| 影片動態 tile、向量記憶、最終隱私稽核 | 🔒 待做 |
+
+進度的單一事實來源是 [`docs/planning/implementation-backlog.md`](docs/planning/implementation-backlog.md)；
+真機驗收清單見 [`docs/planning/realmachine-runbook.md`](docs/planning/realmachine-runbook.md)。
+
+### 自己驗安全邊界
+
+安全性質不是用宣稱的，是用示範的。兩個腳本不需要 Xcode 就能跑：
+
+```bash
+./scripts/sandbox-verify.sh                                   # 沙箱成對驗證
+swiftc -O -o /tmp/xpc-probe scripts/xpc-probe.swift && /tmp/xpc-probe   # 拒絕路徑
+```
+
+`sandbox-verify.sh` 值得一讀，即使你不跑它——裡面記著一個花了好幾輪才學會的教訓：
+**只測「擋得住」會製造假的信心。** `deny default` 之下幾乎什麼都起不來，
+所以一個「什麼都擋」的 profile 會通過每一條負向測試。
 
 ## 快速開始（開發環境）
 
@@ -50,15 +77,22 @@ CoPartner/
 ```bash
 # 1. 安裝開發依賴與產生 Xcode 專案
 ./scripts/bootstrap.sh
+open apps/CoPartner/CoPartner.xcodeproj      # 然後 ⌘R
 
 # 2. 檢查 / 引導 macOS TCC 權限（螢幕錄製、輔助使用、輸入監控）
 ./scripts/permissions-check.sh
+```
 
-# 3. 啟動本地推理 sidecar
-cd sidecar && uv sync && uv run copartner-sidecar
+CoPartner 是 `LSUIElement` app——沒有 Dock 圖示、沒有視窗，從選單列的眼睛圖示操作。
 
-# 4. 啟動 LiteLLM Gateway
-cd infra/litellm && docker compose up -d
+⚠️ **增刪檔案後一定要重跑 `./scripts/bootstrap.sh`**：Xcode 專案由 `project.yml` 產生、不入庫。
+
+**日常使用不需要 sidecar 與 LiteLLM**：OCR 走 macOS Vision、敘事在本機跑。
+sidecar 只留給選用的視覺語言模型路徑：
+
+```bash
+cd sidecar && uv sync && uv run copartner-sidecar     # 選用
+cd infra/litellm && docker compose up -d              # 選用（雲端接手才需要）
 ```
 
 ## 設計文件

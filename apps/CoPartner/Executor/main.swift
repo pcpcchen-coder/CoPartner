@@ -7,7 +7,7 @@ import ActionExecutor
 // 由 launchd 依需求啟動、閒置時回收，主 app 不需要自己管 spawn 與收屍。
 //
 // ⚠️ **不要在 service listener 上呼叫 `setConnectionCodeSigningRequirement`。**
-// 真機實測（step 55 ②）：service 一啟動就在那一行掛掉，launchd 反覆重啟，
+// 真機實測（step 53.2）：service 一啟動就在那一行掛掉，launchd 反覆重啟，
 // 主 app 那頭永遠等不到回覆。內嵌 XPC service 的連線受理是由 launchd 接管的，
 // listener 層的 requirement 設定不適用。
 // 改成在 delegate 裡對**每一條進來的連線**設 requirement——同樣是系統層強制，

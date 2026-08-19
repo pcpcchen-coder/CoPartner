@@ -1,7 +1,7 @@
 import XCTest
 import ActionExecutor
 
-/// step 55 ④ 的純值部分：**餵給 `posix_spawn` 的東西長什麼樣**。
+/// step 53.4 的純值部分：**餵給 `posix_spawn` 的東西長什麼樣**。
 ///
 /// `posix_spawn` 本身測不到（在 XPC service 裡、要真機），但它不會出錯——
 /// 錯的是我們給它什麼。所以安全性其實全在這一層，而這一層完全可以在 CI 驗。
