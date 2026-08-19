@@ -311,17 +311,19 @@ final class AppCoordinator: ObservableObject {
                 let report = result.report
                 let ownPID = ProcessInfo.processInfo.processIdentifier
                 let separate = report.servicePID != ownPID ? "獨立程序" : "⚠️ 同一程序"
-                // 結論放前面、requirement 原文放最後。
-                // 真機上這行被截斷過一次，而被吃掉的正好是最該看的「驗 service」——
-                // 顯示順序要按「驗收要看什麼」排，不是按程式裡的欄位順序。
+                // ⚠️ 版面教訓（真機截斷過**兩次**，兩次被吃掉的都是最該看的「驗 service」）：
+                // 光是「把結論排前面」不夠——只要整串夠長，末尾照樣進不了畫面。
+                // 現在拆成三行，**第一行只放驗收要下判斷的三個結論**，
+                // 而且每一行都短到不需要換行就放得下。細節與原文往後排，被截也不影響判斷。
                 let enforced = report.verifiesCallerSignature ? "已啟用" : "未啟用"
-                self.xpcSummary = "執行端：已連線・\(separate)"
-                    + "（service pid \(report.servicePID) / app pid \(ownPID)）"
-                    + "・euid \(report.serviceEUID)"
-                    + "・會執行動作：\(report.willExecuteActions ? "是" : "否")"
-                    + "・驗呼叫者：\(enforced)"
-                    + "・驗 service：\(result.serviceVerification)"
-                    + "\n\(report.callerVerificationDetail)"
+                self.xpcSummary = [
+                    "執行端：驗呼叫者 \(enforced)"
+                        + "・驗 service \(result.serviceVerification)"
+                        + "・會執行動作 \(report.willExecuteActions ? "是" : "否")",
+                    "\(separate)：service pid \(report.servicePID) / app pid \(ownPID)"
+                        + "・euid \(report.serviceEUID)",
+                    report.callerVerificationDetail,
+                ].joined(separator: "\n")
             } catch {
                 self.xpcSummary = "執行端：連不上（\(error)）"
             }
