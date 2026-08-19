@@ -222,6 +222,38 @@ final class ActionExecutorSandboxTests: XCTestCase {
         }
     }
 
+    /// runtime 的額外規則也要跟著 includeRuntimeMinimum 一起開關，
+    /// 否則對照實驗會測到一個「半套」的 profile，得出的結論不對應任何真實設定。
+    func testRuntimeExtraRulesFollowTheSameSwitch() throws {
+        let withMinimum = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: [])
+        let without = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: [], includeRuntimeMinimum: false)
+        for rule in SbplProfileBuilder.runtimeExtraRules {
+            XCTAssertTrue(withMinimum.contains(rule), "缺少：\(rule)")
+            XCTAssertFalse(without.contains(rule), "關掉時不該還在：\(rule)")
+        }
+    }
+
+    /// sysctl **逐項具名**，不可開放整個 sysctl-read——後者會洩漏一堆系統狀態，
+    /// 而我們只需要 libSystem 起始化用到的那兩個。
+    func testSysctlIsNamedNotWideOpen() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: [])
+        XCTAssertTrue(profile.contains("(sysctl-name \"kern.bootargs\")"))
+        XCTAssertFalse(profile.contains("(allow sysctl-read)"),
+                       "不可無條件開放 sysctl-read")
+    }
+
+    /// 根目錄只給 `literal`，不可寫成 `(subpath "/")`——那等於把整台機器打開，
+    /// 而且它看起來只是「多放一條讀取規則」。
+    func testRootIsLiteralNotSubpath() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: [])
+        XCTAssertTrue(profile.contains("(allow file-read-data (literal \"/\"))"))
+        XCTAssertFalse(profile.contains("(subpath \"/\")"), "根目錄不可用 subpath")
+    }
+
     /// 可以關掉——驗證腳本要用它做對照實驗：關掉之後正向案例應該連跑都跑不起來。
     /// 若關掉仍跑得起來，代表這組路徑是多餘的，該拿掉（寧可少放）。
     func testRuntimeMinimumCanBeDisabledForControlExperiment() throws {

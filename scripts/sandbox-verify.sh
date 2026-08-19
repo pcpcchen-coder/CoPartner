@@ -64,9 +64,11 @@ show_diagnostics() {
     echo "        stderr: （空——沙箱可能連寫終端機都擋掉了）"
   fi
   local denials
+  # 只留**我們自己那幾個測試程式**的拒絕紀錄。系統上隨時有別的程序在被沙箱擋
+  # （PackageThumbnailExtension、logd_helper…），混進來會讓人追錯線索。
   denials="$(log show --last 20s --style compact \
               --predicate 'eventMessage CONTAINS "deny"' 2>/dev/null \
-             | grep -vi 'sandbox-verify' | tail -8)"
+             | grep -E 'Sandbox: (cat|touch|curl|date)\(' | tail -10)"
   if [ -n "${denials}" ]; then
     echo "        統一日誌裡的拒絕紀錄："
     echo "${denials}" | sed 's/^/          /'

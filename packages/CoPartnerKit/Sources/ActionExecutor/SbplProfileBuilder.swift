@@ -37,10 +37,27 @@ public struct SbplProfileBuilder: Sendable {
         "/usr/lib",           // dyld 本體、系統 dylib
         "/System/Library",    // 框架
         "/private/var/db/dyld",   // 舊版 dyld 共用快取位置
-        // macOS 13 之後 dyld 共用快取搬進 Cryptex：舊路徑還在，但快取不在那裡了。
-        // 這是第二輪的**單一假設**——真機第一輪所有東西都在啟動時 SIGABRT，
-        // 症狀與「對映不到共用快取」相符。若這條不對，統一日誌會直說少了什麼。
+        // macOS 13 之後 dyld 共用快取搬進 Cryptex。
+        // （第二輪的假設；實測後確認**不是**啟動失敗的原因，但保留——它是快取的真實位置。）
         "/System/Volumes/Preboot/Cryptexes/OS/System/Library/dyld",
+    ]
+
+    /// 不是「某個子路徑可讀」形狀的 runtime 規則。
+    ///
+    /// **每一條都對應一則真機統一日誌裡的拒絕紀錄**，不是憑印象加的。
+    /// 這個區別很重要：沙箱規則多放一條看不見代價，所以每一條都要說得出
+    /// 「哪一次執行、哪一行日誌」要求了它。
+    public static let runtimeExtraRules = [
+        // Sandbox: cat(…) deny(1) sysctl-read security.mac.lockdown_mode_state
+        // Sandbox: cat(…) deny(1) sysctl-read kern.bootargs
+        // libSystem 起始化時讀的兩個 sysctl。**逐項具名**而不是開放整個 sysctl-read——
+        // 後者會洩漏一堆系統狀態，而我們只需要這兩個。
+        "(allow sysctl-read (sysctl-name \"kern.bootargs\") "
+            + "(sysctl-name \"security.mac.lockdown_mode_state\"))",
+        // Sandbox: cat(…) deny(1) file-read-data /
+        // 路徑解析要讀根目錄本身。**只給根目錄這一個 literal**，
+        // 不是 (subpath "/")——那等於把整台機器打開。
+        "(allow file-read-data (literal \"/\"))",
     ]
 
     public func profile(execAllowlist: [String],
@@ -66,6 +83,7 @@ public struct SbplProfileBuilder: Sendable {
             for runtime in Self.runtimeReadSubpaths {
                 lines.append("(allow file-read* (subpath \(Self.quoted(runtime))))")
             }
+            lines.append(contentsOf: Self.runtimeExtraRules)
         }
         lines.append("(allow file-read* (subpath \(Self.quoted(workspacePath))))")
         lines.append("(allow file-write* (subpath \(Self.quoted(workspacePath))))")
