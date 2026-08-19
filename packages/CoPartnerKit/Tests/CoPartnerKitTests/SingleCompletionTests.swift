@@ -25,7 +25,7 @@ final class SingleCompletionTests: XCTestCase {
     func testFirstOutcomeWinsRegardlessOfKind() {
         let recorder = Recorder()
         let box = SingleCompletion<Int> { recorder.record($0) }
-        box.fail(CocoaError(.fileNoSuchFile))
+        box.fail(TestError.boom)
         box.succeed(99)
         XCTAssertEqual(recorder.entries, ["failure"])
     }
@@ -40,7 +40,7 @@ final class SingleCompletionTests: XCTestCase {
                 if index.isMultiple(of: 2) {
                     box.succeed(index)
                 } else {
-                    box.fail(CocoaError(.fileNoSuchFile))
+                    box.fail(TestError.boom)
                 }
             }
             XCTAssertEqual(recorder.count, 1,
@@ -54,7 +54,7 @@ final class SingleCompletionTests: XCTestCase {
         let recorder = Recorder()
         let box = SingleCompletion<String> { recorder.record($0) }
         box.succeed("reply")
-        box.fail(CocoaError(.timeOut))           // 模擬逾時閉包晚到
+        box.fail(TestError.timedOut)           // 模擬逾時閉包晚到
         XCTAssertEqual(recorder.entries, ["success(reply)"])
     }
 
@@ -66,6 +66,11 @@ final class SingleCompletionTests: XCTestCase {
         XCTAssertFalse(box.isCompleted)
     }
 }
+
+/// 測試用錯誤。刻意不用 `CocoaError`——那要記對 `CocoaError.Code` 的成員名稱，
+/// 而它沒有 `timeOut`（第二版就這樣紅了）。測試不該為了「看起來像真的錯誤」
+/// 去依賴一個要查文件才寫得對的列舉。
+private enum TestError: Error { case boom, timedOut }
 
 /// 執行緒安全的記錄器。完成閉包是 `@Sendable`，不能捕捉可變區域變數。
 private final class Recorder: @unchecked Sendable {
