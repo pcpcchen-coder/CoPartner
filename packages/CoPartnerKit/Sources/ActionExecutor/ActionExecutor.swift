@@ -69,7 +69,7 @@ public actor ActionExecutor {
         }
         // 通過所有閘門後，稽核分成「嘗試」與「結果」兩筆（I9）。
         // 以前只記一筆 "execute …"，在 performer 為 nil 時就已經略嫌含糊；
-        // step 55 ① 接上 XPC 之後更不能這樣寫——service 現在會例行地回「收到但沒做」，
+        // step 53.1 接上 XPC 之後更不能這樣寫——service 現在會例行地回「收到但沒做」，
         // 若稽核只留一筆 "execute"，紀錄上會顯示執行過、實際上什麼都沒發生。
         auditLog.append("attempt \(action.kind.summary)")
         guard let performer else {

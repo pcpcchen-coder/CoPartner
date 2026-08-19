@@ -97,7 +97,7 @@ final class AppCoordinator: ObservableObject {
     private var pendingDecision: CheckedContinuation<TakeoverHUDPresentation.Decision, Never>?
     private let cloudRouter = CloudRouter()   // 無 transport：真雲端傳輸 🔒 step 53
 
-    // 執行端 XPC（step 55 ①）：主 app ↔ service 的連線。
+    // 執行端 XPC（step 53.1）：主 app ↔ service 的連線。
     // service 目前**沒有執行能力**，回覆一律是「收到但沒做」→ 轉成 throw，不假裝成功。
     private let xpcPerformer = XPCActionPerformer()
     @Published private(set) var xpcSummary: String = "執行端：未檢測"
@@ -173,7 +173,7 @@ final class AppCoordinator: ObservableObject {
             takeoverSummary = "接手：交棒中…"
             // executor 依**這次的 contract** 建：allowedTools 是 per-handoff 的值（T4）。
             // 共用同一個世代時鐘 → Stop 一撥，在途 token 全部作廢（I7 單一權威）。
-            // performer 接上 XPC（step 55 ①）。service 尚無執行能力 → 回「收到但沒做」，
+            // performer 接上 XPC（step 53.1）。service 尚無執行能力 → 回「收到但沒做」，
             // 客戶端轉成 throw .notWired，HUD 因此顯示「未執行」而非靜默假裝成功。
             // generation 只是稽核關聯用；真正的世代驗證在 execute 裡（I7）。
             let performer = xpcPerformer
@@ -294,7 +294,7 @@ final class AppCoordinator: ObservableObject {
         takeoverSummary = "接手：版面預覽中（假提議，不會執行）"
     }
 
-    /// 執行端 XPC 自檢（step 55 ①，除錯入口）。
+    /// 執行端 XPC 自檢（step 53.1，除錯入口）。
     ///
     /// 真雲端傳輸接上之前沒有辦法產生真提議，也就沒有辦法驗證這條線——
     /// 同 HUD 預覽的處境。送的是**專屬的 `.selfTest` kind**，不是借用一個 shell 動作，

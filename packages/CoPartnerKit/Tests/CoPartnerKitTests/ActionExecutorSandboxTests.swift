@@ -425,7 +425,7 @@ final class ActionExecutorSandboxTests: XCTestCase {
 
     /// 稽核不可把「沒執行成功」記成執行過（I9）。
     ///
-    /// step 55 ① 之後這條特別重要：XPC service 會**例行地**回「收到但沒做」，
+    /// step 53.1 之後這條特別重要：XPC service 會**例行地**回「收到但沒做」，
     /// 若稽核只留一筆 "execute …"，紀錄上會顯示執行過、實際上什麼都沒發生。
     func testAuditLogDistinguishesAttemptFromExecution() async {
         var (model, executor) = makeStack(performer: { _ in throw ExecutionError.notWired })

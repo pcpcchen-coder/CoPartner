@@ -26,7 +26,7 @@ struct MenuBarContentView: View {
                 // 除錯入口：真執行端接上前，唯一能目視驗證接手浮層的方式（step 54）。
                 // 走的是完全獨立的路徑，按下去不會建立任何接手狀態。
                 Button("HUD 預覽") { coordinator.previewHUD() }
-                // 除錯入口：真雲端傳輸接上前，唯一能驗證執行端 XPC 這條線的方式（step 55 ①）。
+                // 除錯入口：真雲端傳輸接上前，唯一能驗證執行端 XPC 這條線的方式（step 53.1）。
                 // 送的是專屬的 selfTest kind，夾帶不了真動作。
                 Button("XPC 自檢") { coordinator.runXPCSelfTest() }
                 SettingsLink { Text("熱鍵…") }

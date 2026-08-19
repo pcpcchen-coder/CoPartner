@@ -8,7 +8,7 @@ import ActionExecutor
 // 「誠實」在這裡是具體要求而非形容詞——service 回「收到但沒做」時這裡必須 throw。
 // 回成功的話 HUD 會顯示「已執行」，後面每一段驗收都會建立在一個假的成功上。
 //
-// ⚠️ **所有 XPC 回呼都必須標 `@Sendable`**（step 55 ② dogfood 當機的成因）。
+// ⚠️ **所有 XPC 回呼都必須標 `@Sendable`**（step 53.2 dogfood 當機的成因）。
 // Swift 6 會把在 `@MainActor` 環境裡寫出來、而 API 又沒標 `@Sendable` 的閉包
 // **推斷成 MainActor 隔離**，並插入執行期佇列斷言。XPC 是在自己的 serial queue 上
 // 呼叫 reply / interruption / error 處理器的 → 斷言失敗 → `_dispatch_assert_queue_fail`

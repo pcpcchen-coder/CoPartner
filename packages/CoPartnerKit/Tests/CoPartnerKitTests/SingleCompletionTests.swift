@@ -1,7 +1,7 @@
 import XCTest
 import ActionExecutor
 
-/// step 55：XPC 客戶端的「只完成一次」保證。
+/// step 53：XPC 客戶端的「只完成一次」保證。
 ///
 /// 它包住的是 `CheckedContinuation`，而**重複 resume 不是回錯值，是直接 crash**。
 /// 這種錯誤在真機上表現為「偶爾閃退」，重現條件是競態，靠 dogfood 幾乎抓不到——

@@ -86,7 +86,7 @@
 - **秘密路徑**（讀或寫都算）：`~/.ssh`、`~/Library/Keychains`、瀏覽器 profile 目錄、`.env`、`*history`
 - **對外通訊工具類**：send-email / submit-form / purchase 類 action kind → 無條件 high
 
-## 6. sbpl profile ✅ 已真機驗證（2026-08-19，step 55 ③）
+## 6. sbpl profile ✅ 已真機驗證（2026-08-19，step 53.3）
 
 > 本節原為草稿方向。`scripts/sandbox-verify.sh` 的成對驗證已在真機通過
 > **7 項全綠、0 失敗、0 無效**，以下是實測後的定案內容。
@@ -154,7 +154,7 @@
 - profile **尚未接上執行端**：目前是獨立產生、獨立驗證。接起來是第 ④ 段。
 - `posix_spawn` argv 直呼、逾時 kill、stdout/stderr 截斷收集進 audit log 都還沒做。
 
-> **修正（2026-08-18，step 55 ① 真機實測）**：本節原本寫「專用**低權** helper（XPC service，non-root）」，
+> **修正（2026-08-18，step 53.1 真機實測）**：本節原本寫「專用**低權** helper（XPC service，non-root）」，
 > 那是錯的假設。內嵌在 `Contents/XPCServices/` 的 XPC service **必然與主 app 同一個使用者、
 > 同一個 session 執行**——真機自檢量到 service 的 euid 就是使用者本人的 501。
 > 要換成低權帳號得改成 launchd daemon + `SMAppService`/`SMJobBless`，需管理員授權並多一整套安裝流程。
