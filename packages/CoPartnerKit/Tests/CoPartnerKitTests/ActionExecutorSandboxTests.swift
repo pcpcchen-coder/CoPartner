@@ -202,6 +202,38 @@ final class ActionExecutorSandboxTests: XCTestCase {
                                              deniedSubpaths: ["/Users/x/.ssh", "relative/bad"]))
     }
 
+    /// runtime 最小讀取集合預設要在——沒有它，`(deny default)` 下任何程式都起不來，
+    /// 於是所有負向測試都會「通過」，但那只證明了什麼都動不了。
+    func testRuntimeMinimumIsIncludedByDefault() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: ["/bin/cat"], workspace: "/ws", deniedSubpaths: [])
+        for runtime in SbplProfileBuilder.runtimeReadSubpaths {
+            XCTAssertTrue(profile.contains("(allow file-read* (subpath \"\(runtime)\"))"),
+                          "缺少 runtime 讀取路徑：\(runtime)")
+        }
+    }
+
+    /// 可以關掉——驗證腳本要用它做對照實驗：關掉之後正向案例應該連跑都跑不起來。
+    /// 若關掉仍跑得起來，代表這組路徑是多餘的，該拿掉（寧可少放）。
+    func testRuntimeMinimumCanBeDisabledForControlExperiment() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: ["/bin/cat"], workspace: "/ws", deniedSubpaths: [],
+            includeRuntimeMinimum: false)
+        XCTAssertFalse(profile.contains("/usr/lib"))
+        XCTAssertTrue(profile.contains("(allow file-read* (subpath \"/ws\"))"),
+                      "關掉 runtime 最小集合不該影響工作目錄規則")
+    }
+
+    /// runtime 路徑只給**讀**，不給寫。寫入權限一律只在工作目錄。
+    func testRuntimePathsAreReadOnly() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: [])
+        for runtime in SbplProfileBuilder.runtimeReadSubpaths {
+            XCTAssertFalse(profile.contains("(allow file-write* (subpath \"\(runtime)\"))"),
+                           "\(runtime) 不該可寫")
+        }
+    }
+
     /// **deny 必須排在 allow 之後**：sbpl 是最後一條相符的規則勝出。
     /// 順序顛倒的話，「秘密路徑就在工作目錄底下」這個最重要的情況會被 allow 蓋過去。
     func testDenyRulesComeAfterAllowRules() throws {

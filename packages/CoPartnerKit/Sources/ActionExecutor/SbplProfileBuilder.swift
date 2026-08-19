@@ -22,9 +22,27 @@ public struct SbplProfileBuilder: Sendable {
 
     /// 產生 profile。任何一個路徑不安全就整個失敗——**不做「跳過壞的那條」**：
     /// 少一條 deny 規則的 profile 看起來仍然正常，但防線已經有洞。
+    /// 讓白名單內的工具**能夠啟動**所需的最小讀取集合。
+    ///
+    /// `(deny default)` 之下，被 exec 的程式連 dyld 與共用快取都讀不到，
+    /// 於是**任何東西都跑不起來**。這一組不是「放寬」，是「讓正向測試有機會通過」——
+    /// 沒有它，所有負向測試都會通過，但那只證明了「什麼都動不了」，
+    /// 證明不了 profile 有在擋對的東西。
+    ///
+    /// ⚠️ **這一版是依慣例猜的，尚未在真機驗證。** `scripts/sandbox-verify.sh`
+    /// 的正向測試就是要逐條確認：少了哪一條會讓 `/bin/cat` 起不來。
+    /// 原則是**寧可少放**——正向測試失敗看得見，多放的權限看不見。
+    /// 只在正向測試證明必要時才加，不要為了「看起來會動」預先放寬。
+    public static let runtimeReadSubpaths = [
+        "/usr/lib",           // dyld、共用快取、系統 dylib
+        "/System/Library",    // 框架
+        "/private/var/db/dyld",
+    ]
+
     public func profile(execAllowlist: [String],
                         workspace: String,
-                        deniedSubpaths: [String]) throws -> String {
+                        deniedSubpaths: [String],
+                        includeRuntimeMinimum: Bool = true) throws -> String {
         let workspacePath = try Self.sanitize(workspace)
         let execPaths = try execAllowlist.map(Self.sanitize)
         let deniedPaths = try deniedSubpaths.map(Self.sanitize)
@@ -37,6 +55,13 @@ public struct SbplProfileBuilder: Sendable {
         if !execPaths.isEmpty {
             let literals = execPaths.map { "(literal \(Self.quoted($0)))" }.joined(separator: " ")
             lines.append("(allow process-exec \(literals))")
+        }
+        if includeRuntimeMinimum {
+            // 放在工作目錄規則之前：它們彼此不重疊，順序不影響結果，
+            // 但擺前面能讓「哪些是為了讓程式跑起來、哪些是任務所需」在 profile 裡一眼分得出來。
+            for runtime in Self.runtimeReadSubpaths {
+                lines.append("(allow file-read* (subpath \(Self.quoted(runtime))))")
+            }
         }
         lines.append("(allow file-read* (subpath \(Self.quoted(workspacePath))))")
         lines.append("(allow file-write* (subpath \(Self.quoted(workspacePath))))")
