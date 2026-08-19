@@ -245,6 +245,41 @@ final class ActionExecutorSandboxTests: XCTestCase {
                        "不可無條件開放 sysctl-read")
     }
 
+    // MARK: sbpl 符號連結解析（真機 dogfood 抓到）
+
+    /// **profile 裡的路徑必須是解過符號連結的**。
+    ///
+    /// 真機日誌：工作目錄給 `/tmp/…`，核心卻拿 `/private/tmp/…` 在比對，
+    /// 於是 `(subpath "/tmp/…")` **永遠不匹配**——而 profile 看起來完全正常。
+    /// macOS 的 /tmp、/var、/etc 都是符號連結，這不是邊角案例。
+    func testPathsAreSymlinkResolvedBeforeEmitting() throws {
+        let builder = SbplProfileBuilder(resolvePath: { path in
+            path.hasPrefix("/tmp/") ? "/private" + path : path
+        })
+        let profile = try builder.profile(execAllowlist: [],
+                                          workspace: "/tmp/ws",
+                                          deniedSubpaths: ["/tmp/ws/.secrets"])
+        XCTAssertTrue(profile.contains("(subpath \"/private/tmp/ws\")"), "實際：\(profile)")
+        XCTAssertTrue(profile.contains("(subpath \"/private/tmp/ws/.secrets\")"))
+        XCTAssertFalse(profile.contains("(subpath \"/tmp/ws\")"),
+                       "未解析的路徑不可出現——那條規則永遠不會匹配")
+    }
+
+    /// 真的解析器在 macOS 上要把 /tmp 解成 /private/tmp。
+    /// 這條會碰檔案系統，但它守的正是「預設值真的有效」——注入假的測完，
+    /// 若預設值其實沒作用，前一條會綠、真機仍然壞。
+    func testSystemResolverResolvesTmp() {
+        XCTAssertEqual(SbplProfileBuilder.systemPathResolver("/tmp"), "/private/tmp")
+    }
+
+    /// 解析後仍要通過 sanitize——解析器可能吐出結尾斜線之類的東西。
+    func testResolvedPathIsStillSanitized() throws {
+        let builder = SbplProfileBuilder(resolvePath: { _ in "/private/tmp/ws/" })
+        let profile = try builder.profile(execAllowlist: [], workspace: "/tmp/ws", deniedSubpaths: [])
+        XCTAssertTrue(profile.contains("(subpath \"/private/tmp/ws\")"))
+        XCTAssertFalse(profile.contains("ws/\""), "結尾斜線應已去掉")
+    }
+
     /// **這條守住整個放寬的前提**：全域 `(allow file-read-metadata)` 之下，
     /// 秘密路徑的 deny 仍然必須勝出。
     ///

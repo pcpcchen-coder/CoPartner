@@ -18,7 +18,21 @@ public enum SbplProfileError: Error, Equatable {
 }
 
 public struct SbplProfileBuilder: Sendable {
-    public init() {}
+    /// 路徑 → 解開符號連結後的真實路徑。
+    ///
+    /// 可注入的理由是**測試決定性**：真的解析要碰檔案系統，那會讓測試依賴執行環境。
+    /// 預設用真的解析器，測試注入假的。
+    public typealias PathResolver = @Sendable (String) -> String
+
+    /// 真的符號連結解析。
+    public static let systemPathResolver: PathResolver = {
+        URL(fileURLWithPath: $0).resolvingSymlinksInPath().path
+    }
+
+    private let resolvePath: PathResolver
+    public init(resolvePath: @escaping PathResolver = SbplProfileBuilder.systemPathResolver) {
+        self.resolvePath = resolvePath
+    }
 
     /// 產生 profile。任何一個路徑不安全就整個失敗——**不做「跳過壞的那條」**：
     /// 少一條 deny 規則的 profile 看起來仍然正常，但防線已經有洞。
@@ -79,15 +93,31 @@ public struct SbplProfileBuilder: Sendable {
         // 且**排在最後**——最後一條相符的規則勝出，所以它蓋得過這條。
         // `testSecretDenyOverridesGlobalMetadataAllow` 釘住這個關係。
         "(allow file-read-metadata)",
+        // 每個程序啟動時都會開的東西（真機日誌：deny file-read-data /dev/dtracehelper）。
+        "(allow file-read* (literal \"/dev/dtracehelper\"))",
+        // 語系資料要讀**內容**，不只 metadata（deny file-read-data /usr/share/locale/C.UTF-8/LC_CTYPE）。
+        // 給整個 locale 目錄而非逐一列舉：語系檔會隨系統地區設定變，逐條補補不完，
+        // 而它們是唯讀的公開系統資料，放寬的代價很小。
+        "(allow file-read* (subpath \"/usr/share/locale\"))",
+        // Cryptex 掛載點本身要讀得到（deny file-read-data /System/Volumes/Preboot/Cryptexes/OS）。
+        "(allow file-read* (subpath \"/System/Volumes/Preboot/Cryptexes/OS\"))",
     ]
 
     public func profile(execAllowlist: [String],
                         workspace: String,
                         deniedSubpaths: [String],
                         includeRuntimeMinimum: Bool = true) throws -> String {
-        let workspacePath = try Self.sanitize(workspace)
-        let execPaths = try execAllowlist.map(Self.sanitize)
-        let deniedPaths = try deniedSubpaths.map(Self.sanitize)
+        // ⚠️ **先解符號連結再寫進 profile**。真機日誌：
+        //   deny(1) file-read-data /private/tmp/…/hello.txt
+        // 工作目錄給的是 `/tmp/…`，但核心是拿**正規化後**的 `/private/tmp/…` 在比對，
+        // 所以 `(subpath "/tmp/…")` 那條規則**永遠不匹配**——而它看起來完全正常。
+        // macOS 的 /tmp、/var、/etc 都是符號連結，這不是邊角案例。
+        //
+        // 威脅模型 I5 早就要求「路徑正規化 + symlink 解析後再比對白名單」；
+        // `PathAllowlist` 做了，profile 這邊漏了。同一條不變式要在兩個地方各自成立。
+        let workspacePath = try Self.sanitize(resolvePath(workspace))
+        let execPaths = try execAllowlist.map { try Self.sanitize(resolvePath($0)) }
+        let deniedPaths = try deniedSubpaths.map { try Self.sanitize(resolvePath($0)) }
 
         var lines = [
             "(version 1)",
