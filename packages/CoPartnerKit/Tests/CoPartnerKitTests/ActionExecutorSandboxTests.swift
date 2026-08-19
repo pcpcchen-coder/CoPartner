@@ -266,10 +266,19 @@ final class ActionExecutorSandboxTests: XCTestCase {
     }
 
     /// 真的解析器在 macOS 上要把 /tmp 解成 /private/tmp。
+    ///
     /// 這條會碰檔案系統，但它守的正是「預設值真的有效」——注入假的測完，
-    /// 若預設值其實沒作用，前一條會綠、真機仍然壞。
+    /// 若預設值其實沒作用，上一條會綠、真機仍然壞。**這條真的抓到過**：
+    /// 原本用 `URL.resolvingSymlinksInPath()`，而 Foundation 會把 `/private` 前綴
+    /// 再拿掉，等於白解析一場。改用 `realpath(3)`。
     func testSystemResolverResolvesTmp() {
         XCTAssertEqual(SbplProfileBuilder.systemPathResolver("/tmp"), "/private/tmp")
+    }
+
+    /// 路徑不存在時退回原值，不可炸掉整個 profile 的產生。
+    func testSystemResolverFallsBackForMissingPath() {
+        let missing = "/definitely-not-a-real-path-\(UUID().uuidString)"
+        XCTAssertEqual(SbplProfileBuilder.systemPathResolver(missing), missing)
     }
 
     /// 解析後仍要通過 sanitize——解析器可能吐出結尾斜線之類的東西。

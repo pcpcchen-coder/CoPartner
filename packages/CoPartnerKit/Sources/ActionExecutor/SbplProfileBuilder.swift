@@ -25,8 +25,17 @@ public struct SbplProfileBuilder: Sendable {
     public typealias PathResolver = @Sendable (String) -> String
 
     /// 真的符號連結解析。
-    public static let systemPathResolver: PathResolver = {
-        URL(fileURLWithPath: $0).resolvingSymlinksInPath().path
+    ///
+    /// ⚠️ **不要用 `URL.resolvingSymlinksInPath()`**：它會把 `/private` 前綴再拿掉
+    /// （Foundation 刻意的「標準化」行為），等於把我們要的解析結果又還原回去——
+    /// `/tmp` 解成 `/private/tmp` 之後又變回 `/tmp`，白忙一場而且沒有任何跡象。
+    ///
+    /// `realpath(3)` 才是核心在比對的那個答案。路徑不存在時回 NULL，
+    /// 此時退回原值（產生的規則不會匹配，但那是「路徑不存在」的正常後果）。
+    public static let systemPathResolver: PathResolver = { path in
+        guard let resolved = realpath(path, nil) else { return path }
+        defer { free(resolved) }
+        return String(cString: resolved)
     }
 
     private let resolvePath: PathResolver
