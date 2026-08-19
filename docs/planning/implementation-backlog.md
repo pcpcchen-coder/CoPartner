@@ -551,7 +551,7 @@
 
 #### Step 53.5 — 🔒 翻開 `willExecuteActions = true`
 - **單獨一個改動、只有一行。** 理由：翻開執行能力若混在一大包程式碼裡，沒有人能真的審完。
-- 前置門禁清單見 `session-handoff-m4.md` §7.6.5。
+- 前置門禁清單見 `session-handoff.md` §7.6.5。
 - **DoD**：真機——第一次真的執行一個沙箱內的無害命令並看到稽核紀錄
 
 #### Step 53.6 — 🔒 AX / CGEvent 執行端（UI 動作）

@@ -150,25 +150,52 @@ MainActor，UI 不凍結（真機截圖印證劇本持續即時更新）。`infe
 
 ## M5 — Step 53：接手全鏈（最關鍵的安全驗收）
 
-**現況**：整條交棒鏈的**邏輯**都 CI 綠——打包/出境閘門/請求組裝/座標換算/解析/HUD 狀態機/ApprovalToken/風險分級/危險指令偵測/沙箱政策/速率迴圈/undo。但**真執行端全是注入點、預設沒接**（`performer=nil` → `.notWired`；`transport=nil` → handoff 收「尚未接線」）。
+> **本節於 2026-08-19 依真機結果重寫。** 原本的內容假設「執行端只是接線」，
+> 實際做下去才發現它根本還不存在，於是 step 53 展開成 53.1–53.6（見 backlog）。
+> 原文裡幾個後來被推翻的假設也一併更正——留著錯的指示比沒有指示更糟。
 
-**① 我要先補的膠水（這個里程碑膠水最多，動手前逐項確認）**
-- ⚠️ **先用 `/claude-api` 對齊 live computer-use 契約**：`HandoffRequestBuilder` 的預設 `betaHeader="computer-use-2025-11-24"` / `toolType="computer_20251124"` 是開發時 docs 連不上、暫定的值，**很可能過時**——開工第一件事就是查當下正確的 beta header / tool 版本 / 請求 schema / 支援模型，改預設（一行）。
-- 真 `HandoffTransport`：LiteLLM gateway（`cd infra/litellm && litellm --config config.yaml`，設 `ANTHROPIC_API_KEY`）→ Claude computer-use → SSE tool_use 正規化成 `[String:String]` 餵 `ProposedActionParser`。
-- 真 `ActionExecutor.performer`：XPC service（`_ambient` 低權 user）+ code-signing requirement 驗證（只收主 app）+ `sandbox-exec` sbpl 套用 + `posix_spawn` argv 直呼（無 shell）；⚠️ **先驗 `sandbox-exec` 在你的 macOS 版本仍可用**，否則走威脅模型 §6 備援。
-- 接手 HUD 的 SwiftUI 常駐浮層（顯示提議動作原文 + 風險原因 + Approve/Skip/Stop）。
+### 已完成的（不必重驗，除非改到相關程式碼）
 
-**② 你在 Mac 上跑**（對照 `docs/design/sandbox-threat-model.md` I1–I10 逐項勾）
-1. 做一半某件事（留個 open loop，如寫一半的函式）→ 按 **⌃⌥⌘Space**。
-2. HUD 應顯示 Claude 推測的任務 + 下一步 + 信心；**不該貼一堆說明文字**，而是接續你的 open loop。
-3. 高風險動作（改檔/刪除/對外送出）→ HUD **強制確認**；危險指令（`rm -rf`/`sudo`…）→ 被攔、顯示原因。
-4. 接手到一半按 **⌃⌥⌘.** → 串流立刻斷、HUD 進 aborted、後續 token 全失效（世代作廢）。
-5. 故意從別的程序打 XPC → 應被 code-signing 擋。
-6. sbpl：讓沙箱內動作試連網/寫工作目錄外 → 應被 deny。
-7. LiteLLM `max_budget: 5` → 跑到超額一次，確認熔斷。
+| 子步 | 驗收方式 | 結果 |
+|---|---|---|
+| 53.1 XPC 骨架 | 選單「XPC 自檢」 | ✅ service pid ≠ app pid、`會執行動作 否` |
+| 53.2 呼叫者驗證 | 「XPC 自檢」＋ `xpc-probe` | ✅ `驗呼叫者 已啟用・驗 service 通過`；外部程序定址不到 |
+| 53.3 sandbox profile | `./scripts/sandbox-verify.sh` | ✅ 7 項全綠、0 失敗、0 無效 |
 
-**③ 回報**：I1–I10 每條過沒過；computer-use 契約對齊後有沒有相容性問題；接手體驗（Claude 有沒有正確續寫）；kill-switch 是不是真的全鏈斷。
-**驗收標準**：熱鍵後 Claude 正確接續 open loop；高風險強制確認、危險指令攔下；⌃⌥⌘. 全鏈中止；XPC 擋外來；sbpl 實際 deny；budget 熔斷。
+### 三個不需要 Xcode 的驗收指令
+
+```bash
+./scripts/sandbox-verify.sh                       # 沙箱成對驗證（正向 + 負向）
+swiftc -O -o /tmp/xpc-probe scripts/xpc-probe.swift && /tmp/xpc-probe   # 拒絕路徑
+codesign -dv --verbose=4 "$(ls -d ~/Library/Developer/Xcode/DerivedData/CoPartner-*/Build/Products/Debug/CoPartner.app | head -1)/Contents/XPCServices/CoPartnerExecutor.xpc"
+```
+
+第三行是簽章檢查：`.xpc` 的 `TeamIdentifier` 必須與 app 相同。
+若是 `not set`，`驗呼叫者` 會停在「未啟用」——巢狀程式碼沒跟外層同一身分簽。
+
+### 🔒 還沒做的（53.4-B 起）
+
+1. **第一次真的執行**（53.5 翻開開關後）：在工作目錄內跑一個無害命令，
+   確認 HUD 顯示「已執行」、稽核出現 `attempt` + `executed` 兩筆。
+2. **危險指令被攔**：提議 `rm -rf` → HUD 顯示紅色高風險 + 本地原因，且**不可**自動核准。
+3. **kill-switch 全鏈**：接手到一半按 ⌃⌥⌘. → 串流斷、HUD 進 aborted、後續 token 全失效。
+4. **越界寫入被 deny**：讓沙箱內動作寫工作目錄外 → 應失敗（`sandbox-verify.sh` 已驗過規則本身，
+   這裡驗的是**真的接上執行端之後**仍然成立）。
+5. **LiteLLM 預算熔斷**：`max_budget: 5` 跑到超額一次。
+6. **接手品質**：留個 open loop → 熱鍵 → Claude 應**接續**而不是貼一堆說明文字。
+
+### 更正的三個假設（原文有誤，別再照著做）
+
+| 原文說 | 實際 |
+|---|---|
+| 「computer-use 契約預設值很可能過時，開工第一件事是查」 | **查過了，兩個值都是對的。** 真正的缺口是少了 API 必填欄位 |
+| 「XPC service（`_ambient` 低權 user）」 | **做不到。** 內嵌 XPC service 必然與主 app 同 uid（實測 euid 501）。真正的圍籬在 sbpl |
+| 「先驗 `sandbox-exec` 在你的 macOS 版本仍可用」 | **已驗，可用。** 威脅模型 §6 備援不需啟用 |
+
+### 回報時請附
+
+I1–I10 每條過沒過；`sandbox-verify.sh` 的完整輸出（它會自己說哪條無效）；
+kill-switch 是不是**真的全鏈**斷；以及 Claude 有沒有正確續寫 open loop。
 
 ---
 

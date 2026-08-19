@@ -23,20 +23,18 @@
 
 ## 2. 信任邊界
 
-```
-[螢幕內容/網頁/信件]──(不可信輸入)──▶ 劇本/OCR/AX ──▶ ContextEnvelope
-                                                        │ 邊界 B1：出境閘門（EgressGate + Presidio + PIPL）
-                                                        ▼
-                                              LiteLLM ──▶ Claude（雲端）
-                                                        │ 邊界 B2：模型輸出＝不可信提議
-                                                        ▼
-                                              ProposedAction 流
-                                                        │ 邊界 B3：風險分級 + HUD 人工確認（ApprovalToken）
-                                                        ▼
-                                              ActionExecutor（XPC 隔離程序）
-                                                        │ 邊界 B4：sandbox-exec deny-default profile
-                                                        ▼
-                                              使用者的 Mac
+```mermaid
+flowchart TD
+    B0["螢幕內容 / 網頁 / 信件 / PDF"]:::untrusted
+    B0 -->|"不可信輸入"| Script["劇本 / OCR / AX"]
+    Script --> Env["ContextEnvelope"]
+    Env -->|"<b>B1</b> 出境閘門<br/>EgressGate + PII 遮罩 + PIPL"| LLM["LiteLLM"]
+    LLM --> Cloud["Claude（雲端）"]:::untrusted
+    Cloud -->|"<b>B2</b> 模型輸出＝不可信提議"| Actions["ProposedAction 流"]
+    Actions -->|"<b>B3</b> 風險分級 + HUD 人工確認<br/>ApprovalToken"| Exec["ActionExecutor<br/>XPC 隔離程序"]
+    Exec -->|"<b>B4</b> sandbox-exec deny-default"| Mac["使用者的 Mac"]
+
+    classDef untrusted fill:#3b1f1f,stroke:#a33,color:#fdd
 ```
 
 **核心立場**：
