@@ -204,6 +204,38 @@ final class ActionExecutorSandboxTests: XCTestCase {
         XCTAssertFalse(log.contains { $0.hasPrefix("executed ") }, "沒執行就不可記成 executed")
     }
 
+    /// 被閘門擋下來的動作**也要留紀錄**（I9：無論核准與否）。
+    ///
+    /// 這六條正好是最需要事後查得到的情況。稽核只記成功的話，
+    /// 「一切正常」與「有人一直被擋」在紀錄上會長得一模一樣。
+    func testBlockedActionsAreAudited() async {
+        var (model, executor) = makeStack(
+            policy: SandboxPolicy(allowedTools: ["computer"]))   // 不含 bash → shell 會被擋
+        model.begin()
+        let a = ProposedAction(kind: .shell(argv: ["ls"]))
+        let token = approvedToken(&model, for: a)
+        await expectError(.toolNotAllowed("shell(ls)")) {
+            try await executor.execute(a, token: token)
+        }
+        let log = await executor.auditLog
+        XCTAssertEqual(log.count, 1, "被擋也要留一筆：\(log)")
+        XCTAssertTrue(log[0].hasPrefix("blocked shell(ls)"), "實際內容：\(log[0])")
+        XCTAssertFalse(log.contains { $0.hasPrefix("attempt ") }, "沒通過閘門就不算嘗試執行")
+    }
+
+    /// 作廢的 token 是最該留痕的一種——代表有人拿失效的核准來執行。
+    func testStaleTokenIsAudited() async {
+        var (model, executor) = makeStack()
+        model.begin()
+        let a = ProposedAction(kind: .screenshot)
+        let token = approvedToken(&model, for: a)
+        model.stop()                                    // 世代作廢（I7）
+        await expectError(.staleToken) { try await executor.execute(a, token: token) }
+        let log = await executor.auditLog
+        XCTAssertEqual(log.count, 1)
+        XCTAssertTrue(log[0].contains("世代已作廢"), "實際內容：\(log[0])")
+    }
+
     /// performer 未接線時同樣不可記成執行過。
     func testAuditLogHonestWhenPerformerMissing() async {
         var (model, executor) = makeStack(performer: nil)

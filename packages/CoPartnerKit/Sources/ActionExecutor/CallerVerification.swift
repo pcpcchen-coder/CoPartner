@@ -49,6 +49,27 @@ public enum CallerVerification {
         }
     }
 
+    /// **對稱規則**：主 app 這一側要不要把一個真動作送出去。
+    ///
+    /// service 端的規則是「沒有驗證就不可以有執行能力」。少了這條，兩側就不對稱：
+    /// 主 app 會把真動作送給一個**它從未驗證過身分**的 service。
+    /// 今天無害（service 不執行任何東西），但第 ④ 段一翻開執行能力，
+    /// 那就是「對身分不明的對象下指令」——而且方向正好是最危險的那一邊，
+    /// 因為送出去的內容就是「要在這台機器上做什麼」。
+    ///
+    /// 自檢（`isRealAction == false`）不受此限：它送的是 `.selfTest`，
+    /// 在協定上就不是一個動作，執行不了任何東西。診斷能力不該被安全規則鎖死，
+    /// 否則驗不出問題的時候連怎麼壞的都看不到。
+    public static func decideOutbound(mode: Mode, isRealAction: Bool) -> Decision {
+        switch mode {
+        case .enforced:
+            return .accept
+        case .unavailable(let reason):
+            guard isRealAction else { return .accept }
+            return .refuse(reason: "無法驗證 service 身分（\(reason)）——不對身分不明的對象送出真動作")
+        }
+    }
+
     /// 給人看的一行狀態，放進自檢報告。
     public static func describe(_ mode: Mode) -> String {
         switch mode {

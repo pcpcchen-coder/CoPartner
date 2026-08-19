@@ -29,14 +29,15 @@ final class XPCActionPerformer {
     enum Failure: Error, CustomStringConvertible {
         case cannotConnect(String)
         case badReply(String)
-        /// service 的簽章與 requirement 不符——**不是連不上**，是連上了但身分不對。
-        case serviceUntrusted(String)
+        /// **還沒送出**就拒絕：驗不了 service 身分，而這是一個真動作。
+        /// 與 `cannotConnect` 的差別在於「連都沒連」——這是我們自己的決定，不是對方的問題。
+        case refusedToSend(String)
 
         var description: String {
             switch self {
             case .cannotConnect(let d): return "連不上（\(d)）"
             case .badReply(let d): return "回覆有問題（\(d)）"
-            case .serviceUntrusted(let d): return "service 身分驗證失敗（\(d)）"
+            case .refusedToSend(let d): return "拒絕送出（\(d)）"
             }
         }
     }
@@ -51,7 +52,13 @@ final class XPCActionPerformer {
             throw ExecutionError.notSandboxable(summary)
         }
 
-        // 真動作一律要求 service 通過驗證——寧可不執行，也不對一個身分不明的 service 下指令。
+        // 對稱規則（與 service 端的「沒有驗證就不可以有執行能力」成對）：
+        // 驗不了 service 身分就**不送真動作**。寧可不執行，也不對身分不明的對象下指令。
+        let mode = CodeSigningIdentity.requirement(forBundleIdentifier: ExecutorXPCService.name)
+        if case .refuse(let reason) =
+            CallerVerification.decideOutbound(mode: mode, isRealAction: true) {
+            throw Failure.refusedToSend(reason)
+        }
         let outcome = try await Self.exchange(request: request,
                                               serviceRequirement: Self.serviceRequirement())
         switch outcome {
@@ -76,6 +83,9 @@ final class XPCActionPerformer {
     /// 刻意**試兩次**——帶 requirement 一次、不帶一次。
     /// 只試一次的話，「連不上 service」和「連得上但簽章不符」會長得一模一樣，
     /// 而這兩件事要修的東西完全不同。
+    /// （`decideOutbound(isRealAction: false)` 允許在驗不了身分時仍進行——
+    /// 送的是 `.selfTest`，協定上就不是一個動作。診斷能力不該被安全規則鎖死，
+    /// 否則驗不出問題時連怎麼壞的都看不到。）
     func selfTest() async throws -> SelfTestResult {
         let requirement = Self.serviceRequirement()
         var verification = "未設定（本組建無 Team ID）"

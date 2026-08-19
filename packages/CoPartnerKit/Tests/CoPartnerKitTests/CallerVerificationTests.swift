@@ -58,6 +58,47 @@ final class CallerVerificationTests: XCTestCase {
         XCTAssertTrue(reason.contains("未簽章"), "理由要帶上驗不了的原因：\(reason)")
     }
 
+    // MARK: - 對稱規則：主 app 這一側要不要送出去
+
+    /// **最重要的一條**：驗不了 service 身分時，真動作不可送出。
+    ///
+    /// 少了這條，兩側就不對稱——service 端擋住「不明的呼叫者」，主 app 卻會把真動作
+    /// 送給一個從未驗證過身分的 service。今天無害（service 不執行任何東西），
+    /// 第 ④ 段一翻開執行能力就是「對身分不明的對象下指令」。
+    func testRealActionIsNotSentToAnUnverifiableService() {
+        guard case .refuse = CallerVerification.decideOutbound(mode: unavailable, isRealAction: true) else {
+            return XCTFail("驗不了身分就不該送真動作")
+        }
+    }
+
+    /// 自檢不受此限：送的是 `.selfTest`，協定上就不是一個動作。
+    /// 診斷能力不該被安全規則鎖死，否則驗不出問題時連怎麼壞的都看不到。
+    func testSelfTestMayProceedWithoutVerification() {
+        XCTAssertEqual(CallerVerification.decideOutbound(mode: unavailable, isRealAction: false), .accept)
+    }
+
+    func testVerifiedServiceAcceptsBothKinds() {
+        XCTAssertEqual(CallerVerification.decideOutbound(mode: enforced, isRealAction: true), .accept)
+        XCTAssertEqual(CallerVerification.decideOutbound(mode: enforced, isRealAction: false), .accept)
+    }
+
+    /// 兩條規則要**同形**：唯一被拒的組合都是「驗不了 × 動真格」。
+    /// 寫成對照是為了讓將來改動其中一邊時，另一邊的不對稱會立刻現形。
+    func testInboundAndOutboundRulesAreSymmetric() {
+        let inboundRefused = isRefused(CallerVerification.decide(mode: unavailable, serviceCanExecute: true))
+        let outboundRefused = isRefused(CallerVerification.decideOutbound(mode: unavailable, isRealAction: true))
+        XCTAssertTrue(inboundRefused && outboundRefused, "兩側在「驗不了 × 動真格」都必須拒絕")
+
+        let inboundInert = isRefused(CallerVerification.decide(mode: unavailable, serviceCanExecute: false))
+        let outboundInert = isRefused(CallerVerification.decideOutbound(mode: unavailable, isRealAction: false))
+        XCTAssertFalse(inboundInert || outboundInert, "兩側在「驗不了 × 不動真格」都必須放行")
+    }
+
+    private func isRefused(_ decision: CallerVerification.Decision) -> Bool {
+        if case .refuse = decision { return true }
+        return false
+    }
+
     func testDescribeIsHumanReadable() {
         XCTAssertTrue(CallerVerification.describe(enforced).hasPrefix("已啟用"))
         XCTAssertTrue(CallerVerification.describe(unavailable).hasPrefix("未啟用"))

@@ -34,6 +34,12 @@ jobs:
         run: cd apps/CoPartner && xcodegen generate
       - name: Resolve Swift package dependencies
         run: cd apps/CoPartner && xcodebuild -project CoPartner.xcodeproj -resolvePackageDependencies
+      # 探測腳本刻意獨立於 CoPartnerKit（要能用 swiftc 單獨編成 ad-hoc 簽章的外部程序），
+      # 因此不在任何 target 裡、平常不會被編到。沒有這一步它會靜默腐爛，
+      # 而壞掉的腳本會讓拒絕路徑的驗收得出**假的通過**。
+      - name: Type-check XPC probe script
+        run: swiftc -typecheck scripts/xpc-probe.swift
+
       - name: Build app (no signing)
         run: |
           cd apps/CoPartner
