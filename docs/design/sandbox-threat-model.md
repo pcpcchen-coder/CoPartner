@@ -86,19 +86,73 @@
 - **秘密路徑**（讀或寫都算）：`~/.ssh`、`~/Library/Keychains`、瀏覽器 profile 目錄、`.env`、`*history`
 - **對外通訊工具類**：send-email / submit-form / purchase 類 action kind → 無條件 high
 
-## 6. sbpl profile 草稿方向（step 51 落地）
+## 6. sbpl profile ✅ 已真機驗證（2026-08-19，step 55 ③）
+
+> 本節原為草稿方向。`scripts/sandbox-verify.sh` 的成對驗證已在真機通過
+> **7 項全綠、0 失敗、0 無效**，以下是實測後的定案內容。
+> 產生器：`SbplProfileBuilder`（單一事實來源，驗證腳本呼叫 `copartner-sbpl` 取得同一份）。
+
+### 6.1 為什麼驗證方式比 profile 內容更重要
+
+**只測「擋得住」會得到假的通過。** `(deny default)` 之下被 exec 的程式連 dyld 都讀不到，
+幾乎任何東西都會失敗——一個「什麼都擋」的壞 profile 會通過**每一條**負向測試。
+真機第一輪就是這樣：沙箱內每條都回 `rc=134`（SIGABRT），包括**應該放行**的正向案例。
+
+因此驗證有三條規矩：
+1. **負向結果依賴正向基準**。基準沒過 → 所有負向標「無效」，不准報通過。
+2. **負向的無沙箱對照組必須成功**。對照組本來就會失敗的話，該條測不出東西。
+3. **runtime 最小集合要有反向對照**：拿掉它應該連跑都跑不起來。若拿掉還跑得動，
+   代表那組路徑多餘、該刪（寧可少放）。
+
+### 6.2 實測確認的兩個關鍵語意
+
+- **「最後一條相符的規則勝出」成立。** 秘密路徑放在工作目錄底下、`allow` 在前
+  `deny` 在後，實測 deny 勝出。這條先前只是慣例假設，現在有實據。
+  **它同時是全域 `(allow file-read-metadata)` 安全的前提**——deny 用 `file-read*`
+  （含 metadata）且排在最後，蓋得過那條放寬。
+- **路徑必須先用 `realpath(3)` 解符號連結。** 核心是拿正規化後的路徑在比對：
+  給 `/tmp/x` 產生的規則對 `/private/tmp/x` **永遠不匹配**，而 profile 看起來完全正常。
+  ⚠️ 不可用 `URL.resolvingSymlinksInPath()`——Foundation 會把 `/private` 前綴再拿掉。
+  （這正是 I5 要求的「解 symlink 後再比對」，先前只在 `PathAllowlist` 做了。）
+
+### 6.3 定案的 profile 形狀
 
 ```
 (version 1)
-(deny default)                          ; deny-default，逐項開白
-(allow process-exec (literal "/bin/ls" "/usr/bin/…"))   ; exec 白名單，逐工具開
-(deny network*)                          ; 沙箱內一律斷網（T5）
-(allow file-read* (subpath WORKSPACE))   ; 讀限工作範圍
-(allow file-write* (subpath WORKSPACE))  ; 寫限更窄的工作目錄
-(deny file-write* (subpath HOME-secrets))
+(deny default)                                  ; 一切先拒
+(deny network*)                                 ; 沙箱內斷網（T5）
+(allow process-exec (literal <每個工具>))        ; exec 白名單
+(allow file-read*   (literal <每個工具>))        ; 能 exec 不等於能讀——載入器要讀 binary
+(allow file-read-data (literal <工具所在目錄>))
+;; ── 讓程式起得來的最小集合（每條都對應一則真機拒絕紀錄）──
+(allow file-read* (subpath "/usr/lib") (subpath "/System/Library") …)
+(allow sysctl-read (sysctl-name "kern.bootargs") …)   ; 逐項具名，不開放整個 sysctl-read
+(allow file-read-data (literal "/"))            ; 路徑解析要讀根目錄；literal 不是 subpath
+(allow file-read-metadata)                      ; 刻意放寬，見 6.4
+(allow file-read* file-write* (literal "/dev/dtracehelper"))  ; 讀寫開啟的裝置節點
+;; ── 任務範圍 ──
+(allow file-read*  (subpath <解析後的 WORKSPACE>))
+(allow file-write* (subpath <解析後的 WORKSPACE>))
+;; ── deny 必須排最後 ──
+(deny file-read*  (subpath <秘密子路徑>))
+(deny file-write* (subpath <秘密子路徑>))
 ```
 
-搭配：獨立 XPC service 程序、`posix_spawn` 直接帶 argv（無 shell）、逾時 kill、stdout/stderr 截斷收集進 audit log。
+### 6.4 一個刻意的放寬：全域 `file-read-metadata`
+
+路徑解析會對一長串祖先目錄要 metadata（`/var`、`/tmp`、語系檔…），逐條補補不完：
+`/tmp` 是符號連結、語系檔位置隨地區變，而每漏一條的症狀都是「動作莫名其妙失敗」。
+
+**取捨：metadata 不是內容。** 它洩漏「路徑存不存在、多大」，不是檔案裡寫什麼。
+本威脅模型要擋的是秘密**內容**外洩（T5）與破壞性寫入（資產 1），兩者都不受影響。
+且秘密路徑仍完全受保護——見 6.2 的規則順序。
+
+### 6.5 尚未驗證的部分（別把 6.1 的綠燈讀太寬）
+
+- 驗證只涵蓋 `/bin/cat`、`/usr/bin/touch`、`/usr/bin/curl` 三個工具、單一 macOS 版本、
+  單一機器。**換工具或換系統版本可能需要新的 runtime 規則**——腳本會直說少什麼。
+- profile **尚未接上執行端**：目前是獨立產生、獨立驗證。接起來是第 ④ 段。
+- `posix_spawn` argv 直呼、逾時 kill、stdout/stderr 截斷收集進 audit log 都還沒做。
 
 > **修正（2026-08-18，step 55 ① 真機實測）**：本節原本寫「專用**低權** helper（XPC service，non-root）」，
 > 那是錯的假設。內嵌在 `Contents/XPCServices/` 的 XPC service **必然與主 app 同一個使用者、
