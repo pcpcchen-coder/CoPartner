@@ -155,9 +155,16 @@ final class ActionExecutorSandboxTests: XCTestCase {
         let nasty = "/ws\") (allow default) (deny nothing \""
         let profile = try SbplProfileBuilder().profile(execAllowlist: [],
                                                        workspace: nasty, deniedSubpaths: [])
-        XCTAssertFalse(profile.contains("(allow default)"),
-                       "注入成功了：\n\(profile)")
-        XCTAssertTrue(profile.contains("\\\""), "引號應被跳脫成 \\\"")
+        let line = try XCTUnwrap(profile.split(separator: "\n").first { $0.contains("file-read*") })
+
+        // ⚠️ 不可以斷言「profile 不含 (allow default) 這幾個字」——那條斷言是錯的：
+        // 那段文字本來就是路徑的**內容**，跳脫不會讓它消失，它只是待在字面值裡面。
+        // 該驗的是**字面值有沒有提前結束**：把被跳脫的引號拿掉之後，
+        // 整行應該只剩下兩個引號，也就是 (subpath "…") 的那對定界符。
+        // 若跳脫失效，路徑裡的引號會多出來，後面的內容就脫離字串變成 profile 指令。
+        let withoutEscapedQuotes = line.replacingOccurrences(of: "\\\"", with: "")
+        XCTAssertEqual(withoutEscapedQuotes.filter { $0 == "\"" }.count, 2,
+                       "字面值提前結束了，路徑內容脫離字串：\(line)")
     }
 
     /// 反斜線要先跳脫。順序反了的話 `\` 結尾的路徑會把後面的引號吃掉。
