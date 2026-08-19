@@ -128,20 +128,83 @@ final class ActionExecutorSandboxTests: XCTestCase {
 
     // MARK: sbpl（B4）
 
-    func testSbplDeniesNetworkByDefault() {
-        let profile = SbplProfileBuilder().profile(execAllowlist: ["/bin/ls"],
-                                                   workspace: "/ws", deniedSubpaths: ["/Users/x/.ssh"])
+    func testSbplDeniesNetworkByDefault() throws {
+        let profile = try SbplProfileBuilder().profile(execAllowlist: ["/bin/ls"],
+                                                       workspace: "/ws", deniedSubpaths: ["/Users/x/.ssh"])
         let lines = profile.split(separator: "\n").map(String.init)
         XCTAssertEqual(lines[1], "(deny default)")                     // deny-default 先行
         XCTAssertTrue(lines.contains("(deny network*)"))
         XCTAssertFalse(profile.contains("(allow network"))
     }
 
-    func testSbplExecAllowlistOnly() {
-        let profile = SbplProfileBuilder().profile(execAllowlist: ["/bin/ls", "/usr/bin/git"],
-                                                   workspace: "/ws", deniedSubpaths: [])
+    func testSbplExecAllowlistOnly() throws {
+        let profile = try SbplProfileBuilder().profile(execAllowlist: ["/bin/ls", "/usr/bin/git"],
+                                                       workspace: "/ws", deniedSubpaths: [])
         XCTAssertTrue(profile.contains("(allow process-exec (literal \"/bin/ls\") (literal \"/usr/bin/git\"))"))
         XCTAssertTrue(profile.contains("(allow file-write* (subpath \"/ws\"))"))
+    }
+
+    // MARK: sbpl 路徑安全（第 ③ 段 (c)）
+
+    /// **核心**：路徑裡的引號不可以提前結束字面值。
+    ///
+    /// 這是把「一個檔名」變成「一條 profile 規則」的路徑。若跳脫失效，
+    /// 一個名為 `/ws") (allow default) (deny nothing "` 的目錄就能讓整道沙箱失效，
+    /// 而產出的 profile 看起來仍然像個正常的 profile。
+    func testQuoteInPathCannotInjectRules() throws {
+        let nasty = "/ws\") (allow default) (deny nothing \""
+        let profile = try SbplProfileBuilder().profile(execAllowlist: [],
+                                                       workspace: nasty, deniedSubpaths: [])
+        XCTAssertFalse(profile.contains("(allow default)"),
+                       "注入成功了：\n\(profile)")
+        XCTAssertTrue(profile.contains("\\\""), "引號應被跳脫成 \\\"")
+    }
+
+    /// 反斜線要先跳脫。順序反了的話 `\` 結尾的路徑會把後面的引號吃掉。
+    func testBackslashIsEscapedBeforeQuote() {
+        XCTAssertEqual(SbplProfileBuilder.quoted("/a\\b"), "\"/a\\\\b\"")
+        XCTAssertEqual(SbplProfileBuilder.quoted("/a\\"), "\"/a\\\\\"")
+    }
+
+    /// 控制字元（含換行）無法在 profile 裡安全表達——**拒絕，不要盡力表達**。
+    func testControlCharactersAreRejected() {
+        for bad in ["/ws\n(allow default)", "/ws\u{0}", "/ws\t"] {
+            XCTAssertThrowsError(try SbplProfileBuilder.sanitize(bad), "應拒絕：\(bad)")
+        }
+    }
+
+    /// 相對路徑的意義取決於當下工作目錄——放進沙箱規則裡是不可預測的。
+    func testRelativePathIsRejected() {
+        XCTAssertThrowsError(try SbplProfileBuilder.sanitize("ws/sub"))
+        XCTAssertThrowsError(try SbplProfileBuilder.sanitize(""))
+    }
+
+    /// 結尾斜線會讓 `(subpath …)` 規則**安靜地不生效**，所以一律去掉。根目錄除外。
+    func testTrailingSlashIsStripped() throws {
+        XCTAssertEqual(try SbplProfileBuilder.sanitize("/a/b/"), "/a/b")
+        XCTAssertEqual(try SbplProfileBuilder.sanitize("/a/b///"), "/a/b")
+        XCTAssertEqual(try SbplProfileBuilder.sanitize("/"), "/")
+    }
+
+    /// 一條路徑不安全就整個 profile 失敗——**不可以只跳過壞的那條**。
+    /// 少一條 deny 的 profile 看起來完全正常，但防線已經有洞。
+    func testOneBadPathFailsTheWholeProfile() {
+        XCTAssertThrowsError(
+            try SbplProfileBuilder().profile(execAllowlist: [],
+                                             workspace: "/ws",
+                                             deniedSubpaths: ["/Users/x/.ssh", "relative/bad"]))
+    }
+
+    /// **deny 必須排在 allow 之後**：sbpl 是最後一條相符的規則勝出。
+    /// 順序顛倒的話，「秘密路徑就在工作目錄底下」這個最重要的情況會被 allow 蓋過去。
+    func testDenyRulesComeAfterAllowRules() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: ["/ws/.ssh"])
+        let lines = profile.split(separator: "\n").map(String.init)
+        let allowIndex = try XCTUnwrap(lines.firstIndex { $0.contains("(allow file-read* (subpath \"/ws\"))") })
+        let denyIndex = try XCTUnwrap(lines.firstIndex { $0.contains("(deny file-read* (subpath \"/ws/.ssh\"))") })
+        XCTAssertLessThan(allowIndex, denyIndex,
+                          "deny 排在 allow 之前的話，工作目錄底下的秘密路徑會變成可讀")
     }
 
     // MARK: 速率 / 迴圈（I8）
