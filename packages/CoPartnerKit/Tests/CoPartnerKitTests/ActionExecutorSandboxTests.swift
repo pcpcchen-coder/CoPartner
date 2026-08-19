@@ -202,6 +202,172 @@ final class ActionExecutorSandboxTests: XCTestCase {
                                              deniedSubpaths: ["/Users/x/.ssh", "relative/bad"]))
     }
 
+    /// runtime 最小讀取集合預設要在——沒有它，`(deny default)` 下任何程式都起不來，
+    /// 於是所有負向測試都會「通過」，但那只證明了什麼都動不了。
+    func testRuntimeMinimumIsIncludedByDefault() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: ["/bin/cat"], workspace: "/ws", deniedSubpaths: [])
+        for runtime in SbplProfileBuilder.runtimeReadSubpaths {
+            XCTAssertTrue(profile.contains("(allow file-read* (subpath \"\(runtime)\"))"),
+                          "缺少 runtime 讀取路徑：\(runtime)")
+        }
+    }
+
+    /// runtime 路徑一律是**絕對路徑**且通得過 sanitize——這組是寫死在原始碼裡的，
+    /// 打錯字不會有人發現，profile 照樣產得出來、只是那條規則永遠不匹配。
+    func testRuntimePathsAreWellFormed() throws {
+        for runtime in SbplProfileBuilder.runtimeReadSubpaths {
+            XCTAssertEqual(try SbplProfileBuilder.sanitize(runtime), runtime,
+                           "runtime 路徑本身就該是正規化後的形式：\(runtime)")
+        }
+    }
+
+    /// runtime 的額外規則也要跟著 includeRuntimeMinimum 一起開關，
+    /// 否則對照實驗會測到一個「半套」的 profile，得出的結論不對應任何真實設定。
+    func testRuntimeExtraRulesFollowTheSameSwitch() throws {
+        let withMinimum = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: [])
+        let without = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: [], includeRuntimeMinimum: false)
+        for rule in SbplProfileBuilder.runtimeExtraRules {
+            XCTAssertTrue(withMinimum.contains(rule), "缺少：\(rule)")
+            XCTAssertFalse(without.contains(rule), "關掉時不該還在：\(rule)")
+        }
+    }
+
+    /// sysctl **逐項具名**，不可開放整個 sysctl-read——後者會洩漏一堆系統狀態，
+    /// 而我們只需要 libSystem 起始化用到的那兩個。
+    func testSysctlIsNamedNotWideOpen() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: [])
+        XCTAssertTrue(profile.contains("(sysctl-name \"kern.bootargs\")"))
+        XCTAssertFalse(profile.contains("(allow sysctl-read)"),
+                       "不可無條件開放 sysctl-read")
+    }
+
+    // MARK: sbpl 符號連結解析（真機 dogfood 抓到）
+
+    /// **profile 裡的路徑必須是解過符號連結的**。
+    ///
+    /// 真機日誌：工作目錄給 `/tmp/…`，核心卻拿 `/private/tmp/…` 在比對，
+    /// 於是 `(subpath "/tmp/…")` **永遠不匹配**——而 profile 看起來完全正常。
+    /// macOS 的 /tmp、/var、/etc 都是符號連結，這不是邊角案例。
+    func testPathsAreSymlinkResolvedBeforeEmitting() throws {
+        let builder = SbplProfileBuilder(resolvePath: { path in
+            path.hasPrefix("/tmp/") ? "/private" + path : path
+        })
+        let profile = try builder.profile(execAllowlist: [],
+                                          workspace: "/tmp/ws",
+                                          deniedSubpaths: ["/tmp/ws/.secrets"])
+        XCTAssertTrue(profile.contains("(subpath \"/private/tmp/ws\")"), "實際：\(profile)")
+        XCTAssertTrue(profile.contains("(subpath \"/private/tmp/ws/.secrets\")"))
+        XCTAssertFalse(profile.contains("(subpath \"/tmp/ws\")"),
+                       "未解析的路徑不可出現——那條規則永遠不會匹配")
+    }
+
+    /// 真的解析器在 macOS 上要把 /tmp 解成 /private/tmp。
+    ///
+    /// 這條會碰檔案系統，但它守的正是「預設值真的有效」——注入假的測完，
+    /// 若預設值其實沒作用，上一條會綠、真機仍然壞。**這條真的抓到過**：
+    /// 原本用 `URL.resolvingSymlinksInPath()`，而 Foundation 會把 `/private` 前綴
+    /// 再拿掉，等於白解析一場。改用 `realpath(3)`。
+    func testSystemResolverResolvesTmp() {
+        XCTAssertEqual(SbplProfileBuilder.systemPathResolver("/tmp"), "/private/tmp")
+    }
+
+    /// 路徑不存在時退回原值，不可炸掉整個 profile 的產生。
+    func testSystemResolverFallsBackForMissingPath() {
+        let missing = "/definitely-not-a-real-path-\(UUID().uuidString)"
+        XCTAssertEqual(SbplProfileBuilder.systemPathResolver(missing), missing)
+    }
+
+    /// 解析後仍要通過 sanitize——解析器可能吐出結尾斜線之類的東西。
+    func testResolvedPathIsStillSanitized() throws {
+        let builder = SbplProfileBuilder(resolvePath: { _ in "/private/tmp/ws/" })
+        let profile = try builder.profile(execAllowlist: [], workspace: "/tmp/ws", deniedSubpaths: [])
+        XCTAssertTrue(profile.contains("(subpath \"/private/tmp/ws\")"))
+        XCTAssertFalse(profile.contains("ws/\""), "結尾斜線應已去掉")
+    }
+
+    /// **這條守住整個放寬的前提**：全域 `(allow file-read-metadata)` 之下，
+    /// 秘密路徑的 deny 仍然必須勝出。
+    ///
+    /// sbpl 是最後一條相符的規則勝出，所以 deny 排在後面就蓋得過全域 allow。
+    /// 若哪天有人為了「整理」把 allow 移到最後，秘密路徑會安靜地變成可讀——
+    /// 而 profile 看起來完全正常。
+    func testSecretDenyOverridesGlobalMetadataAllow() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: ["/ws/.secrets"])
+        let lines = profile.split(separator: "\n").map(String.init)
+        let metadataAllow = try XCTUnwrap(lines.firstIndex(of: "(allow file-read-metadata)"))
+        let secretDeny = try XCTUnwrap(
+            lines.firstIndex { $0.contains("(deny file-read* (subpath \"/ws/.secrets\"))") })
+        XCTAssertLessThan(metadataAllow, secretDeny,
+                          "全域 metadata allow 排在秘密 deny 之後的話，秘密路徑會變成可讀")
+    }
+
+    /// exec 白名單的每個項目都要自動附帶「可讀該檔」——**能 exec 不等於能讀**，
+    /// 載入器讀不到 binary 本身就起不來（真機日誌：deny file-read-data /bin/cat）。
+    func testExecAllowlistImpliesReadAccess() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: ["/bin/cat", "/usr/bin/touch"], workspace: "/ws", deniedSubpaths: [])
+        XCTAssertTrue(profile.contains("(allow file-read* (literal \"/bin/cat\") (literal \"/usr/bin/touch\"))"))
+        // 以及所在目錄（去重、排序，避免同目錄的多個工具產生重複規則）
+        XCTAssertTrue(profile.contains("(allow file-read-data (literal \"/bin\") (literal \"/usr/bin\"))"),
+                      "實際：\(profile)")
+    }
+
+    /// 同目錄的多個工具不該產生重複的父目錄規則。
+    func testExecParentDirectoriesAreDeduplicated() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: ["/bin/cat", "/bin/echo"], workspace: "/ws", deniedSubpaths: [])
+        let occurrences = profile.components(separatedBy: "(literal \"/bin\")").count - 1
+        XCTAssertEqual(occurrences, 1, "父目錄 /bin 只該出現一次")
+    }
+
+    /// 根目錄只給 `literal`，不可寫成 `(subpath "/")`——那等於把整台機器打開，
+    /// 而且它看起來只是「多放一條讀取規則」。
+    func testRootIsLiteralNotSubpath() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: [])
+        XCTAssertTrue(profile.contains("(allow file-read-data (literal \"/\"))"))
+        XCTAssertFalse(profile.contains("(subpath \"/\")"), "根目錄不可用 subpath")
+    }
+
+    /// 可以關掉——驗證腳本要用它做對照實驗：關掉之後正向案例應該連跑都跑不起來。
+    /// 若關掉仍跑得起來，代表這組路徑是多餘的，該拿掉（寧可少放）。
+    func testRuntimeMinimumCanBeDisabledForControlExperiment() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: ["/bin/cat"], workspace: "/ws", deniedSubpaths: [],
+            includeRuntimeMinimum: false)
+        XCTAssertFalse(profile.contains("/usr/lib"))
+        XCTAssertTrue(profile.contains("(allow file-read* (subpath \"/ws\"))"),
+                      "關掉 runtime 最小集合不該影響工作目錄規則")
+    }
+
+    /// runtime 的**子路徑**一律只給讀。寫入權限只在工作目錄，以及
+    /// `/dev/dtracehelper` 這個逐一具名的例外（它是讀寫開啟的裝置節點）。
+    func testRuntimeSubpathsAreReadOnly() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: [])
+        for runtime in SbplProfileBuilder.runtimeReadSubpaths {
+            XCTAssertFalse(profile.contains("(allow file-write* (subpath \"\(runtime)\"))"),
+                           "\(runtime) 不該可寫")
+        }
+    }
+
+    /// 唯一的寫入例外必須是**具名的單一檔案**，不可是子路徑。
+    /// 真機日誌顯示 /dev/dtracehelper 是讀寫開啟的；只放讀那一半的症狀跟完全沒放一樣，
+    /// 但 profile 裡看起來「已經處理過了」。
+    func testOnlyDtracehelperIsWritableOutsideWorkspace() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: [])
+        let writes = profile.split(separator: "\n").filter { $0.contains("allow file-write") }
+        XCTAssertEqual(writes.count, 2, "工作目錄 + dtracehelper，就這兩條：\(writes)")
+        XCTAssertTrue(writes.contains { $0.contains("(subpath \"/ws\")") })
+        XCTAssertTrue(writes.contains { $0.contains("(literal \"/dev/dtracehelper\")") })
+    }
+
     /// **deny 必須排在 allow 之後**：sbpl 是最後一條相符的規則勝出。
     /// 順序顛倒的話，「秘密路徑就在工作目錄底下」這個最重要的情況會被 allow 蓋過去。
     func testDenyRulesComeAfterAllowRules() throws {

@@ -11,6 +11,9 @@ let package = Package(
         .library(name: "MemoryStore", targets: ["MemoryStore"]),
         .library(name: "CloudRouter", targets: ["CloudRouter"]),
         .library(name: "ActionExecutor", targets: ["ActionExecutor"]),
+        // 印 sbpl profile 的小工具：讓 scripts/sandbox-verify.sh 驗的是 app 真正會用的
+        // 那份 profile，而不是腳本自己拼一份長得很像的。
+        .executable(name: "copartner-sbpl", targets: ["SbplTool"]),
     ],
     dependencies: [
         // 註：全域熱鍵（V2-B.5）的 KeyboardShortcuts 只有 app target 用得到，由
@@ -26,6 +29,7 @@ let package = Package(
         .target(name: "MemoryStore", dependencies: ["CoPartnerCore"]),
         .target(name: "CloudRouter", dependencies: ["CoPartnerCore"]),
         .target(name: "ActionExecutor", dependencies: ["CoPartnerCore"]),
+        .executableTarget(name: "SbplTool", dependencies: ["ActionExecutor"]),
         .testTarget(name: "CoPartnerKitTests", dependencies: ["CoPartnerCore", "CaptureEngine", "ScriptNarrator", "CloudRouter", "MemoryStore", "ActionExecutor"]),
     ]
 )
