@@ -49,7 +49,13 @@ struct MenuBarContentView: View {
                     Text(coordinator.captureSummary).lineLimit(1)
                     Text(coordinator.screenTextSummary).lineLimit(2)
                     Text(coordinator.takeoverSummary).lineLimit(1)
-                    Text(coordinator.xpcSummary).lineLimit(3)   // requirement 原文自成一行
+                    // 自檢輸出是**驗收證據**，不是狀態列裝飾——寧可佔三行也不能截斷。
+                    // `fixedSize(vertical:)` 才會真的讓它長高；只給 lineLimit 的話
+                    // 容器仍會把它壓成一行再加省略號（真機上就這樣吃掉了關鍵欄位兩次）。
+                    Text(coordinator.xpcSummary)
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)      // 可複製，方便貼回報告
                     Text(coordinator.localModelSummary).lineLimit(1)
                 }
                 .font(.caption2).foregroundStyle(.tertiary)
