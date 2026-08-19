@@ -245,6 +245,42 @@ final class ActionExecutorSandboxTests: XCTestCase {
                        "不可無條件開放 sysctl-read")
     }
 
+    /// **這條守住整個放寬的前提**：全域 `(allow file-read-metadata)` 之下，
+    /// 秘密路徑的 deny 仍然必須勝出。
+    ///
+    /// sbpl 是最後一條相符的規則勝出，所以 deny 排在後面就蓋得過全域 allow。
+    /// 若哪天有人為了「整理」把 allow 移到最後，秘密路徑會安靜地變成可讀——
+    /// 而 profile 看起來完全正常。
+    func testSecretDenyOverridesGlobalMetadataAllow() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: ["/ws/.secrets"])
+        let lines = profile.split(separator: "\n").map(String.init)
+        let metadataAllow = try XCTUnwrap(lines.firstIndex(of: "(allow file-read-metadata)"))
+        let secretDeny = try XCTUnwrap(
+            lines.firstIndex { $0.contains("(deny file-read* (subpath \"/ws/.secrets\"))") })
+        XCTAssertLessThan(metadataAllow, secretDeny,
+                          "全域 metadata allow 排在秘密 deny 之後的話，秘密路徑會變成可讀")
+    }
+
+    /// exec 白名單的每個項目都要自動附帶「可讀該檔」——**能 exec 不等於能讀**，
+    /// 載入器讀不到 binary 本身就起不來（真機日誌：deny file-read-data /bin/cat）。
+    func testExecAllowlistImpliesReadAccess() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: ["/bin/cat", "/usr/bin/touch"], workspace: "/ws", deniedSubpaths: [])
+        XCTAssertTrue(profile.contains("(allow file-read* (literal \"/bin/cat\") (literal \"/usr/bin/touch\"))"))
+        // 以及所在目錄（去重、排序，避免同目錄的多個工具產生重複規則）
+        XCTAssertTrue(profile.contains("(allow file-read-data (literal \"/bin\") (literal \"/usr/bin\"))"),
+                      "實際：\(profile)")
+    }
+
+    /// 同目錄的多個工具不該產生重複的父目錄規則。
+    func testExecParentDirectoriesAreDeduplicated() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: ["/bin/cat", "/bin/echo"], workspace: "/ws", deniedSubpaths: [])
+        let occurrences = profile.components(separatedBy: "(literal \"/bin\")").count - 1
+        XCTAssertEqual(occurrences, 1, "父目錄 /bin 只該出現一次")
+    }
+
     /// 根目錄只給 `literal`，不可寫成 `(subpath "/")`——那等於把整台機器打開，
     /// 而且它看起來只是「多放一條讀取規則」。
     func testRootIsLiteralNotSubpath() throws {

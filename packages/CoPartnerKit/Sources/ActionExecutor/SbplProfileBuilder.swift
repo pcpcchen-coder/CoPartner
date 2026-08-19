@@ -48,16 +48,37 @@ public struct SbplProfileBuilder: Sendable {
     /// 這個區別很重要：沙箱規則多放一條看不見代價，所以每一條都要說得出
     /// 「哪一次執行、哪一行日誌」要求了它。
     public static let runtimeExtraRules = [
-        // Sandbox: cat(…) deny(1) sysctl-read security.mac.lockdown_mode_state
-        // Sandbox: cat(…) deny(1) sysctl-read kern.bootargs
-        // libSystem 起始化時讀的兩個 sysctl。**逐項具名**而不是開放整個 sysctl-read——
-        // 後者會洩漏一堆系統狀態，而我們只需要這兩個。
-        "(allow sysctl-read (sysctl-name \"kern.bootargs\") "
-            + "(sysctl-name \"security.mac.lockdown_mode_state\"))",
+        // libSystem / 語系起始化讀的 sysctl。**逐項具名**而不是開放整個 sysctl-read——
+        // 後者會洩漏一堆系統狀態，而我們只需要這幾個。清單來自兩輪真機日誌：
+        //   deny(1) sysctl-read kern.bootargs / security.mac.lockdown_mode_state
+        //   deny(1) sysctl-read kern.osvariant_status / hw.ephemeral_storage
+        //   deny(1) sysctl-read kern.osproductversion / kern.iossupportversion
+        "(allow sysctl-read "
+            + "(sysctl-name \"kern.bootargs\") "
+            + "(sysctl-name \"security.mac.lockdown_mode_state\") "
+            + "(sysctl-name \"kern.osvariant_status\") "
+            + "(sysctl-name \"hw.ephemeral_storage\") "
+            + "(sysctl-name \"kern.osproductversion\") "
+            + "(sysctl-name \"kern.iossupportversion\"))",
         // Sandbox: cat(…) deny(1) file-read-data /
         // 路徑解析要讀根目錄本身。**只給根目錄這一個 literal**，
         // 不是 (subpath "/")——那等於把整台機器打開。
         "(allow file-read-data (literal \"/\"))",
+        // ⚠️ 這一條是**刻意的放寬**，值得單獨說明。
+        //
+        // 真機日誌顯示路徑解析會對一長串祖先目錄要 metadata：
+        //   deny(1) file-read-metadata /var  /tmp  /usr/share/locale/zh_TW.UTF-8/LC_CTYPE
+        // 逐條補是補不完的——`/tmp` 是 `/private/tmp` 的符號連結、語系檔位置隨地區變，
+        // 而每漏一條的症狀都是「動作莫名其妙失敗」。
+        //
+        // 取捨：**metadata 不是內容**。它洩漏的是「這個路徑存不存在、多大」，
+        // 不是檔案裡寫什麼。威脅模型要擋的是秘密**內容**外洩與破壞性寫入，
+        // 兩者都不受這條影響。
+        //
+        // 而且秘密路徑仍然完全受保護：deny 規則用的是 `file-read*`（含 metadata）
+        // 且**排在最後**——最後一條相符的規則勝出，所以它蓋得過這條。
+        // `testSecretDenyOverridesGlobalMetadataAllow` 釘住這個關係。
+        "(allow file-read-metadata)",
     ]
 
     public func profile(execAllowlist: [String],
@@ -76,6 +97,18 @@ public struct SbplProfileBuilder: Sendable {
         if !execPaths.isEmpty {
             let literals = execPaths.map { "(literal \(Self.quoted($0)))" }.joined(separator: " ")
             lines.append("(allow process-exec \(literals))")
+            // 真機日誌：`deny(1) file-read-data /bin/cat` 與 `deny(1) file-read-data /bin`。
+            // **能 exec 不等於能讀**——載入器要讀得到 binary 本身，以及它所在的目錄。
+            // 這兩條因此綁在 exec 白名單上自動產生，而不是另外維護一份清單：
+            // 兩份清單遲早會不同步，而不同步的症狀是「某個工具就是跑不起來」。
+            lines.append("(allow file-read* \(literals))")
+            let parents = Set(execPaths.map { ($0 as NSString).deletingLastPathComponent })
+                .sorted()
+                .map { "(literal \(Self.quoted($0)))" }
+                .joined(separator: " ")
+            if !parents.isEmpty {
+                lines.append("(allow file-read-data \(parents))")
+            }
         }
         if includeRuntimeMinimum {
             // 放在工作目錄規則之前：它們彼此不重疊，順序不影響結果，
