@@ -144,9 +144,11 @@ final class XPCActionPerformer {
         defer { connection.invalidate() }
 
         let replyData: Data = try await withCheckedThrowingContinuation { continuation in
-            // ⚠️ reply、錯誤處理器、中斷、失效**四條路都可能觸發**，而
-            // CheckedContinuation 重複 resume 會直接 crash。用 box 保證只 resume 一次。
-            let box = ContinuationBox(continuation)
+            // ⚠️ reply、錯誤處理器、中斷、失效、逾時**五條路都可能觸發**，各自在不同佇列上，
+            // 而 CheckedContinuation 重複 resume **不是回錯值，是直接 crash**。
+            // `SingleCompletion` 在 CoPartnerKit 裡，因此那個保證有 CI 的多執行緒測試撞過——
+            // 這種競態靠 dogfood 幾乎抓不到，真機上只會表現成「偶爾閃退」。
+            let box = SingleCompletion<Data> { continuation.resume(with: $0) }
             // ⏱ 逾時保險。service 若在**啟動時**就崩潰並被 launchd 反覆重啟，
             // reply、錯誤處理器、中斷處理器可能一個都不會來——真機上就這樣讓自檢
             // 永遠卡在「檢測中…」。沒有回應本身也是一種結果，必須報得出來。
@@ -181,28 +183,5 @@ final class XPCActionPerformer {
         } catch {
             throw Failure.badReply("回覆無法解碼：\(error)")
         }
-    }
-}
-
-/// 保證 continuation 只被 resume 一次。
-///
-/// XPC 的回呼在任意佇列上進來，而 reply 與中斷處理器可能競爭——
-/// 重複 resume 不是回錯值，是直接 crash。
-private final class ContinuationBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<Data, Error>?
-
-    init(_ continuation: CheckedContinuation<Data, Error>) {
-        self.continuation = continuation
-    }
-
-    func succeed(_ data: Data) { take()?.resume(returning: data) }
-    func fail(_ error: Error) { take()?.resume(throwing: error) }
-
-    private func take() -> CheckedContinuation<Data, Error>? {
-        lock.lock(); defer { lock.unlock() }
-        let c = continuation
-        continuation = nil
-        return c
     }
 }
