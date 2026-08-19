@@ -213,6 +213,15 @@ final class ActionExecutorSandboxTests: XCTestCase {
         }
     }
 
+    /// runtime 路徑一律是**絕對路徑**且通得過 sanitize——這組是寫死在原始碼裡的，
+    /// 打錯字不會有人發現，profile 照樣產得出來、只是那條規則永遠不匹配。
+    func testRuntimePathsAreWellFormed() throws {
+        for runtime in SbplProfileBuilder.runtimeReadSubpaths {
+            XCTAssertEqual(try SbplProfileBuilder.sanitize(runtime), runtime,
+                           "runtime 路徑本身就該是正規化後的形式：\(runtime)")
+        }
+    }
+
     /// 可以關掉——驗證腳本要用它做對照實驗：關掉之後正向案例應該連跑都跑不起來。
     /// 若關掉仍跑得起來，代表這組路徑是多餘的，該拿掉（寧可少放）。
     func testRuntimeMinimumCanBeDisabledForControlExperiment() throws {

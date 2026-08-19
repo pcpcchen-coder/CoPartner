@@ -53,9 +53,25 @@ echo
 
 pass=0; fail=0; invalid=0
 
-show_stderr() {
+# 為什麼不能只靠子程序的 stderr：
+# `(deny default)` 連**寫到終端機**都擋，所以 dyld 抱怨的那句話根本吐不出來，
+# 只剩 SIGABRT。真機第一輪就是這樣——ERRLOG 全空。
+# 沙箱的拒絕紀錄在**統一日誌**裡，那條路不依賴子程序有沒有辦法開口。
+show_diagnostics() {
   if [ -s "${ERRLOG}" ]; then
     echo "        stderr: $(head -c 400 "${ERRLOG}" | tr '\n' ' ')"
+  else
+    echo "        stderr: （空——沙箱可能連寫終端機都擋掉了）"
+  fi
+  local denials
+  denials="$(log show --last 20s --style compact \
+              --predicate 'eventMessage CONTAINS "deny"' 2>/dev/null \
+             | grep -vi 'sandbox-verify' | tail -8)"
+  if [ -n "${denials}" ]; then
+    echo "        統一日誌裡的拒絕紀錄："
+    echo "${denials}" | sed 's/^/          /'
+  else
+    echo "        統一日誌：20 秒內沒有 deny 紀錄（可能需要 sudo，或訊息不含 deny 字樣）"
   fi
 }
 
@@ -71,7 +87,7 @@ if sandboxed "${ALLOWED_CAT}" "${WS}/hello.txt"; then
 else
   rc=$?
   echo "  ❌ 讀工作目錄內的檔案 — 沙箱內失敗 (rc=${rc})"
-  show_stderr
+  show_diagnostics
   baseline_ok=0
   fail=$((fail+1))
 fi
@@ -81,7 +97,7 @@ if sandboxed "${ALLOWED_TOUCH}" "${WS}/created"; then
 else
   rc=$?
   echo "  ❌ 寫工作目錄內的檔案 — 沙箱內失敗 (rc=${rc})"
-  show_stderr
+  show_diagnostics
   baseline_ok=0
   fail=$((fail+1))
 fi

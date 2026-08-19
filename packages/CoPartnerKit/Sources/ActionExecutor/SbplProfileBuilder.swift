@@ -34,9 +34,13 @@ public struct SbplProfileBuilder: Sendable {
     /// 原則是**寧可少放**——正向測試失敗看得見，多放的權限看不見。
     /// 只在正向測試證明必要時才加，不要為了「看起來會動」預先放寬。
     public static let runtimeReadSubpaths = [
-        "/usr/lib",           // dyld、共用快取、系統 dylib
+        "/usr/lib",           // dyld 本體、系統 dylib
         "/System/Library",    // 框架
-        "/private/var/db/dyld",
+        "/private/var/db/dyld",   // 舊版 dyld 共用快取位置
+        // macOS 13 之後 dyld 共用快取搬進 Cryptex：舊路徑還在，但快取不在那裡了。
+        // 這是第二輪的**單一假設**——真機第一輪所有東西都在啟動時 SIGABRT，
+        // 症狀與「對映不到共用快取」相符。若這條不對，統一日誌會直說少了什麼。
+        "/System/Volumes/Preboot/Cryptexes/OS/System/Library/dyld",
     ]
 
     public func profile(execAllowlist: [String],
