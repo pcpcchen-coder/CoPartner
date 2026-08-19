@@ -345,14 +345,27 @@ final class ActionExecutorSandboxTests: XCTestCase {
                       "關掉 runtime 最小集合不該影響工作目錄規則")
     }
 
-    /// runtime 路徑只給**讀**，不給寫。寫入權限一律只在工作目錄。
-    func testRuntimePathsAreReadOnly() throws {
+    /// runtime 的**子路徑**一律只給讀。寫入權限只在工作目錄，以及
+    /// `/dev/dtracehelper` 這個逐一具名的例外（它是讀寫開啟的裝置節點）。
+    func testRuntimeSubpathsAreReadOnly() throws {
         let profile = try SbplProfileBuilder().profile(
             execAllowlist: [], workspace: "/ws", deniedSubpaths: [])
         for runtime in SbplProfileBuilder.runtimeReadSubpaths {
             XCTAssertFalse(profile.contains("(allow file-write* (subpath \"\(runtime)\"))"),
                            "\(runtime) 不該可寫")
         }
+    }
+
+    /// 唯一的寫入例外必須是**具名的單一檔案**，不可是子路徑。
+    /// 真機日誌顯示 /dev/dtracehelper 是讀寫開啟的；只放讀那一半的症狀跟完全沒放一樣，
+    /// 但 profile 裡看起來「已經處理過了」。
+    func testOnlyDtracehelperIsWritableOutsideWorkspace() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/ws", deniedSubpaths: [])
+        let writes = profile.split(separator: "\n").filter { $0.contains("allow file-write") }
+        XCTAssertEqual(writes.count, 2, "工作目錄 + dtracehelper，就這兩條：\(writes)")
+        XCTAssertTrue(writes.contains { $0.contains("(subpath \"/ws\")") })
+        XCTAssertTrue(writes.contains { $0.contains("(literal \"/dev/dtracehelper\")") })
     }
 
     /// **deny 必須排在 allow 之後**：sbpl 是最後一條相符的規則勝出。

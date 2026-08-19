@@ -102,8 +102,13 @@ public struct SbplProfileBuilder: Sendable {
         // 且**排在最後**——最後一條相符的規則勝出，所以它蓋得過這條。
         // `testSecretDenyOverridesGlobalMetadataAllow` 釘住這個關係。
         "(allow file-read-metadata)",
-        // 每個程序啟動時都會開的東西（真機日誌：deny file-read-data /dev/dtracehelper）。
+        // 每個程序啟動時都會開的東西。真機日誌先出現 read、放行後又出現 write：
+        //   deny(1) file-read-data /dev/dtracehelper
+        //   deny(1) file-write-data /dev/dtracehelper
+        // 它是**讀寫**開啟的。只放讀那一半的症狀跟完全沒放一樣——程式照樣起不來，
+        // 但 profile 裡看起來「已經處理過 dtracehelper 了」。
         "(allow file-read* (literal \"/dev/dtracehelper\"))",
+        "(allow file-write* (literal \"/dev/dtracehelper\"))",
         // 語系資料要讀**內容**，不只 metadata（deny file-read-data /usr/share/locale/C.UTF-8/LC_CTYPE）。
         // 給整個 locale 目錄而非逐一列舉：語系檔會隨系統地區設定變，逐條補補不完，
         // 而它們是唯讀的公開系統資料，放寬的代價很小。
