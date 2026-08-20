@@ -51,11 +51,52 @@ final class ExecutorService: NSObject, ExecutorXPCProtocol {
                 verifiesCallerSignature: enforced,
                 callerVerificationDetail: CallerVerification.describe(callerVerification)))
 
-        case .shell, .readFile, .writeFile:
-            // 誠實回報：收到了、解得開、但**沒有執行**。
-            // 主 app 端會把這個回覆轉成 throw，所以 HUD 不會顯示「已執行」。
-            return .acknowledgedNotExecuted(
-                detail: "XPC 骨架：service 尚未具備執行能力（第 ③④ 段）")
+        case let .shell(argv, workspace):
+            // ⬇️ 第 53.5 段翻開 willExecuteActions 之後，這個 guard 才會放行。
+            //    在那之前，下面的執行程式碼一次都不會跑。
+            guard Self.willExecuteActions else {
+                return .acknowledgedNotExecuted(
+                    detail: "service 尚未啟用執行能力（backlog step 53.5）")
+            }
+            return execute(argv: argv, workspace: workspace)
+
+        case .readFile, .writeFile:
+            // **刻意不支援。** service 若直接讀寫檔案就完全繞過沙箱——
+            // 那等於把 profile 的意義拿掉，而且是靜默拿掉：功能會正常運作，
+            // 只是不再有任何限制。要沙箱化檔案動作得另外設計，不該混在
+            // 「第一次真的執行」這一段裡。
+            return .rejected(reason: "檔案動作尚未接線：直接讀寫會繞過沙箱，需獨立設計")
+        }
+    }
+
+    /// 真的執行（🔒 第 53.5 段開啟前不會被呼叫）。
+    private func execute(argv: [String], workspace: SandboxWorkspace) -> ExecutionOutcome {
+        // 第二道 exec 白名單檢查。sbpl 本身也會擋，但兩道的失敗模式不同：
+        // profile 若因路徑寫錯而整條規則不匹配（真機踩過），沙箱可能放行；
+        // 這裡是純值比對，不受路徑解析影響。
+        guard workspace.permitsExecuting(argv) else {
+            return .rejected(reason: "命令不在 exec 白名單內：\(argv.first ?? "(空)")")
+        }
+        let profile: String
+        do {
+            profile = try SbplProfileBuilder().profile(
+                execAllowlist: workspace.execAllowlist,
+                workspace: workspace.root,
+                deniedSubpaths: workspace.deniedSubpaths)
+        } catch {
+            // profile 產不出來就**不執行**。「產不出來所以不套沙箱」是絕對不可以的退路。
+            return .rejected(reason: "無法產生 sandbox profile：\(error)")
+        }
+        do {
+            let output = try SandboxedCommandRunner().run(
+                argv: argv, profile: profile,
+                workspaceRoot: workspace.root, timeout: .seconds(30))
+            return .executed(ExecutionReport(
+                disposition: String(describing: output.disposition),
+                didExecute: output.disposition.didExecute,
+                stdout: output.stdout, stderr: output.stderr))
+        } catch {
+            return .rejected(reason: "執行失敗：\(error)")
         }
     }
 }

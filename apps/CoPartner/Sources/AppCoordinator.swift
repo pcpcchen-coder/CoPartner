@@ -178,12 +178,20 @@ final class AppCoordinator: ObservableObject {
             // generation 只是稽核關聯用；真正的世代驗證在 execute 裡（I7）。
             let performer = xpcPerformer
             let generation = handoffGeneration.current
+            // 沙箱設定由**本地**產生：工作目錄來自本機政策，exec 白名單由 contract 的
+            // 工具名稱去查一張寫死的表（`SandboxWorkspace.toolBinaries`）。
+            // 模型提議裡的任何路徑都不會影響它——那是沙箱有沒有意義的分水嶺。
+            let workspace = SandboxWorkspace.forContract(
+                allowedTools: cleanEnvelope.takeover.allowedTools,
+                root: Self.sandboxWorkspaceRoot(),
+                deniedSubpaths: Self.secretSubpaths())
             actionExecutor = ActionExecutor(
                 clock: handoffGeneration,
                 policy: .from(contract: cleanEnvelope.takeover),
                 allowlist: Self.defaultPathAllowlist(),
                 performer: { action in
-                    try await performer.perform(action, generation: generation)
+                    try await performer.perform(action, generation: generation,
+                                                workspace: workspace)
                 })
             let router = cloudRouter
             handoffTask = Task { [weak self] in
@@ -370,6 +378,24 @@ final class AppCoordinator: ObservableObject {
             takeoverSummary = "接手：未執行 \(action.kind.summary) — \(reason)"
         }
         takeoverModel?.finishExecution()
+    }
+
+    /// 沙箱工作目錄。**唯一可寫的地方**。
+    /// 刻意放在 app 自己的 Application Support 底下而不是使用者的文件夾——
+    /// 沙箱內的動作出錯時，破壞範圍限縮在一個我們自己建的目錄裡。
+    private static func sandboxWorkspaceRoot() -> String {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory())
+        let root = base.appendingPathComponent("CoPartner/Sandbox", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root.path
+    }
+
+    /// 即使在工作目錄底下也要拒絕的路徑（威脅模型 T5 秘密路徑）。
+    private static func secretSubpaths() -> [String] {
+        let home = NSHomeDirectory()
+        return ["\(home)/.ssh", "\(home)/Library/Keychains", "\(home)/.aws"]
     }
 
     /// 路徑白名單（I5）。目前給保守的預設值；使用者可設定的版本待做。
