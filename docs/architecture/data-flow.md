@@ -57,14 +57,20 @@ sequenceDiagram
                 U-->>HUD: 決定
             end
             App->>X: 已核准的結構化 argv
-            X-->>App: 結果（目前一律「收到但沒做」）
+            X->>X: sandbox-exec -f profile + posix_spawn（唯讀工具白名單）
+            X-->>App: ExecutionReport（disposition / didExecute / stdout / stderr）
         end
     end
     Note over U,X: ⌃⌥⌘. 隨時可撥世代時鐘 → 串流斷、在途 token 全失效
 ```
 
-⚠️ 圖中最後一步目前**刻意**是「收到但沒做」：執行能力尚未開啟（backlog step 53.5）。
-佔位一律 throw、絕不靜默假裝成功——否則後面每一次驗收都建立在一個假的成功上。
+⚠️ 最後一步從 2026-08-20（step 53.5）起**會真的執行**。在那之前它一律回
+「收到但沒做」而且客戶端一律 throw——佔位絕不靜默假裝成功，否則後面每一次驗收
+都建立在一個假的成功上。同樣的理由讓「已執行」不能只看 `didExecute`：
+沙箱擋掉讀取時命令照樣會正常結束，要看 stdout 裡真的有東西才算數。
+
+雲端來源（圖中的 `C`）目前仍是 🔒——真 SSE 尚未接線，因此驗收用的是一個
+**本地合成提議**（選單裡的「執行測試」），走的路徑與圖中完全相同。
 
 ## 信任邊界
 

@@ -22,7 +22,9 @@ final class ServiceDelegate: NSObject, NSXPCListenerDelegate {
     func listener(_ listener: NSXPCListener,
                   shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
         // 沒有驗證就不可以有執行能力（威脅模型 T7）。
-        // 第 ④ 段把 willExecuteActions 翻成 true 的那一刻，這裡自動開始拒絕未驗證的連線。
+        // step 53.5 把 willExecuteActions 翻成 true 之後，這條規則**已經生效**：
+        // 組不出 requirement 的組建（ad-hoc 簽章）現在會被這裡直接拒絕，
+        // 不需要有人記得回來改這裡——那正是把它寫成「事實」而非「開關」的用意。
         switch CallerVerification.decide(mode: callerVerification,
                                          serviceCanExecute: ExecutorService.willExecuteActions) {
         case .refuse(let reason):

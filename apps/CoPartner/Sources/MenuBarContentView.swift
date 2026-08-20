@@ -32,6 +32,10 @@ struct MenuBarContentView: View {
                 // 除錯入口：在任何東西真的執行之前，先看到完整的命令與 profile（step 53.4-B）。
                 // 送的是專屬的 dryRun kind，service 端那個分支裡沒有任何 spawn 呼叫。
                 Button("執行乾跑") { coordinator.runExecutionDryRun() }
+                // ⚠️ 這顆會**真的執行**（step 53.5 驗收用）。送的是本地合成提議，
+                // 但走的是與真提議完全相同的路徑——風險分級、HUD 確認、token、沙箱一個不少。
+                Button("執行測試") { coordinator.runExecutionSmokeTest() }
+                    .tint(.orange)
                 SettingsLink { Text("熱鍵…") }
                 Spacer()
                 Button("緊急停止") { coordinator.stopAll() }
@@ -123,7 +127,7 @@ struct MenuBarContentView: View {
             .padding(.top, 10)
             .padding(.bottom, 14)
         }
-        // 760：又多一顆除錯按鈕。按鈕被擠出畫面真機上重演過兩次，寧可先留寬。
-        .frame(width: 760)
+        // 840：又多一顆按鈕（執行測試）。按鈕被擠出畫面真機上重演過兩次，寧可先留寬。
+        .frame(width: 840)
     }
 }

@@ -3,8 +3,9 @@ import ActionExecutor
 
 // 🔒 真機膠水：實際的 `posix_spawn`（第 53.4-B 段）。CI 只保證編譯。
 //
-// **這個檔目前不會被呼叫**——`ExecutorService.willExecuteActions` 仍是 false，
-// 執行路徑在那個 guard 後面。第 53.5 段翻開那一行，這裡才會第一次真的跑。
+// **step 53.5 起這個檔會真的被呼叫**——`ExecutorService.willExecuteActions` 已翻成 true。
+// 在此之前它只被編譯、從未執行過，所以下面三點的每一點都還沒被真機證實過，
+// 只被推理與測試涵蓋過；真機上第一次出問題最可能就在這三點裡。
 //
 // 三個一定要做對的地方，做錯的後果都不是「失敗」而是更糟的東西：
 //

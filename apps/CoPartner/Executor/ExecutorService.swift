@@ -12,12 +12,22 @@ import ActionExecutor
 // 先讓它無害、再讓它有能力，中間任何一刻出錯都不會變成「誰都能叫它執行東西」。
 final class ExecutorService: NSObject, ExecutorXPCProtocol {
 
-    /// service 目前**有沒有執行能力**。第 ④ 段接上真執行時才會變 true。
+    /// service 目前**有沒有執行能力**。
     ///
     /// 這不是一個開關，是一個事實的陳述——`main.swift` 拿它去餵
     /// `CallerVerification.decide`，所以翻成 true 的那一刻，
     /// 未驗證的連線會**自動**開始被拒，不需要有人記得回來改別的地方。
-    static let willExecuteActions = false
+    ///
+    /// **2026-08-20（step 53.5）：翻成 true。** 這一行單獨成為一個改動，
+    /// 因為翻開執行能力若混在一大包程式碼裡，沒有人（包括作者）能真的審完。
+    /// 翻開前的門禁清單見 `docs/planning/session-handoff.md` §7.6.5，當時已全數打勾：
+    /// 雙向驗簽真機確認、sbpl profile 成對驗證 8 項全綠、路徑跳脫與符號連結解析、
+    /// 乾跑報告逐項核對過 argv／profile／環境變數。
+    ///
+    /// 翻開後的能力範圍**遠比「能執行指令」窄**：只有 shell、只有本地固定表裡的
+    /// 七個唯讀工具、只能寫沙箱工作目錄、斷網、家目錄關閉、秘密路徑另外 deny，
+    /// 而且每個動作仍需經本地風險分級與 HUD 人工確認。
+    static let willExecuteActions = true
 
     /// 呼叫者驗證狀態，由 `main.swift` 在啟動時決定後注入。
     private let callerVerification: CallerVerification.Mode
@@ -52,8 +62,8 @@ final class ExecutorService: NSObject, ExecutorXPCProtocol {
                 callerVerificationDetail: CallerVerification.describe(callerVerification)))
 
         case let .shell(argv, workspace):
-            // ⬇️ 第 53.5 段翻開 willExecuteActions 之後，這個 guard 才會放行。
-            //    在那之前，下面的執行程式碼一次都不會跑。
+            // ⬇️ step 53.5 起這個 guard 會放行。留著不是裝飾——它讓「有沒有執行能力」
+            //    始終是一個可以在一行內翻回去的事實，出事時的第一動作就是把它翻回 false。
             guard Self.willExecuteActions else {
                 return .acknowledgedNotExecuted(
                     detail: "service 尚未啟用執行能力（backlog step 53.5）")
