@@ -24,7 +24,10 @@ import CoPartnerCore
 public struct ExecutionRequest: Codable, Sendable, Equatable {
     /// 可走沙箱路徑的動作種類。**沒有** shell 字串、**沒有** UI 動作——理由見檔頭。
     public enum Kind: Codable, Sendable, Equatable {
-        case shell(argv: [String])
+        /// shell 類動作。**沙箱參數與 argv 綁在同一個 case 裡**，
+        /// 因此「送了命令卻沒送沙箱設定」在型別上就組不出來——
+        /// 那種組合的後果是「不知道該套哪個 profile」，而預設值在這裡沒有安全的選項。
+        case shell(argv: [String], workspace: SandboxWorkspace)
         case readFile(path: String)
         case writeFile(path: String, contents: String)
         /// 除錯自檢：**不是一個動作**，service 只回報自己的身分資訊。
@@ -65,6 +68,26 @@ public enum ExecutionOutcome: Codable, Sendable, Equatable {
     case rejected(reason: String)
     /// 自檢回覆：證明 service 真的是**另一個程序**在跑。
     case diagnostics(SelfTestReport)
+    /// 真的執行過了（第 53.5 段開啟後才可能出現）。
+    case executed(ExecutionReport)
+}
+
+/// 一次真實執行的結果。
+public struct ExecutionReport: Codable, Sendable, Equatable {
+    /// 給人看的處置分類（succeeded / failed / timedOut …）。
+    public let disposition: String
+    /// **有沒有東西真的被執行**。稽核與 HUD 靠這個決定敢不敢說「已執行」——
+    /// 不可從 `disposition` 的字串去猜，那是給人看的，不是給程式判斷的。
+    public let didExecute: Bool
+    public let stdout: String
+    public let stderr: String
+
+    public init(disposition: String, didExecute: Bool, stdout: String, stderr: String) {
+        self.disposition = disposition
+        self.didExecute = didExecute
+        self.stdout = stdout
+        self.stderr = stderr
+    }
 }
 
 /// 自檢報告。刻意包含 pid 與 euid：
@@ -99,6 +122,9 @@ public struct SelfTestReport: Codable, Sendable, Equatable {
 public enum ExecutionWireError: Error, Equatable {
     /// UI 類動作不走沙箱路徑（威脅模型 R2）——它們該在主程序內以 AX/CGEvent 執行。
     case notSandboxable(String)
+    /// shell 動作沒帶沙箱設定。**不給預設值**：預設的工作目錄與 exec 白名單
+    /// 沒有一個安全的選項——太寬等於沒有沙箱，太窄等於靜默失敗。
+    case missingWorkspace(String)
 }
 
 extension ExecutionRequest {
@@ -106,11 +132,15 @@ extension ExecutionRequest {
     ///
     /// UI 類動作在這裡就**明確失敗**而不是被悄悄忽略：靜默忽略會讓 HUD 顯示「已執行」
     /// 而實際什麼都沒發生——那正是這個專案一路在避免的「假裝成功」。
-    public static func from(action: ProposedAction, generation: Int) throws -> ExecutionRequest {
+    public static func from(action: ProposedAction, generation: Int,
+                            workspace: SandboxWorkspace? = nil) throws -> ExecutionRequest {
         let kind: Kind
         switch action.kind {
         case let .shell(argv):
-            kind = .shell(argv: argv)
+            guard let workspace else {
+                throw ExecutionWireError.missingWorkspace(action.kind.summary)
+            }
+            kind = .shell(argv: argv, workspace: workspace)
         case let .readFile(path):
             kind = .readFile(path: path)
         case let .writeFile(path, contents):

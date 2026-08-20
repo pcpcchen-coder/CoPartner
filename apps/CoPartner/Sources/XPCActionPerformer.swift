@@ -44,12 +44,18 @@ final class XPCActionPerformer {
 
     /// 執行一個已核准的動作。
     /// 第 ① 段的正常結果是 throw `.notWired`——service 收得到、解得開、但不執行。
-    func perform(_ action: ProposedAction, generation: Int) async throws {
+    /// - Parameter workspace: 沙箱設定。**由主 app 從本地固定表產生**，
+    ///   任何來自模型的路徑都不會進到這裡（見 `SandboxWorkspace`）。
+    func perform(_ action: ProposedAction, generation: Int,
+                 workspace: SandboxWorkspace) async throws {
         let request: ExecutionRequest
         do {
-            request = try ExecutionRequest.from(action: action, generation: generation)
+            request = try ExecutionRequest.from(action: action, generation: generation,
+                                                workspace: workspace)
         } catch ExecutionWireError.notSandboxable(let summary) {
             throw ExecutionError.notSandboxable(summary)
+        } catch ExecutionWireError.missingWorkspace(let summary) {
+            throw ExecutionError.xpcUnavailable("缺少沙箱設定：\(summary)")
         }
 
         // 對稱規則（與 service 端的「沒有驗證就不可以有執行能力」成對）：
@@ -68,6 +74,13 @@ final class XPCActionPerformer {
             throw ExecutionError.xpcUnavailable("service 拒收：\(reason)")
         case .diagnostics:
             throw ExecutionError.xpcUnavailable("回覆型別不符（收到自檢報告）")
+        case .executed(let report):
+            // ⚠️ 判斷依據是 `didExecute` 這個布林，**不是** disposition 字串。
+            // 字串是給人看的；拿它來做程式判斷，改一次文案就會靜默失效。
+            guard report.didExecute else {
+                throw ExecutionError.xpcUnavailable("未執行：\(report.disposition)")
+            }
+            return
         }
     }
 
@@ -111,6 +124,7 @@ final class XPCActionPerformer {
         case .diagnostics(let report): return report
         case .acknowledgedNotExecuted(let detail): throw Failure.badReply(detail)
         case .rejected(let reason): throw Failure.badReply(reason)
+        case .executed: throw Failure.badReply("自檢不該收到執行結果")
         }
     }
 

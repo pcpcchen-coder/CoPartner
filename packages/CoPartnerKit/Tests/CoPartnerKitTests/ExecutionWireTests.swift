@@ -11,6 +11,22 @@ import ActionExecutor
 /// 後面 sbpl profile 寫得再嚴都沒有意義。
 final class ExecutionWireTests: XCTestCase {
 
+    /// 測試用的沙箱設定。真實情況由 `SandboxWorkspace.forContract` 從**本地固定表**產生。
+    private static let workspace = SandboxWorkspace(
+        root: "/tmp/ws", execAllowlist: ["/bin/cat"], deniedSubpaths: [])
+
+    /// shell 動作沒帶沙箱設定時必須明確失敗——預設值在這裡沒有安全的選項。
+    func testShellWithoutWorkspaceIsRejected() {
+        XCTAssertThrowsError(
+            try ExecutionRequest.from(action: ProposedAction(kind: .shell(argv: ["/bin/cat"])),
+                                      generation: 1)
+        ) { error in
+            guard case ExecutionWireError.missingWorkspace = error else {
+                return XCTFail("錯誤型別不對：\(error)")
+            }
+        }
+    }
+
     // MARK: - I4：沒有 shell 字串通道
 
     /// shell 類動作只能是 argv 陣列。這條測試釘住的是「service 端拿不到原料
@@ -18,8 +34,8 @@ final class ExecutionWireTests: XCTestCase {
     func testShellCarriesArgvArrayNotAString() throws {
         let request = try ExecutionRequest.from(
             action: ProposedAction(kind: .shell(argv: ["ls", "-la", "/tmp"])),
-            generation: 3)
-        guard case let .shell(argv) = request.kind else { return XCTFail("應為 shell kind") }
+            generation: 3, workspace: Self.workspace)
+        guard case let .shell(argv, _) = request.kind else { return XCTFail("應為 shell kind") }
         XCTAssertEqual(argv, ["ls", "-la", "/tmp"])
 
         // JSON 裡也必須是陣列——若哪天有人「順手」加了字串欄位，這條會紅。
@@ -33,9 +49,10 @@ final class ExecutionWireTests: XCTestCase {
     /// 不可在編解碼過程中被切開或被合併——那正是 shell injection 的入口。
     func testArgvElementsSurviveRoundTripIntact() throws {
         let nasty = ["echo", "a b; rm -rf /", "$(whoami)", "|", "&&"]
-        let request = ExecutionRequest(actionID: UUID(), generation: 1, kind: .shell(argv: nasty))
+        let request = ExecutionRequest(actionID: UUID(), generation: 1,
+                                       kind: .shell(argv: nasty, workspace: Self.workspace))
         let decoded = try ExecutionWire.decodeRequest(ExecutionWire.encode(request))
-        guard case let .shell(argv) = decoded.kind else { return XCTFail("應為 shell kind") }
+        guard case let .shell(argv, _) = decoded.kind else { return XCTFail("應為 shell kind") }
         XCTAssertEqual(argv, nasty, "argv 元素邊界不可在線上被改變")
     }
 
@@ -64,7 +81,6 @@ final class ExecutionWireTests: XCTestCase {
     /// 對照組：可沙箱化的三種動作都要過得去。
     func testSandboxableActionsAreAccepted() throws {
         let kinds: [ProposedAction.Kind] = [
-            .shell(argv: ["ls"]),
             .readFile(path: "/tmp/a.txt"),
             .writeFile(path: "/tmp/a.txt", contents: "x"),
         ]
@@ -113,6 +129,8 @@ final class ExecutionWireTests: XCTestCase {
                                         willExecuteActions: false,
                                         verifiesCallerSignature: false,
                                         callerVerificationDetail: "未啟用（無 Team ID）")),
+            .executed(ExecutionReport(disposition: "succeeded", didExecute: true,
+                                      stdout: "hi", stderr: "")),
         ]
         for outcome in outcomes {
             XCTAssertEqual(try ExecutionWire.decodeOutcome(ExecutionWire.encode(outcome)), outcome)
