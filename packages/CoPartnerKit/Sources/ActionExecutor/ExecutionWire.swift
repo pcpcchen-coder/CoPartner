@@ -30,6 +30,13 @@ public struct ExecutionRequest: Codable, Sendable, Equatable {
         case shell(argv: [String], workspace: SandboxWorkspace)
         case readFile(path: String)
         case writeFile(path: String, contents: String)
+        /// 乾跑：走**完全相同**的建構路徑（白名單檢查 → 產 profile → 組 spawn argv），
+        /// 但**不 spawn**。回報「會執行什麼」讓人先看過。
+        ///
+        /// 為什麼是專屬 kind 而不是 `shell` 上的一個旗標：旗標會有預設值，
+        /// 而預設值寫錯的方向是「以為在乾跑、其實執行了」。專屬 kind 沒有這個問題——
+        /// service 端 `dryRun` 那個分支裡**沒有任何 spawn 呼叫**，不是有但關著。
+        case dryRun(argv: [String], workspace: SandboxWorkspace)
         /// 除錯自檢：**不是一個動作**，service 只回報自己的身分資訊。
         ///
         /// 存在的理由是驗收：真的雲端傳輸接上之前，沒有任何辦法產生真提議，
@@ -70,6 +77,30 @@ public enum ExecutionOutcome: Codable, Sendable, Equatable {
     case diagnostics(SelfTestReport)
     /// 真的執行過了（第 53.5 段開啟後才可能出現）。
     case executed(ExecutionReport)
+    /// 乾跑結果：**什麼都沒執行**，只回報會執行什麼。
+    case dryRun(DryRunReport)
+}
+
+/// 乾跑報告——「如果真的執行，會發生什麼」的完整快照。
+public struct DryRunReport: Codable, Sendable, Equatable {
+    /// 白名單檢查過了嗎。沒過的話後面幾個欄位是空的（因為根本組不到那一步）。
+    public let allowedByAllowlist: Bool
+    public let rejectionReason: String?
+    /// 交給 `posix_spawn` 的**完整** argv，逐元素列出——
+    /// 印成一整行字串的話，帶空白的參數看起來會像兩個，那正好是最需要看清楚的地方。
+    public let spawnArguments: [String]
+    /// 完整的 sbpl profile 原文。
+    public let profile: String
+    public let environment: [String]
+
+    public init(allowedByAllowlist: Bool, rejectionReason: String?,
+                spawnArguments: [String], profile: String, environment: [String]) {
+        self.allowedByAllowlist = allowedByAllowlist
+        self.rejectionReason = rejectionReason
+        self.spawnArguments = spawnArguments
+        self.profile = profile
+        self.environment = environment
+    }
 }
 
 /// 一次真實執行的結果。

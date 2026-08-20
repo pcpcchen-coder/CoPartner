@@ -74,6 +74,8 @@ final class XPCActionPerformer {
             throw ExecutionError.xpcUnavailable("service 拒收：\(reason)")
         case .diagnostics:
             throw ExecutionError.xpcUnavailable("回覆型別不符（收到自檢報告）")
+        case .dryRun:
+            throw ExecutionError.xpcUnavailable("回覆型別不符（收到乾跑報告）")
         case .executed(let report):
             // ⚠️ 判斷依據是 `didExecute` 這個布林，**不是** disposition 字串。
             // 字串是給人看的；拿它來做程式判斷，改一次文案就會靜默失效。
@@ -119,12 +121,29 @@ final class XPCActionPerformer {
                               serviceVerification: verification)
     }
 
+    /// 乾跑：問 service「如果執行，會發生什麼」。**什麼都不會被執行。**
+    ///
+    /// 與 `perform` 不同，這裡不套「驗不了 service 身分就不送」的規則——
+    /// 乾跑送的是 `.dryRun` kind，service 端那個分支裡沒有任何 spawn 呼叫。
+    /// 診斷能力不該被安全規則鎖死，否則最需要看清楚的時候反而看不到。
+    func dryRun(argv: [String], workspace: SandboxWorkspace) async throws -> DryRunReport {
+        let request = ExecutionRequest(actionID: UUID(), generation: 0,
+                                       kind: .dryRun(argv: argv, workspace: workspace))
+        switch try await Self.exchange(request: request,
+                                       serviceRequirement: Self.serviceRequirement()) {
+        case .dryRun(let report): return report
+        case .rejected(let reason): throw Failure.badReply(reason)
+        default: throw Failure.badReply("乾跑收到非乾跑回覆")
+        }
+    }
+
     private static func report(from outcome: ExecutionOutcome) throws -> SelfTestReport {
         switch outcome {
         case .diagnostics(let report): return report
         case .acknowledgedNotExecuted(let detail): throw Failure.badReply(detail)
         case .rejected(let reason): throw Failure.badReply(reason)
         case .executed: throw Failure.badReply("自檢不該收到執行結果")
+        case .dryRun: throw Failure.badReply("自檢不該收到乾跑結果")
         }
     }
 
