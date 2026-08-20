@@ -6,8 +6,9 @@
 
 ### 真機里程碑
 - **M5 接手（進行中）**：computer-use 契約對齊、SSE 傳輸、接手 HUD、
-  執行端 XPC 骨架與雙向 code-signing 驗證、`sandbox-exec` profile 成對驗證（7 項全綠）。
-  🔒 剩 `posix_spawn` 接線與翻開執行開關。
+  執行端 XPC 骨架與雙向 code-signing 驗證、`sandbox-exec` profile 成對驗證（8 項全綠）、
+  `posix_spawn` 真執行接線。**執行開關已翻開**（2026-08-20）——門禁清單逐項打勾後，
+  app 第一次真的會執行沙箱內的命令。🔒 剩真雲端 SSE 來源與 UI/AX 執行端（53.6）。
 - **M4 本地敘事** ✅ 真機通過：FoundationModels 3B，1373–2388ms／step，
   關閉 Apple Intelligence 自動降級規則式且不中斷。
 - **M2 局部 OCR** ✅ 真機通過：改用 macOS Vision（不再依賴 sidecar），吞吐 18%（目標 ≤20%）。
@@ -20,6 +21,16 @@
 - 架構圖改用 Mermaid（`docs/architecture/`）：模組相依、程序拓樸、資料流、
   接手時序、信任邊界。純文字可 diff，GitHub 直接算圖。
 - 英文 `README.en.md`。
+- **執行能力（step 53.5）**：`ExecutorService.willExecuteActions` 翻成 `true`。
+  能力範圍刻意遠比「能執行指令」窄——只有 `shell`、只有本地固定表裡七個唯讀工具
+  （cat/ls/head/tail/wc/grep/find，**永遠不含 shell 本身**）、只能寫沙箱工作目錄、
+  斷網、家目錄關閉、秘密路徑另外 deny、檔案動作明確拒絕，而且每個動作仍需
+  本地風險分級與 HUD 人工確認。翻回 `false` 是出事時的第一動作，只需改一行。
+- 除錯入口「執行測試」：送一個**本地合成提議**走完整條接手鏈（風險分級 → HUD 確認 →
+  token → 全部閘門 → XPC → sbpl）。不是繞過閘門，只是把提議來源從雲端換成本地——
+  讓第一次真執行發生在完全受控的情況下，而不是在第一次接上雲端時。
+  驗收判定條件是「stdout 裡有那串隨機標記」，不是 `didExecute == true`：
+  沙箱擋掉讀取時 `cat` 照樣會結束、`didExecute` 照樣為真，stdout 卻是空的。
 
 ### Changed
 - 威脅模型 §6 從草稿升格為**已驗證**，並更正一個錯誤假設：內嵌 XPC service

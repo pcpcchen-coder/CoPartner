@@ -42,6 +42,20 @@ final class XPCActionPerformer {
         }
     }
 
+    /// 最近一次真執行的完整回報（stdout / stderr / 處置）。
+    ///
+    /// `ActionExecutor` 的 performer 契約回傳 `Void`——它只需要知道「成功或丟錯」，
+    /// 不該為了顯示而讓執行閘門去搬運輸出。但「已執行」四個字本身**不是證據**：
+    /// 沙箱擋掉讀取時 `cat` 一樣會結束、一樣可能被說成執行過。第一次真執行的驗收
+    /// 必須看得到 stdout 裡真的有檔案內容，所以在這裡留一份給 UI 讀。
+    /// 只保留最近一次，且不參與任何決策——純粹是給人看的證據。
+    private(set) var lastExecutionReport: ExecutionReport?
+
+    /// 丟掉上一次的回報。**開始新一輪之前一定要叫**——
+    /// 否則使用者在 HUD 按了「略過」時，畫面上會留著上一次的 stdout，
+    /// 看起來像是這一次執行過了。留著舊證據比沒有證據更糟。
+    func forgetLastExecutionReport() { lastExecutionReport = nil }
+
     /// 執行一個已核准的動作。
     /// 第 ① 段的正常結果是 throw `.notWired`——service 收得到、解得開、但不執行。
     /// - Parameter workspace: 沙箱設定。**由主 app 從本地固定表產生**，
@@ -77,6 +91,8 @@ final class XPCActionPerformer {
         case .dryRun:
             throw ExecutionError.xpcUnavailable("回覆型別不符（收到乾跑報告）")
         case .executed(let report):
+            // 先留證據再判斷：失敗的那次**更需要**看得到 stderr。
+            lastExecutionReport = report
             // ⚠️ 判斷依據是 `didExecute` 這個布林，**不是** disposition 字串。
             // 字串是給人看的；拿它來做程式判斷，改一次文案就會靜默失效。
             guard report.didExecute else {

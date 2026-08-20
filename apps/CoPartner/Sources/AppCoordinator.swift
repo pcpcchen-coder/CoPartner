@@ -372,6 +372,81 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
+    /// 送一個**合成提議**走完整條接手鏈（step 53.5 驗收用）。
+    ///
+    /// ⚠️ **這不是繞過確認閘門。** 它走的是與真提議**完全相同**的路徑：
+    /// 本地風險分級 → `TakeoverSessionModel` → HUD 人工確認 → 鑄造 `ApprovalToken`
+    /// → `ActionExecutor.execute`（token 驗證、工具白名單、路徑白名單、速率）
+    /// → XPC → sbpl 沙箱。差別只在提議的來源是本地寫死的，不是雲端。
+    ///
+    /// 存在的理由：真雲端傳輸還沒接，沒有它就無法驗證「第一次真的執行」。
+    /// 而第一次真執行發生在**完全受控**的情況下，比發生在第一次接上雲端時好得多。
+    func runExecutionSmokeTest() {
+        // 與 `previewHUD` 同一組條件：浮層只有一個，蓋掉真提議會讓使用者對著測試按下去。
+        guard takeoverModel == nil, pendingDecision == nil else {
+            takeoverSummary = "接手：進行中，測試已略過（避免蓋掉真提議）"
+            return
+        }
+        let root = Self.sandboxWorkspaceRoot()
+        let sample = (root as NSString).appendingPathComponent("smoke-test.txt")
+        let marker = "CoPartner 第一次真執行 \(UUID().uuidString)"
+        do {
+            try (marker + "\n").write(toFile: sample, atomically: true, encoding: .utf8)
+        } catch {
+            // 寫不進去就別跑：沙箱擋讀 vs 檔案根本不存在，兩者的 stdout 都是空的。
+            xpcSummary = "執行端：測試檔寫不進去（\(error)）"
+            return
+        }
+
+        let workspace = SandboxWorkspace.forContract(
+            allowedTools: ["bash"], root: root, deniedSubpaths: Self.secretSubpaths(),
+            closedRoots: [NSHomeDirectory()])
+        let performer = xpcPerformer
+        performer.forgetLastExecutionReport()      // 舊證據會讓「略過」看起來像「執行過」
+
+        session.beginIntervention()
+        var model = TakeoverSessionModel(policy: .confirmEach, generationClock: handoffGeneration)
+        model.begin()
+        takeoverModel = model
+        let generation = handoffGeneration.current
+        actionExecutor = ActionExecutor(
+            clock: handoffGeneration,
+            policy: SandboxPolicy(allowedTools: ["bash(sandboxed)"]),
+            allowlist: Self.defaultPathAllowlist(),
+            performer: { action in
+                try await performer.perform(action, generation: generation, workspace: workspace)
+            })
+
+        let proposal = ProposedAction(
+            kind: .shell(argv: ["/bin/cat", sample]),
+            rationale: "（本地合成提議，非雲端）讀一個測試檔，驗證沙箱執行鏈。")
+        takeoverSummary = "接手：測試提議已送出，等你在 HUD 確認"
+        xpcSummary = "執行端：等待 HUD 確認…"
+        handoffTask = Task { [weak self] in
+            guard let self else { return }
+            _ = await self.handle(proposal: proposal)
+            self.xpcSummary = Self.smokeTestVerdict(
+                report: self.xpcPerformer.lastExecutionReport, expecting: marker)
+            self.hudPanel.hide()
+            self.takeoverModel = nil
+            self.session.endIntervention()
+        }
+    }
+
+    /// 把真執行的回報轉成一句**可以拿來驗收的判定**。
+    ///
+    /// 判定條件刻意是「stdout 裡有那串隨機標記」，不是「didExecute 為 true」：
+    /// 沙箱擋掉讀取時 `cat` 照樣會結束，`didExecute` 照樣是 true，stdout 卻是空的。
+    /// 標記帶 UUID 是為了讓「這次真的讀到了」與「讀到上一次留下的東西」分得開。
+    private static func smokeTestVerdict(report: ExecutionReport?, expecting marker: String) -> String {
+        guard let report else { return "執行端：沒有執行回報（未執行或被擋下，見接手訊息）" }
+        let matched = report.stdout.contains(marker)
+        let head = matched ? "✅ 真執行成功" : "⚠️ 有回報但內容對不上"
+        return "執行端：\(head)・處置 \(report.disposition)"
+            + "\nstdout：\(report.stdout.isEmpty ? "（空）" : report.stdout)"
+            + (report.stderr.isEmpty ? "" : "\nstderr：\(report.stderr)")
+    }
+
     /// 把兩份乾跑報告寫成一個檔案。回傳路徑。
     private static func writeDryRunReport(allowed: DryRunReport, refused: DryRunReport,
                                           root: String) -> String {
