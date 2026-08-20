@@ -97,9 +97,10 @@ final class ExecutorService: NSObject, ExecutorXPCProtocol {
                                 rejectionReason: "無法產生 sandbox profile：\(error)",
                                 spawnArguments: [], profile: "", environment: [])
         }
-        // profilePath 用一個代表性的值：真跑時是每次新生的暫存檔名，
-        // 乾跑報告要看的是**其餘部分**的形狀，不是那個隨機字尾。
-        let placeholder = (workspace.root as NSString)
+        // 目錄取自 `workspace.profileDirectory`（與真執行同一個來源），
+        // 只有檔名用佔位符——真跑時那是每次新生的 UUID，乾跑要看的是路徑的**位置**，
+        // 不是那個隨機字尾。
+        let placeholder = (workspace.profileDirectory as NSString)
             .appendingPathComponent(".copartner-sandbox-<每次新生>.sb")
         let arguments = (try? SandboxedCommand(argv: argv, profilePath: placeholder,
                                                timeout: .seconds(30)).spawnArguments) ?? []
@@ -130,7 +131,7 @@ final class ExecutorService: NSObject, ExecutorXPCProtocol {
         do {
             let output = try SandboxedCommandRunner().run(
                 argv: argv, profile: profile,
-                workspaceRoot: workspace.root, timeout: .seconds(30))
+                workspace: workspace, timeout: .seconds(30))
             return .executed(ExecutionReport(
                 disposition: String(describing: output.disposition),
                 didExecute: output.disposition.didExecute,
