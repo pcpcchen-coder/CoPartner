@@ -29,6 +29,9 @@ struct MenuBarContentView: View {
                 // 除錯入口：真雲端傳輸接上前，唯一能驗證執行端 XPC 這條線的方式（step 53.1）。
                 // 送的是專屬的 selfTest kind，夾帶不了真動作。
                 Button("XPC 自檢") { coordinator.runXPCSelfTest() }
+                // 除錯入口：在任何東西真的執行之前，先看到完整的命令與 profile（step 53.4-B）。
+                // 送的是專屬的 dryRun kind，service 端那個分支裡沒有任何 spawn 呼叫。
+                Button("執行乾跑") { coordinator.runExecutionDryRun() }
                 SettingsLink { Text("熱鍵…") }
                 Spacer()
                 Button("緊急停止") { coordinator.stopAll() }
@@ -120,8 +123,7 @@ struct MenuBarContentView: View {
             .padding(.top, 10)
             .padding(.bottom, 14)
         }
-        // 680 而非 620：又多了兩顆除錯按鈕，橫排在 620 下已經逼到邊。
-        // 按鈕被擠出畫面這件事真機上重演過兩次，寧可先留寬。
-        .frame(width: 680)
+        // 760：又多一顆除錯按鈕。按鈕被擠出畫面真機上重演過兩次，寧可先留寬。
+        .frame(width: 760)
     }
 }

@@ -338,6 +338,74 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
+    /// 執行乾跑（step 53.4-B 除錯入口）。
+    ///
+    /// 在**任何東西真的執行之前**，先看到完整的命令、profile 與環境變數。
+    /// 跑兩個案例：一個白名單內、一個白名單外——只看放行的那個，
+    /// 證明不了拒絕路徑還在。
+    ///
+    /// 報告寫進檔案而不是塞進選單：profile 有二十幾行，塞進選單必然被截斷，
+    /// 而**被截掉的往往正是最該看的那段**（今天已經發生兩次）。
+    func runExecutionDryRun() {
+        xpcSummary = "執行端：乾跑中…"
+        let root = Self.sandboxWorkspaceRoot()
+        let workspace = SandboxWorkspace.forContract(
+            allowedTools: ["bash"], root: root, deniedSubpaths: Self.secretSubpaths())
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let allowed = try await self.xpcPerformer.dryRun(
+                    argv: ["/bin/cat", (root as NSString).appendingPathComponent("hello.txt")],
+                    workspace: workspace)
+                let refused = try await self.xpcPerformer.dryRun(
+                    argv: ["/bin/sh", "-c", "echo pwned"], workspace: workspace)
+                let path = Self.writeDryRunReport(allowed: allowed, refused: refused, root: root)
+                self.xpcSummary = "執行端：乾跑完成"
+                    + "・白名單內 \(allowed.allowedByAllowlist ? "放行" : "⚠️ 被拒")"
+                    + "・/bin/sh \(refused.allowedByAllowlist ? "⚠️ 竟然放行" : "已擋")"
+                    + "\n完整報告：\(path)"
+            } catch {
+                self.xpcSummary = "執行端：乾跑失敗（\(error)）"
+            }
+        }
+    }
+
+    /// 把兩份乾跑報告寫成一個檔案。回傳路徑。
+    private static func writeDryRunReport(allowed: DryRunReport, refused: DryRunReport,
+                                          root: String) -> String {
+        func section(_ title: String, _ report: DryRunReport) -> String {
+            var lines = ["## \(title)", "",
+                         "白名單：\(report.allowedByAllowlist ? "放行" : "拒絕")"]
+            if let reason = report.rejectionReason { lines.append("原因：\(reason)") }
+            if !report.spawnArguments.isEmpty {
+                lines.append("")
+                lines.append("posix_spawn 的 argv（逐元素，這是重點）：")
+                // 逐元素列出而非印成一行：帶空白的參數印成一行會看起來像兩個，
+                // 而那正好是最需要看清楚的地方。
+                for (i, argument) in report.spawnArguments.enumerated() {
+                    lines.append("  [\(i)] \(argument)")
+                }
+                lines.append("")
+                lines.append("環境變數：\(report.environment.joined(separator: "  "))")
+                lines.append("")
+                lines.append("sbpl profile：")
+                lines.append(report.profile)
+            }
+            return lines.joined(separator: "\n")
+        }
+        let text = ["# CoPartner 執行乾跑報告",
+                    "",
+                    "⚠️ 這份報告是「**如果**執行會發生什麼」。產生它的過程沒有執行任何東西。",
+                    "",
+                    section("案例 1：白名單內的命令", allowed),
+                    "",
+                    section("案例 2：白名單外的 /bin/sh（應被拒）", refused),
+                    ""].joined(separator: "\n")
+        let path = (root as NSString).appendingPathComponent("dry-run-report.md")
+        try? text.write(toFile: path, atomically: true, encoding: .utf8)
+        return path
+    }
+
     /// 顯示 HUD 並等使用者按鍵。
     private func awaitDecision(showing presentation: TakeoverHUDPresentation) async
         -> TakeoverHUDPresentation.Decision {

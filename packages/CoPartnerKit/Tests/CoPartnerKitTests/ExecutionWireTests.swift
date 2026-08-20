@@ -114,7 +114,10 @@ final class ExecutionWireTests: XCTestCase {
             ExecutionWire.encode(ExecutionRequest.selfTest()))
         switch decoded.kind {
         case .selfTest: break
-        case .shell, .readFile, .writeFile: XCTFail("自檢不可帶動作內容")
+        // 刻意逐一列出而不用 default：新增 kind 時這裡會編譯失敗，
+        // 強迫作者回來想「這個新種類算不算帶動作內容」。
+        // 用 default 的話新 kind 會被靜默歸類成「不帶動作」——那正是最危險的預設。
+        case .shell, .readFile, .writeFile, .dryRun: XCTFail("自檢不可帶動作內容")
         }
     }
 
@@ -182,6 +185,44 @@ final class ExecutionWireTests: XCTestCase {
         XCTAssertEqual(Array(kind.keys), ["selfTest"])
         XCTAssertEqual((kind["selfTest"] as? [String: Any])?.count, 0,
                        "無關聯值的 case 應編成空物件")
+    }
+
+    // MARK: - 乾跑（step 53.4-B）
+
+    /// 乾跑是**專屬 kind**，不是 `shell` 上的旗標。
+    /// 旗標會有預設值，而預設值寫錯的方向是「以為在乾跑、其實執行了」。
+    func testDryRunIsItsOwnKindNotAFlagOnShell() throws {
+        let request = ExecutionRequest(actionID: UUID(), generation: 0,
+                                       kind: .dryRun(argv: ["/bin/cat"], workspace: Self.workspace))
+        let decoded = try ExecutionWire.decodeRequest(ExecutionWire.encode(request))
+        switch decoded.kind {
+        case .dryRun: break
+        case .shell, .readFile, .writeFile, .selfTest:
+            XCTFail("乾跑不可被解成別的 kind")
+        }
+    }
+
+    /// 乾跑報告要能原樣往返——它是給人看的證據，欄位掉了就等於證據被改過。
+    func testDryRunReportRoundTrips() throws {
+        let report = DryRunReport(
+            allowedByAllowlist: true, rejectionReason: nil,
+            spawnArguments: ["/usr/bin/sandbox-exec", "-f", "/ws/p.sb", "/bin/cat", "a b"],
+            profile: "(version 1)\n(deny default)", environment: ["PATH=", "HOME=/ws"])
+        let decoded = try ExecutionWire.decodeOutcome(ExecutionWire.encode(.dryRun(report)))
+        XCTAssertEqual(decoded, .dryRun(report))
+    }
+
+    /// argv 在報告裡是**陣列**，不是拼好的字串。
+    /// 印成一行的話，帶空白的參數看起來會像兩個——而那正好是最需要看清楚的地方。
+    func testDryRunKeepsArgumentsAsArray() throws {
+        let report = DryRunReport(allowedByAllowlist: true, rejectionReason: nil,
+                                  spawnArguments: ["/bin/cat", "a b; rm -rf /"],
+                                  profile: "", environment: [])
+        let json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: ExecutionWire.encode(.dryRun(report)))
+            as? [String: Any])
+        XCTAssertFalse(String(describing: json).contains("/bin/cat a b"),
+                       "argv 不可被拼成一行")
     }
 
     /// 壞資料要 throw，不可解出一個「看起來正常」的結果。

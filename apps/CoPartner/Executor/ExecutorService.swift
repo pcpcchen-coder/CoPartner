@@ -60,6 +60,11 @@ final class ExecutorService: NSObject, ExecutorXPCProtocol {
             }
             return execute(argv: argv, workspace: workspace)
 
+        case let .dryRun(argv, workspace):
+            // ⚠️ **這個分支裡沒有任何 spawn 呼叫**——不是有但關著，是根本沒有。
+            // 乾跑的價值在於「保證什麼都不會發生」，而那個保證應該來自程式碼的形狀。
+            return .dryRun(dryRun(argv: argv, workspace: workspace))
+
         case .readFile, .writeFile:
             // **刻意不支援。** service 若直接讀寫檔案就完全繞過沙箱——
             // 那等於把 profile 的意義拿掉，而且是靜默拿掉：功能會正常運作，
@@ -67,6 +72,39 @@ final class ExecutorService: NSObject, ExecutorXPCProtocol {
             // 「第一次真的執行」這一段裡。
             return .rejected(reason: "檔案動作尚未接線：直接讀寫會繞過沙箱，需獨立設計")
         }
+    }
+
+    /// 乾跑：跟 `execute` 走**完全相同**的建構順序，只是最後不 spawn。
+    ///
+    /// 刻意共用 `SandboxWorkspace.permitsExecuting` 與 `SbplProfileBuilder`——
+    /// 乾跑若自己組一份「長得很像」的東西，它證明的就只是那份仿製品，
+    /// 而真正會跑的那份仍然沒被看過。
+    private func dryRun(argv: [String], workspace: SandboxWorkspace) -> DryRunReport {
+        guard workspace.permitsExecuting(argv) else {
+            return DryRunReport(allowedByAllowlist: false,
+                                rejectionReason: "命令不在 exec 白名單內：\(argv.first ?? "(空)")",
+                                spawnArguments: [], profile: "", environment: [])
+        }
+        let profile: String
+        do {
+            profile = try SbplProfileBuilder().profile(
+                execAllowlist: workspace.execAllowlist,
+                workspace: workspace.root,
+                deniedSubpaths: workspace.deniedSubpaths)
+        } catch {
+            return DryRunReport(allowedByAllowlist: true,
+                                rejectionReason: "無法產生 sandbox profile：\(error)",
+                                spawnArguments: [], profile: "", environment: [])
+        }
+        // profilePath 用一個代表性的值：真跑時是每次新生的暫存檔名，
+        // 乾跑報告要看的是**其餘部分**的形狀，不是那個隨機字尾。
+        let placeholder = (workspace.root as NSString)
+            .appendingPathComponent(".copartner-sandbox-<每次新生>.sb")
+        let arguments = (try? SandboxedCommand(argv: argv, profilePath: placeholder,
+                                               timeout: .seconds(30)).spawnArguments) ?? []
+        return DryRunReport(allowedByAllowlist: true, rejectionReason: nil,
+                            spawnArguments: arguments, profile: profile,
+                            environment: SandboxedCommand.minimalEnvironment(home: workspace.root))
     }
 
     /// 真的執行（🔒 第 53.5 段開啟前不會被呼叫）。
