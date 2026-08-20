@@ -90,7 +90,8 @@ final class ExecutorService: NSObject, ExecutorXPCProtocol {
             profile = try SbplProfileBuilder().profile(
                 execAllowlist: workspace.execAllowlist,
                 workspace: workspace.root,
-                deniedSubpaths: workspace.deniedSubpaths)
+                deniedSubpaths: workspace.deniedSubpaths,
+                closedRoots: workspace.closedRoots)
         } catch {
             return DryRunReport(allowedByAllowlist: true,
                                 rejectionReason: "無法產生 sandbox profile：\(error)",
@@ -120,7 +121,8 @@ final class ExecutorService: NSObject, ExecutorXPCProtocol {
             profile = try SbplProfileBuilder().profile(
                 execAllowlist: workspace.execAllowlist,
                 workspace: workspace.root,
-                deniedSubpaths: workspace.deniedSubpaths)
+                deniedSubpaths: workspace.deniedSubpaths,
+                closedRoots: workspace.closedRoots)
         } catch {
             // profile 產不出來就**不執行**。「產不出來所以不套沙箱」是絕對不可以的退路。
             return .rejected(reason: "無法產生 sandbox profile：\(error)")

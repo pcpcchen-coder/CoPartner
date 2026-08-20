@@ -117,9 +117,16 @@ public struct SbplProfileBuilder: Sendable {
         "(allow file-read* (subpath \"/System/Volumes/Preboot/Cryptexes/OS\"))",
     ]
 
+    /// - Parameters:
+    ///   - closedRoots: 在**工作目錄規則之前**關掉的整片區域（通常是家目錄）。
+    ///     順序是重點：`closedRoots` → 工作目錄 allow → `deniedSubpaths` deny，
+    ///     最後一條相符的規則勝出，所以工作目錄仍開得回來、秘密仍關得掉。
+    ///     這一層存在的理由見 `SandboxWorkspace` 對 metadata 列舉的說明。
+    ///   - deniedSubpaths: 在所有 allow **之後**關掉的路徑（秘密目錄）。
     public func profile(execAllowlist: [String],
                         workspace: String,
                         deniedSubpaths: [String],
+                        closedRoots: [String] = [],
                         includeRuntimeMinimum: Bool = true) throws -> String {
         // ⚠️ **先解符號連結再寫進 profile**。真機日誌：
         //   deny(1) file-read-data /private/tmp/…/hello.txt
@@ -132,6 +139,7 @@ public struct SbplProfileBuilder: Sendable {
         let workspacePath = try Self.sanitize(resolvePath(workspace))
         let execPaths = try execAllowlist.map { try Self.sanitize(resolvePath($0)) }
         let deniedPaths = try deniedSubpaths.map { try Self.sanitize(resolvePath($0)) }
+        let closedPaths = try closedRoots.map { try Self.sanitize(resolvePath($0)) }
 
         var lines = [
             "(version 1)",
@@ -161,6 +169,18 @@ public struct SbplProfileBuilder: Sendable {
                 lines.append("(allow file-read* (subpath \(Self.quoted(runtime))))")
             }
             lines.append(contentsOf: Self.runtimeExtraRules)
+        }
+        // ⚠️ 這一層要排在工作目錄規則**之前**。
+        //
+        // 全域 `(allow file-read-metadata)` 是為了路徑解析而放寬的，但它與 exec 白名單裡的
+        // `find` / `grep` 相乘之後，語意就從「偶爾解析一個路徑」變成「可以掃整台機器」——
+        // `find ~ -name "*.key"` 列得出來。那是完全不同的量級。
+        //
+        // 所以把家目錄整片關掉（含 metadata），再把工作目錄開回來。
+        // /usr、/System 之類的系統路徑仍可列舉，但那些是公開的。
+        for closed in closedPaths {
+            lines.append("(deny file-read* (subpath \(Self.quoted(closed))))")
+            lines.append("(deny file-write* (subpath \(Self.quoted(closed))))")
         }
         lines.append("(allow file-read* (subpath \(Self.quoted(workspacePath))))")
         lines.append("(allow file-write* (subpath \(Self.quoted(workspacePath))))")
