@@ -65,6 +65,22 @@ public struct SandboxWorkspace: Sendable, Equatable, Codable {
                                 closedRoots: closedRoots)
     }
 
+    /// sbpl profile 檔要放的目錄——**刻意在工作目錄之外**。
+    ///
+    /// 工作目錄是沙箱唯一可寫的地方，profile 放在裡面的話，被關住的命令
+    /// 讀得到也寫得到它——等於把「哪些路徑被視為秘密」的地圖交給它。
+    /// （真機乾跑報告揪出來的。）
+    ///
+    /// 這是安全的：`sandbox-exec` 在**套用沙箱之前**讀 profile，
+    /// 那個檔從來不需要在沙箱可及範圍內。
+    ///
+    /// ⚠️ **放在這裡是因為要有單一事實來源。** 真執行與乾跑各自算一次的話，
+    /// 兩邊會漂——而乾跑一旦報告了跟實際不同的路徑，它就從證據變成誤導。
+    /// 這個坑真的踩到了：runner 改了、乾跑的佔位路徑沒跟上。
+    public var profileDirectory: String {
+        (root as NSString).deletingLastPathComponent
+    }
+
     /// 這個 argv 的第一個元素在白名單裡嗎。
     ///
     /// sbpl 本身也會擋，這是**第二道**——兩道的失敗模式不同：

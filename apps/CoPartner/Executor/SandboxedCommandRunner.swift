@@ -35,14 +35,15 @@ final class SandboxedCommandRunner {
     }
 
     /// 執行一個沙箱命令。**同步**——呼叫端是 XPC 的工作佇列，本來就允許阻塞。
-    func run(argv: [String], profile: String, workspaceRoot: String,
+    func run(argv: [String], profile: String, workspace: SandboxWorkspace,
              timeout: Duration) throws -> Output {
-        let profilePath = try writeProfile(profile, under: workspaceRoot)
+        // 目錄由 `SandboxWorkspace` 決定——單一事實來源，乾跑報告才不會跟實際漂開。
+        let profilePath = try writeProfile(profile, in: workspace.profileDirectory)
         defer { try? FileManager.default.removeItem(atPath: profilePath) }
 
         let command = try SandboxedCommand(argv: argv, profilePath: profilePath, timeout: timeout)
         return try spawn(command,
-                         environment: SandboxedCommand.minimalEnvironment(home: workspaceRoot))
+                         environment: SandboxedCommand.minimalEnvironment(home: workspace.root))
     }
 
     /// profile 寫到**沙箱碰不到的地方**、權限 0600。
@@ -54,9 +55,8 @@ final class SandboxedCommandRunner {
     /// 改放工作目錄的**兄弟目錄**（沙箱的 deny-default 蓋得到）。這是安全的，因為
     /// `sandbox-exec` 是在**套用沙箱之前**讀 profile 的——那個檔從來不需要在
     /// 沙箱可及範圍內。
-    private func writeProfile(_ profile: String, under root: String) throws -> String {
-        let profileDir = (root as NSString).deletingLastPathComponent
-        let path = (profileDir as NSString)
+    private func writeProfile(_ profile: String, in directory: String) throws -> String {
+        let path = (directory as NSString)
             .appendingPathComponent(".copartner-sandbox-\(UUID().uuidString).sb")
         do {
             try profile.write(toFile: path, atomically: true, encoding: .utf8)

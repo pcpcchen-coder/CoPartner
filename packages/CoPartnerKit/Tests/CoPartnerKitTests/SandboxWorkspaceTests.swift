@@ -59,6 +59,27 @@ final class SandboxWorkspaceTests: XCTestCase {
         XCTAssertFalse(ws.permitsExecuting(["/bin/ca"]))
     }
 
+    // MARK: - profile 檔的位置
+
+    /// **profile 必須在工作目錄之外**：工作目錄是沙箱唯一可寫的地方，
+    /// profile 放裡面等於把「哪些路徑被視為秘密」的地圖交給被關住的命令。
+    func testProfileDirectoryIsOutsideTheWorkspace() {
+        let ws = SandboxWorkspace(root: "/a/b/Sandbox", execAllowlist: [], deniedSubpaths: [])
+        XCTAssertEqual(ws.profileDirectory, "/a/b")
+        XCTAssertFalse(ws.profileDirectory.hasPrefix(ws.root),
+                       "profile 目錄不可在工作目錄底下")
+    }
+
+    /// 真執行與乾跑共用這個屬性——**這條測試守的是兩邊不會漂**。
+    /// 各自算一次的話，乾跑報告會顯示跟實際不同的路徑，
+    /// 而那時它就從證據變成誤導（這個坑真的踩到過）。
+    func testProfileDirectoryIsDerivedNotHardcoded() {
+        for root in ["/x/ws", "/very/deep/nested/ws", "/Users/u/Library/App/Sandbox"] {
+            let ws = SandboxWorkspace(root: root, execAllowlist: [], deniedSubpaths: [])
+            XCTAssertEqual(ws.profileDirectory, (root as NSString).deletingLastPathComponent)
+        }
+    }
+
     // MARK: - 環境變數清洗（T3）
 
     /// **不繼承父程序環境**。繼承的話 DYLD_INSERT_LIBRARIES 能改變實際執行到什麼，
