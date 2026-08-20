@@ -114,7 +114,10 @@ final class ExecutionWireTests: XCTestCase {
             ExecutionWire.encode(ExecutionRequest.selfTest()))
         switch decoded.kind {
         case .selfTest: break
-        case .shell, .readFile, .writeFile: XCTFail("自檢不可帶動作內容")
+        // 刻意逐一列出而不用 default：新增 kind 時這裡會編譯失敗，
+        // 強迫作者回來想「這個新種類算不算帶動作內容」。
+        // 用 default 的話新 kind 會被靜默歸類成「不帶動作」——那正是最危險的預設。
+        case .shell, .readFile, .writeFile, .dryRun: XCTFail("自檢不可帶動作內容")
         }
     }
 
