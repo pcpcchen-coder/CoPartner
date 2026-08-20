@@ -10,7 +10,7 @@ import ActionExecutor
 //
 // 用法：
 //   swift run --package-path packages/CoPartnerKit copartner-sbpl \
-//       --workspace /tmp/ws --exec /bin/cat --exec /usr/bin/touch --deny /tmp/ws/.secrets
+//       --workspace /tmp/ws --exec /bin/cat --deny /tmp/ws/.secrets --closed "$HOME"
 
 func fail(_ message: String) -> Never {
     FileHandle.standardError.write(Data((message + "\n").utf8))
@@ -20,6 +20,7 @@ func fail(_ message: String) -> Never {
 var workspace: String?
 var execAllowlist: [String] = []
 var denied: [String] = []
+var closed: [String] = []
 var includeRuntimeMinimum = true
 
 var arguments = Array(CommandLine.arguments.dropFirst())
@@ -35,6 +36,9 @@ while let flag = arguments.first {
     case "--deny":
         guard let value = arguments.first else { fail("--deny 缺少值") }
         arguments.removeFirst(); denied.append(value)
+    case "--closed":
+        guard let value = arguments.first else { fail("--closed 缺少值") }
+        arguments.removeFirst(); closed.append(value)
     case "--no-runtime-minimum":
         // 給驗證腳本用：證明「少了 runtime 最小集合，連正向案例都跑不起來」。
         includeRuntimeMinimum = false
@@ -49,6 +53,7 @@ do {
     let profile = try SbplProfileBuilder().profile(execAllowlist: execAllowlist,
                                                    workspace: workspace,
                                                    deniedSubpaths: denied,
+                                                   closedRoots: closed,
                                                    includeRuntimeMinimum: includeRuntimeMinimum)
     print(profile)
 } catch {

@@ -17,11 +17,20 @@ public struct SandboxWorkspace: Sendable, Equatable, Codable {
     public let execAllowlist: [String]
     /// 即使在 root 底下也要拒絕的子路徑（秘密目錄）。
     public let deniedSubpaths: [String]
+    /// 在工作目錄規則**之前**整片關掉的區域（通常是家目錄）。
+    ///
+    /// 存在的理由：全域 `(allow file-read-metadata)` 是為了路徑解析而放寬的，
+    /// 但它跟白名單裡的 `find` / `grep` 相乘之後，語意就從「偶爾解析一個路徑」
+    /// 變成「**可以掃整台機器**」——`find ~ -name "*.key"` 列得出來。
+    /// 那是完全不同的量級，真機乾跑報告才看出來。
+    public let closedRoots: [String]
 
-    public init(root: String, execAllowlist: [String], deniedSubpaths: [String]) {
+    public init(root: String, execAllowlist: [String], deniedSubpaths: [String],
+                closedRoots: [String] = []) {
         self.root = root
         self.execAllowlist = execAllowlist
         self.deniedSubpaths = deniedSubpaths
+        self.closedRoots = closedRoots
     }
 
     /// 工具名稱 → 允許的二進位。**寫死在原始碼裡，這是刻意的。**
@@ -42,7 +51,8 @@ public struct SandboxWorkspace: Sendable, Equatable, Codable {
     /// 未知的工具名稱**直接忽略**（而非放行）：白名單的預設值是「空的」，
     /// 不是「全部」。空白名單的後果是什麼都不能執行——那是安全的失敗方向。
     public static func forContract(allowedTools: [String], root: String,
-                                   deniedSubpaths: [String] = []) -> SandboxWorkspace {
+                                   deniedSubpaths: [String] = [],
+                                   closedRoots: [String] = []) -> SandboxWorkspace {
         var binaries: [String] = []
         for tool in allowedTools {
             // contract 可能寫成 "bash(sandboxed)"，取括號前的基底名。
@@ -51,7 +61,8 @@ public struct SandboxWorkspace: Sendable, Equatable, Codable {
         }
         return SandboxWorkspace(root: root,
                                 execAllowlist: Array(Set(binaries)).sorted(),
-                                deniedSubpaths: deniedSubpaths)
+                                deniedSubpaths: deniedSubpaths,
+                                closedRoots: closedRoots)
     }
 
     /// 這個 argv 的第一個元素在白名單裡嗎。

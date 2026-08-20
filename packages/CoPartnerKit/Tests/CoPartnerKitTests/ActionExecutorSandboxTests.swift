@@ -368,6 +368,37 @@ final class ActionExecutorSandboxTests: XCTestCase {
         XCTAssertTrue(writes.contains { $0.contains("(literal \"/dev/dtracehelper\")") })
     }
 
+    /// `closedRoots` 必須排在工作目錄 allow **之前**，工作目錄才開得回來。
+    ///
+    /// 順序反了的後果不是「太鬆」而是「太緊」——工作目錄變成不可讀，
+    /// 所有動作都失敗，而 profile 看起來完全合理。
+    func testClosedRootsComeBeforeWorkspaceAllow() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/home/u/ws", deniedSubpaths: [],
+            closedRoots: ["/home/u"])
+        let lines = profile.split(separator: "\n").map(String.init)
+        let closed = try XCTUnwrap(lines.firstIndex { $0 == #"(deny file-read* (subpath "/home/u"))"# })
+        let allow = try XCTUnwrap(lines.firstIndex { $0 == #"(allow file-read* (subpath "/home/u/ws"))"# })
+        XCTAssertLessThan(closed, allow, "家目錄關閉必須在工作目錄開啟之前")
+    }
+
+    /// 三層順序完整檢查：關家目錄 → 開工作目錄 → 關秘密路徑。
+    /// 這三層的相對位置就是整個 profile 的安全語意，值得單獨釘住。
+    func testThreeLayerOrderingIsPreserved() throws {
+        let profile = try SbplProfileBuilder().profile(
+            execAllowlist: [], workspace: "/home/u/ws",
+            deniedSubpaths: ["/home/u/.ssh"], closedRoots: ["/home/u"])
+        let lines = profile.split(separator: "\n").map(String.init)
+        func index(_ needle: String) throws -> Int {
+            try XCTUnwrap(lines.firstIndex { $0.contains(needle) })
+        }
+        let closed = try index(#"(deny file-read* (subpath "/home/u"))"#)
+        let allow = try index(#"(allow file-read* (subpath "/home/u/ws"))"#)
+        let secret = try index(#"(deny file-read* (subpath "/home/u/.ssh"))"#)
+        XCTAssertTrue(closed < allow && allow < secret,
+                      "順序應為 關家目錄(\(closed)) → 開工作目錄(\(allow)) → 關秘密(\(secret))")
+    }
+
     /// **deny 必須排在 allow 之後**：sbpl 是最後一條相符的規則勝出。
     /// 順序顛倒的話，「秘密路徑就在工作目錄底下」這個最重要的情況會被 allow 蓋過去。
     func testDenyRulesComeAfterAllowRules() throws {

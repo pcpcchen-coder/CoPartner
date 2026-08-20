@@ -45,12 +45,19 @@ final class SandboxedCommandRunner {
                          environment: SandboxedCommand.minimalEnvironment(home: workspaceRoot))
     }
 
-    /// profile 寫進工作目錄內、權限 0600。
+    /// profile 寫到**沙箱碰不到的地方**、權限 0600。
     ///
-    /// 放工作目錄而非 /tmp：`/tmp` 是全機可讀的，而 profile 內容會揭露
-    /// 「哪些路徑被視為秘密」——那本身就是給攻擊者的地圖。
+    /// ⚠️ 第一版寫在工作目錄裡，那是錯的：工作目錄是沙箱**唯一可寫**的地方，
+    /// 所以被關住的命令讀得到也寫得到那份 profile——等於把「哪些路徑被視為秘密」
+    /// 的地圖交給它。真機乾跑報告一眼看出來的。
+    ///
+    /// 改放工作目錄的**兄弟目錄**（沙箱的 deny-default 蓋得到）。這是安全的，因為
+    /// `sandbox-exec` 是在**套用沙箱之前**讀 profile 的——那個檔從來不需要在
+    /// 沙箱可及範圍內。
     private func writeProfile(_ profile: String, under root: String) throws -> String {
-        let path = (root as NSString).appendingPathComponent(".copartner-sandbox-\(UUID().uuidString).sb")
+        let profileDir = (root as NSString).deletingLastPathComponent
+        let path = (profileDir as NSString)
+            .appendingPathComponent(".copartner-sandbox-\(UUID().uuidString).sb")
         do {
             try profile.write(toFile: path, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)

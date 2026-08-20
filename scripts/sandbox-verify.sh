@@ -39,7 +39,8 @@ echo "產生 profile（來源：SbplProfileBuilder，非腳本自己拼）…"
 swift run --package-path "${REPO_ROOT}/packages/CoPartnerKit" copartner-sbpl \
   --workspace "${WS}" \
   --exec "${ALLOWED_CAT}" --exec "${ALLOWED_TOUCH}" --exec "${ALLOWED_CURL}" \
-  --deny "${WS}/.secrets" > "${PROFILE}" || { echo "❌ 產生 profile 失敗"; exit 2; }
+  --deny "${WS}/.secrets" --closed "${HOME}" > "${PROFILE}" \
+  || { echo "❌ 產生 profile 失敗"; exit 2; }
 
 swift run --package-path "${REPO_ROOT}/packages/CoPartnerKit" copartner-sbpl \
   --workspace "${WS}" --exec "${ALLOWED_CAT}" --no-runtime-minimum \
@@ -139,6 +140,9 @@ run_deny "讀工作目錄外的檔案"          "${ALLOWED_CAT}" "${OUTSIDE}/oth
 run_deny "寫工作目錄外的檔案"          "${ALLOWED_TOUCH}" "${OUTSIDE}/probe"
 run_deny "讀工作目錄內的秘密子路徑"    "${ALLOWED_CAT}" "${WS}/.secrets/token"
 run_deny "執行白名單外的程式"          "${NOT_ALLOWED}"
+# 家目錄整片關閉（closedRoots）：全域 metadata 放寬 + find/grep 會讓「解析一個路徑」
+# 變成「掃整台機器」，所以家目錄要關掉、工作目錄再開回來。
+run_deny "讀家目錄裡的檔案"            "${ALLOWED_CAT}" "${HOME}/.zshrc"
 
 # ── 步驟 3：runtime 最小集合到底有沒有用 ──────────────────────────
 echo

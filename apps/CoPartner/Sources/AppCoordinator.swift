@@ -184,7 +184,8 @@ final class AppCoordinator: ObservableObject {
             let workspace = SandboxWorkspace.forContract(
                 allowedTools: cleanEnvelope.takeover.allowedTools,
                 root: Self.sandboxWorkspaceRoot(),
-                deniedSubpaths: Self.secretSubpaths())
+                deniedSubpaths: Self.secretSubpaths(),
+                closedRoots: [NSHomeDirectory()])
             actionExecutor = ActionExecutor(
                 clock: handoffGeneration,
                 policy: .from(contract: cleanEnvelope.takeover),
@@ -350,7 +351,8 @@ final class AppCoordinator: ObservableObject {
         xpcSummary = "執行端：乾跑中…"
         let root = Self.sandboxWorkspaceRoot()
         let workspace = SandboxWorkspace.forContract(
-            allowedTools: ["bash"], root: root, deniedSubpaths: Self.secretSubpaths())
+            allowedTools: ["bash"], root: root, deniedSubpaths: Self.secretSubpaths(),
+            closedRoots: [NSHomeDirectory()])
         Task { [weak self] in
             guard let self else { return }
             do {
