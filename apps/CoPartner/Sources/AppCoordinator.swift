@@ -102,7 +102,25 @@ final class AppCoordinator: ObservableObject {
     private let xpcPerformer = XPCActionPerformer()
     @Published private(set) var xpcSummary: String = "執行端：未檢測"
 
+    // 記憶體診斷（handoff §7.6.6）：真機上**沒開觀察**、只是讓 app 開著就會跳告警。
+    // 取樣刻意**不用定時器**——我們要量的正是閒置路徑，在上面裝一個會定時醒來的東西
+    // 等於在被觀察的對象裡加一個新的觀察者。改成每次打開選單取一個樣：
+    // 背景成本恰好是零，而使用者本來就會不時打開選單看一眼。
+    @Published private(set) var memorySummary: String = "記憶體：尚無取樣"
+    private var memoryLog = MemorySampleLog()
+
     init() { registerHotkeys() }
+
+    /// 取一個記憶體樣本。由選單出現時呼叫，以及開始／停止觀察時各取一次
+    /// （那兩個時間點是曲線上最重要的兩個標記：閒置與觀察中的斜率能不能分開）。
+    func sampleMemory() {
+        guard let mb = MemoryFootprint.currentMB() else {
+            memorySummary = "記憶體：問不到（task_info 失敗）"
+            return
+        }
+        memoryLog.record(MemorySample(at: Date(), footprintMB: mb))
+        memorySummary = memoryLog.summary
+    }
 
     /// ⌃⌥⌘O 切換觀察、⌃⌥⌘. 緊急停止（全域熱鍵；實際觸發需真機驗收）。
     private func registerHotkeys() {
@@ -118,6 +136,7 @@ final class AppCoordinator: ObservableObject {
     }
 
     func toggleObserving() {
+        sampleMemory()                    // 曲線上的標記：這一刻之前是閒置，之後是觀察中
         if session.mode == .idle {
             session.toggleObserve()   // → observing
             startPipeline()

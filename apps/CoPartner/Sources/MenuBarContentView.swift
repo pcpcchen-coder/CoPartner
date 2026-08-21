@@ -64,6 +64,12 @@ struct MenuBarContentView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)      // 可複製，方便貼回報告
                     Text(coordinator.localModelSummary).lineLimit(1)
+                    // 記憶體診斷（handoff §7.6.6）。每次打開這個選單就是一次取樣，
+                    // 所以放在這裡不只是顯示——這一行的存在本身就是量測動作。
+                    Text(coordinator.memorySummary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
                 .font(.caption2).foregroundStyle(.tertiary)
 
@@ -129,5 +135,7 @@ struct MenuBarContentView: View {
         }
         // 840：又多一顆按鈕（執行測試）。按鈕被擠出畫面真機上重演過兩次，寧可先留寬。
         .frame(width: 840)
+        // 打開選單 ＝ 取一個記憶體樣本。用 onAppear 而不是定時器：見 AppCoordinator。
+        .onAppear { coordinator.sampleMemory() }
     }
 }
