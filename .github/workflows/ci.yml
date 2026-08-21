@@ -9,8 +9,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build CoPartnerKit
         run: swift build --package-path packages/CoPartnerKit
+      # 失敗訊息另外用 ::error:: 印一次，讓它變成 check annotation。
+      # 原因很實際：完整的 job log 要從 blob storage 下載，而不是每個看 PR 的人
+      # （或每個環境）都拿得到；annotation 直接顯示在 PR 上，也讀得到 API。
+      # `pipefail` 是重點——沒有它，`tee` 的 0 會蓋掉 swift test 的非 0，
+      # 測試失敗會變成 job 成功，那比看不到 log 糟得多。
       - name: Test CoPartnerKit
-        run: swift test --package-path packages/CoPartnerKit
+        run: |
+          set -o pipefail
+          swift test --package-path packages/CoPartnerKit 2>&1 | tee /tmp/swift-test.log || {
+            grep -E "error:|failed|XCTAssert" /tmp/swift-test.log \
+              | head -40 | sed 's/^/::error::/'
+            exit 1
+          }
   python:
     runs-on: macos-15
     steps:

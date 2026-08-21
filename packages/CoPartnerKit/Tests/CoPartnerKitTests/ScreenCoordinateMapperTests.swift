@@ -9,6 +9,24 @@ import CoreGraphics
 /// 以及「該拒絕的有沒有真的拒絕（而不是夾到邊界然後照點）」。
 final class ScreenCoordinateMapperTests: XCTestCase {
 
+    // 這兩個 case 帶關聯值，比對時只關心是哪一種、不關心裡面的數字。
+    // 先 `as?` 成具體型別再 switch——把 `Error` 存在型別直接丟給 case pattern
+    // 是我不確定編不編得過的寫法，而測試檔的編譯錯誤在 `swift build` 階段看不到。
+    private static func isOutOfBounds(_ error: Error) -> Bool {
+        guard let mapped = error as? CoordinateMappingError else { return false }
+        switch mapped {
+        case .outOfBounds: return true
+        default: return false
+        }
+    }
+    private static func isAspectMismatch(_ error: Error) -> Bool {
+        guard let mapped = error as? CoordinateMappingError else { return false }
+        switch mapped {
+        case .aspectMismatch: return true
+        default: return false
+        }
+    }
+
     /// 主顯示器 1512×982 點、Retina、截圖被縮成 1512×982 以外的尺寸。
     private func geometry(image: CGSize,
                           origin: CGPoint = .zero,
@@ -76,9 +94,8 @@ final class ScreenCoordinateMapperTests: XCTestCase {
             XCTAssertThrowsError(
                 try ScreenCoordinateMapper.globalPoint(fromModelPoint: point, in: g),
                 "\(point) 應該被拒絕") { error in
-                guard case CoordinateMappingError.outOfBounds = error else {
-                    return XCTFail("\(point) 應該是 outOfBounds，實際是 \(error)")
-                }
+                XCTAssertTrue(Self.isOutOfBounds(error),
+                              "\(point) 應該是 outOfBounds，實際是 \(error)")
             }
         }
     }
@@ -123,9 +140,7 @@ final class ScreenCoordinateMapperTests: XCTestCase {
                          screen: CGSize(width: 1512, height: 982))
         XCTAssertThrowsError(try ScreenCoordinateMapper.globalPoint(
             fromModelPoint: CGPoint(x: 10, y: 10), in: g)) { error in
-            guard case CoordinateMappingError.aspectMismatch = error else {
-                return XCTFail("應該是 aspectMismatch，實際是 \(error)")
-            }
+            XCTAssertTrue(Self.isAspectMismatch(error), "應該是 aspectMismatch，實際是 \(error)")
         }
     }
 
