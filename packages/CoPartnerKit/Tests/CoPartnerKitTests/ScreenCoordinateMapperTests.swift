@@ -111,7 +111,9 @@ final class ScreenCoordinateMapperTests: XCTestCase {
 
     func testNonFiniteIsRejected() {
         let g = geometry(image: CGSize(width: 1512, height: 982))
-        for point in [CGPoint(x: .nan, y: 0), CGPoint(x: 0, y: .infinity)] {
+        // 型別要寫出來：`CGPoint(x: .nan, y: 0)` 會在 CGFloat / Double / Int 三個
+        // init 之間變成 ambiguous——而這種錯誤 `swift build` 看不到（它不編測試 target）。
+        for point in [CGPoint(x: CGFloat.nan, y: 0), CGPoint(x: 0, y: CGFloat.infinity)] {
             XCTAssertThrowsError(
                 try ScreenCoordinateMapper.globalPoint(fromModelPoint: point, in: g)) { error in
                 XCTAssertEqual(error as? CoordinateMappingError, .nonFinite)
