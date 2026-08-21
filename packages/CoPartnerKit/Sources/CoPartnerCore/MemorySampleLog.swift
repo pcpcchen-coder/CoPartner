@@ -44,31 +44,59 @@ public struct MemorySampleLog: Sendable {
     public var latest: MemorySample? { samples.last }
     public var peakMB: Double? { samples.map(\.footprintMB).max() }
 
-    /// 每小時成長多少 MB。
+    /// 每小時成長多少 MB（**整體**：第一筆到最後一筆）。
     ///
-    /// 用**第一筆到最後一筆**的整體斜率，不是相鄰兩筆的差：取樣間隔不規則，
-    /// 相鄰差會被「剛好連按兩次選單」這種零間隔放大成荒謬的數字。
-    /// 樣本不足或時間跨度過短時回 nil——**寧可不報，也不要報一個看起來像資料的猜測**。
-    public var growthMBPerHour: Double? {
-        guard let first, let latest else { return nil }
-        let seconds = latest.at.timeIntervalSince(first.at)
-        guard seconds >= 60 else { return nil }        // 不足一分鐘的斜率沒有意義
-        return (latest.footprintMB - first.footprintMB) / seconds * 3600
+    /// 不用相鄰兩筆的差：取樣間隔不規則，相鄰差會被「剛好連按兩次選單」這種零間隔
+    /// 放大成荒謬的數字。樣本不足或時間跨度過短時回 nil——
+    /// **寧可不報，也不要報一個看起來像資料的猜測**。
+    public var growthMBPerHour: Double? { slope(over: samples) }
+
+    /// 每小時成長多少 MB（**近期**：最後 `window` 筆）。
+    ///
+    /// 為什麼需要這個：真機第一輪資料長這樣——
+    /// 26 MB 起始，51 分鐘時 30 MB，55 分鐘 30 MB，59 分鐘 30 MB。
+    /// 也就是**啟動暖機漲了 4 MB，然後完全持平**。但整體斜率把那 4 MB 攤到
+    /// 一小時上，報成「+4 MB/小時」——看起來像還在漲，實際上早就停了。
+    ///
+    /// 整體斜率是為了避開相鄰差的雜訊而選的，結果換成另一種誤導：
+    /// 它分不出「一次性暖機後持平」與「持續成長」，而那正是我們唯一想知道的事。
+    /// 近期斜率取最後幾筆，既避開單點雜訊，也不會被開頭的暖機汙染。
+    public func recentGrowthMBPerHour(window: Int = 3) -> Double? {
+        slope(over: samples.suffix(max(2, window)))
     }
 
-    /// 選單上那一行。刻意把**樣本數與時間跨度**一起印出來——
-    /// 「成長 300 MB/小時」在只有兩個樣本、間隔 90 秒時完全不能拿來下結論，
-    /// 而少了這兩個數字，讀的人沒有辦法知道這件事。
+    /// 近期是否可視為持平。門檻 1 MB/小時：低於這個值，一天也不到 25 MB，
+    /// 而量測本身的雜訊（GC 時機、字型快取）就有這個量級。
+    public static let flatThresholdMBPerHour: Double = 1.0
+
+    private func slope<S: Sequence>(over window: S) -> Double? where S.Element == MemorySample {
+        let points = Array(window)
+        guard let head = points.first, let tail = points.last else { return nil }
+        let seconds = tail.at.timeIntervalSince(head.at)
+        guard seconds >= 60 else { return nil }        // 不足一分鐘的斜率沒有意義
+        return (tail.footprintMB - head.footprintMB) / seconds * 3600
+    }
+
+    /// 選單上那一行。
+    ///
+    /// **近期斜率排在整體前面**，因為要判斷「有沒有在漏」看的是它。
+    /// 樣本數與時間跨度一定要印——「+300 MB/小時」在只有兩個樣本、間隔 90 秒時
+    /// 完全不能拿來下結論，而少了這兩個數字，讀的人沒有辦法知道這件事。
     public var summary: String {
         guard let first, let latest else { return "記憶體：尚無取樣" }
         let spanMinutes = latest.at.timeIntervalSince(first.at) / 60
-        var line = String(format: "記憶體：目前 %.0f MB・起始 %.0f MB", latest.footprintMB, first.footprintMB)
-        if let peakMB { line += String(format: "・峰值 %.0f MB", peakMB) }
-        if let rate = growthMBPerHour {
-            line += String(format: "・成長 %+.0f MB/小時", rate)
+        var line = String(format: "記憶體：%.0f MB（起始 %.0f", latest.footprintMB, first.footprintMB)
+        if let peakMB { line += String(format: "・峰值 %.0f", peakMB) }
+        line += " MB）"
+        if let recent = recentGrowthMBPerHour() {
+            let verdict = abs(recent) < Self.flatThresholdMBPerHour ? "近期持平" : "近期"
+            line += String(format: "・%@ %+.0f MB/小時", verdict, recent)
         } else {
-            line += "・成長率待累積"
+            line += "・近期斜率待累積"
         }
-        return line + String(format: "（%d 個樣本／%.0f 分鐘）", samples.count, spanMinutes)
+        if let overall = growthMBPerHour {
+            line += String(format: "・整體 %+.0f MB/小時", overall)
+        }
+        return line + String(format: "（%d 樣本／%.0f 分）", samples.count, spanMinutes)
     }
 }

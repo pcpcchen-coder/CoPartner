@@ -48,9 +48,50 @@ final class MemorySampleLogTests: XCTestCase {
     /// 摘要必須帶樣本數與時間跨度：沒有這兩個數字，讀的人無法判斷該不該相信那個斜率。
     func testSummaryCarriesSampleCountAndSpan() {
         let s = log([(0, 100), (60, 160)]).summary
-        XCTAssertTrue(s.contains("2 個樣本"), s)
-        XCTAssertTrue(s.contains("60 分鐘"), s)
+        XCTAssertTrue(s.contains("2 樣本"), s)
+        XCTAssertTrue(s.contains("60 分"), s)
         XCTAssertTrue(s.contains("+60 MB/小時"), s)
+    }
+
+    // MARK: - 近期斜率（真機第一輪資料逼出來的）
+
+    /// **真機序列重演。** 26 MB 起始、51 分 30 MB、55 分 30 MB、59 分 30 MB
+    /// ——啟動暖機漲了 4 MB 然後完全持平。整體斜率會把那 4 MB 攤成「+4 MB/小時」，
+    /// 看起來像還在漲；近期斜率必須看得出它早就停了。
+    func testWarmUpThenFlatIsNotReportedAsGrowth() {
+        let l = log([(0, 26), (51, 30), (55, 30), (59, 30)])
+        XCTAssertEqual(try XCTUnwrap(l.growthMBPerHour), 4, accuracy: 0.5,
+                       "整體斜率確實是 +4——這正是誤導的來源")
+        XCTAssertEqual(try XCTUnwrap(l.recentGrowthMBPerHour()), 0, accuracy: 0.001,
+                       "近期完全持平")
+        XCTAssertTrue(l.summary.contains("近期持平"), l.summary)
+    }
+
+    /// 反面：真的持續在漲時，近期斜率不可以被判成持平。
+    func testSustainedGrowthIsNotCalledFlat() {
+        let l = log([(0, 100), (20, 140), (40, 180), (60, 220)])
+        XCTAssertEqual(try XCTUnwrap(l.recentGrowthMBPerHour()), 120, accuracy: 1)
+        XCTAssertFalse(l.summary.contains("近期持平"), l.summary)
+    }
+
+    /// 近期視窗只看最後幾筆——開頭的暖機不可以汙染它。
+    func testRecentWindowIgnoresEarlySamples() {
+        let l = log([(0, 26), (1, 500), (30, 30), (60, 30)])
+        XCTAssertEqual(try XCTUnwrap(l.recentGrowthMBPerHour(window: 2)), 0, accuracy: 0.001)
+    }
+
+    /// 視窗內跨度不足一分鐘 → 不報（與整體斜率同一條規則）。
+    func testRecentSlopeNeedsEnoughSpan() {
+        let l = log([(0, 100), (59.5, 200), (59.7, 201), (59.9, 202)])
+        XCTAssertNil(l.recentGrowthMBPerHour(), "最後三筆只跨 24 秒，不該報")
+        XCTAssertTrue(l.summary.contains("近期斜率待累積"), l.summary)
+        XCTAssertNotNil(l.growthMBPerHour, "整體跨度夠，仍要報")
+    }
+
+    /// 視窗至少 2 筆——傳 0 或 1 不可以讓近期斜率永遠是 nil。
+    func testRecentWindowHasAFloor() {
+        let l = log([(0, 100), (60, 160)])
+        XCTAssertEqual(try XCTUnwrap(l.recentGrowthMBPerHour(window: 1)), 60, accuracy: 0.001)
     }
 
     /// 下降也要看得見（修好之後要能確認）。
