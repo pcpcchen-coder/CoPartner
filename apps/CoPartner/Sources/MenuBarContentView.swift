@@ -76,6 +76,12 @@ struct MenuBarContentView: View {
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
+                    // 完整曲線在檔案裡。路徑要看得見且**可複製**——
+                    // 否則使用者得先問「那個檔在哪」才能把資料交出來。
+                    Text("記憶體日誌：\(coordinator.memoryLogPath)")
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
                 .font(.caption2).foregroundStyle(.tertiary)
 
