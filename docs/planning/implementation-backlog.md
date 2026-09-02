@@ -598,8 +598,27 @@
   - `DestructiveKeyChords` + `RiskClassifier`：⌘Q／⌘⌫／⇧⌘⌫／⌥⌘⎋ 類 → high 並說得出後果；
     解析不了的組合鍵也算 high（不知道它會做什麼 ⟹ 更該問人）；
     `typeText` 含換行 → medium（等同「打完按 Enter」，而 Enter 是送出的那一下）。
-- **53.6-B 🔒**：真的送 `CGEvent` / 呼叫 AX。undo 的 AX 快照也在這一段。
-- **DoD**：A ✅ CI ・ B 真機
+- **53.6-B**：`UIActionPerformer`（主程序內，非 XPC）＋ `UIActionGate`（純值閘門）
+  ＋ `VirtualKeyMap`（Carbon 具名常數，不寫死數字）＋ `ScreenGeometryProvider`。
+  **能力旗標 `willPerformUIActions` 仍為 `false`**——與 53.4-B / 53.5 同一種切法。
+  - **為什麼在主程序**：UI 動作天生就在使用者權限內，沒有沙箱可以圍（R2）。
+    放進 XPC service 只會製造「看起來被隔離了」的假象——service 與主 app 同 uid（R5 實測），
+    sbpl 也擋不住 CGEvent。
+  - **硬規則**：沒有輔助使用權限一定拒絕。沒有它時 `CGEvent.post` **不會失敗、不會丟錯、
+    就是靜默什麼都不做**——不擋的話，稽核會寫下 `executed`、HUD 會顯示「已執行」，
+    而畫面上什麼都沒發生。
+  - **截圖刻意不支援**：它是給模型看的，該由擷取管線產生並經出境閘門（PII 遮罩 + PIPL）。
+    在 UI 執行端偷截一張＝靜默拿掉整個出境設計。
+  - **跨模組不變式**（測試釘住）：`KeyChord` 解析得出來的每一個具名鍵，
+    `VirtualKeyMap` 都必須映射得到——否則組合鍵會解析成功卻在真機上按不出來，
+    而那要等使用者按下「執行」的那一刻才發現。
+  - **文字輸入不走鍵碼**走 `keyboardSetUnicodeString`：鍵碼是 ANSI 佈局的**位置**，
+    用它打字在非美式佈局上會打出別的字。鍵碼只服務組合鍵（⌘C／⌘V 各佈局位置一致）。
+  - **驗收入口「UI 乾跑」**：印出宣告尺寸／實際尺寸／全域原點／換算後的落點，
+    以及**那個位置上的 AX 元件**（「AXButton『刪除』」）。座標算錯不會報錯，
+    那一行是唯一能在事前看出差別的東西。`dryRun` 裡沒有任何 `post` 呼叫。
+- **53.6-C 🔒**：翻開 `willPerformUIActions = true`。單獨一個改動，理由同 53.5。
+- **DoD**：A ✅ CI ・ B ✅ CI ＋ 真機乾跑 ・ C 真機
 
 ---
 

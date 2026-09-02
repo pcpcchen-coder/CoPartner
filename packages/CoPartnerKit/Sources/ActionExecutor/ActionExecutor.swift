@@ -16,6 +16,10 @@ public enum ExecutionError: Error, Equatable {
     case notWired                         // service 回覆「收到但沒做」——第 ① 段骨架的預期結果
     case xpcUnavailable(String)           // 連不上 / 連線中斷 / 回覆格式不對
     case notSandboxable(String)           // UI 類動作不走沙箱路徑（R2），該在主程序內執行
+    /// UI 執行端拒絕（缺輔助使用權限、能力未啟用、座標對不上、鍵按不出來…）。
+    /// 與 `.notWired` 同一個理由存在：**做不到的時候要大聲說做不到**——
+    /// UI 動作沒有沙箱兜底，靜默失敗會讓稽核寫下「已執行」而畫面上什麼都沒發生。
+    case uiActionRefused(String)
 }
 
 public actor ActionExecutor {

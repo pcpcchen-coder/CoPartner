@@ -87,6 +87,13 @@ public struct KeyChord: Sendable, Equatable, Hashable {
         return table
     }()
 
+    /// 這個解析器可能產出的所有**具名**主鍵（正規化後、去重）。
+    ///
+    /// 公開出來是為了一條跨模組的測試：**解析得出來的鍵，執行端一定要按得下去。**
+    /// 少了它，一個 `KeyChord` 可以解析成功卻在真機上映射不到鍵碼——
+    /// 而那要等到使用者在 HUD 按下「執行」的那一刻才會發現。
+    public static var knownKeyNames: [String] { Array(Set(namedKeys.values)).sorted() }
+
     /// 解析組合鍵字串。接受 `+` 或 `-` 分隔，以及緊貼的符號寫法（`"⌘⇧Q"`）。
     public static func parse(_ raw: String) throws -> KeyChord {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)

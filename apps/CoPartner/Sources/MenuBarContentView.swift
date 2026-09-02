@@ -36,6 +36,9 @@ struct MenuBarContentView: View {
                 // 但走的是與真提議完全相同的路徑——風險分級、HUD 確認、token、沙箱一個不少。
                 Button("執行測試") { coordinator.runExecutionSmokeTest() }
                     .tint(.orange)
+                // 除錯入口：UI 動作在真的能動之前，先看到「會落在哪裡、那裡有什麼」
+                // （step 53.6-B）。`UIActionPerformer.dryRun` 裡沒有任何 post 呼叫。
+                Button("UI 乾跑") { coordinator.runUIDryRun() }
                 SettingsLink { Text("熱鍵…") }
                 Spacer()
                 Button("緊急停止") { coordinator.stopAll() }
@@ -59,8 +62,10 @@ struct MenuBarContentView: View {
                     // 自檢輸出是**驗收證據**，不是狀態列裝飾——寧可佔三行也不能截斷。
                     // `fixedSize(vertical:)` 才會真的讓它長高；只給 lineLimit 的話
                     // 容器仍會把它壓成一行再加省略號（真機上就這樣吃掉了關鍵欄位兩次）。
+                    // UI 乾跑的報告有七八行（含命中的 AX 元件），而**被截掉的往往正是
+                    // 最該看的那一行**——真機上已經因為截斷吃掉關鍵欄位兩次。
                     Text(coordinator.xpcSummary)
-                        .lineLimit(4)
+                        .lineLimit(10)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)      // 可複製，方便貼回報告
                     Text(coordinator.localModelSummary).lineLimit(1)
@@ -145,8 +150,8 @@ struct MenuBarContentView: View {
             .padding(.top, 10)
             .padding(.bottom, 14)
         }
-        // 840：又多一顆按鈕（執行測試）。按鈕被擠出畫面真機上重演過兩次，寧可先留寬。
-        .frame(width: 840)
+        // 920：又多一顆按鈕（UI 乾跑）。按鈕被擠出畫面真機上重演過兩次，寧可先留寬。
+        .frame(width: 920)
         // 打開選單 ＝ 取一個記憶體樣本。用 onAppear 而不是定時器：見 AppCoordinator。
         .onAppear { coordinator.sampleMemory() }
     }
