@@ -10,15 +10,16 @@ final class MemoryLogFormatTests: XCTestCase {
 
     private let t0 = Date(timeIntervalSince1970: 1_756_800_000)
 
-    func testLineHasExactlyFiveTabSeparatedFields() {
-        let line = MemoryLogFormat.line(at: t0, footprintMB: 130.4,
-                                        regime: "觀察中", steps: 41, source: .tick)
+    func testLineHasExactlySixTabSeparatedFields() {
+        let line = MemoryLogFormat.line(at: t0, footprintMB: 130.4, regime: "觀察中",
+                                        steps: 41, source: .tick, model: .available)
         let fields = line.components(separatedBy: MemoryLogFormat.separator)
-        XCTAssertEqual(fields.count, 5, line)
+        XCTAssertEqual(fields.count, 6, line)
         XCTAssertEqual(fields[1], "130.4")
         XCTAssertEqual(fields[2], "觀察中")
         XCTAssertEqual(fields[3], "41")
         XCTAssertEqual(fields[4], "tick")
+        XCTAssertEqual(fields[5], "可用")
     }
 
     /// **欄位裡不可以出現分隔符**，否則整個檔案的欄位會錯位而且看起來完全正常。
@@ -27,17 +28,20 @@ final class MemoryLogFormatTests: XCTestCase {
         for source in MemoryLogFormat.Source.allCases {
             XCTAssertFalse(source.rawValue.contains(MemoryLogFormat.separator), source.rawValue)
         }
+        for state in MemoryLogFormat.ModelState.allCases {
+            XCTAssertFalse(state.rawValue.contains(MemoryLogFormat.separator), state.rawValue)
+        }
         for regime in ["閒置", "觀察中", "接手中"] {
             let line = MemoryLogFormat.line(at: t0, footprintMB: 1, regime: regime,
-                                            steps: 0, source: .menu)
-            XCTAssertEqual(line.components(separatedBy: MemoryLogFormat.separator).count, 5)
+                                            steps: 0, source: .menu, model: .unavailable)
+            XCTAssertEqual(line.components(separatedBy: MemoryLogFormat.separator).count, 6)
         }
     }
 
     /// 空狀態要有替代值，不能留空欄位——空欄位在 TSV 裡看不出來是「沒有」還是「錯位」。
     func testEmptyRegimeBecomesPlaceholder() {
-        let fields = MemoryLogFormat.line(at: t0, footprintMB: 1, regime: "",
-                                          steps: 0, source: .menu)
+        let fields = MemoryLogFormat.line(at: t0, footprintMB: 1, regime: "", steps: 0,
+                                          source: .menu, model: .available)
             .components(separatedBy: MemoryLogFormat.separator)
         XCTAssertEqual(fields[2], "?")
     }
@@ -56,8 +60,8 @@ final class MemoryLogFormatTests: XCTestCase {
         var text = MemoryLogFormat.header + "\n"
         for i in 0..<lines {
             text += MemoryLogFormat.line(at: t0.addingTimeInterval(Double(i)),
-                                         footprintMB: Double(i), regime: "閒置",
-                                         steps: i, source: .tick) + "\n"
+                                         footprintMB: Double(i), regime: "閒置", steps: i,
+                                         source: .tick, model: .available) + "\n"
         }
         return text
     }
@@ -72,7 +76,7 @@ final class MemoryLogFormatTests: XCTestCase {
     /// 診斷看的永遠是最近發生的事；而丟掉 header 會讓檔案失去版本標記。
     func testTrimKeepsNewestAndRestoresHeader() {
         let trimmed = MemoryLogFormat.trimmed(log(lines: 100), maxLines: 10)
-        XCTAssertTrue(trimmed.hasPrefix("# CoPartner 記憶體取樣 v1"), trimmed.prefix(60).description)
+        XCTAssertTrue(trimmed.hasPrefix("# CoPartner 記憶體取樣 v2"), trimmed.prefix(60).description)
         let body = trimmed.split(separator: "\n").filter { !$0.hasPrefix("#") }
         XCTAssertEqual(body.count, 10)
         // 最後一行應該是第 99 筆（足跡 99.0），不是第 9 筆。
@@ -84,5 +88,25 @@ final class MemoryLogFormatTests: XCTestCase {
     func testTrimIsIdempotent() {
         let once = MemoryLogFormat.trimmed(log(lines: 100), maxLines: 10)
         XCTAssertEqual(MemoryLogFormat.trimmed(once, maxLines: 10), once)
+    }
+
+    /// 版本號要跟欄位數一起走。日後再加欄位時，這條測試會逼人回來改版本號——
+    /// 舊檔案讀不出是哪個版本寫的，事後分析就只能猜欄位對應。
+    func testHeaderVersionMatchesFieldCount() {
+        let headerFields = MemoryLogFormat.header
+            .split(separator: "\n").last!
+            .replacingOccurrences(of: "# ", with: "")
+            .components(separatedBy: MemoryLogFormat.separator)
+        let line = MemoryLogFormat.line(at: t0, footprintMB: 1, regime: "閒置",
+                                        steps: 0, source: .menu, model: .available)
+        XCTAssertEqual(headerFields.count,
+                       line.components(separatedBy: MemoryLogFormat.separator).count,
+                       "欄位說明與實際欄位數必須一致")
+    }
+
+    /// 模型狀態要能從布林直接建，而且兩種都印得出字。
+    func testModelStateFromBool() {
+        XCTAssertEqual(MemoryLogFormat.ModelState(available: true), .available)
+        XCTAssertEqual(MemoryLogFormat.ModelState(available: false), .unavailable)
     }
 }
