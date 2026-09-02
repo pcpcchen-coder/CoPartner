@@ -7,8 +7,16 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      # build 與 test 都要把錯誤印成 annotation。
+      # 上一次只包了 test，結果 build 掛掉時整個 job 只留下「exit code 1」——
+      # 在一個拿不到完整 log 的環境裡，那等於什麼都沒說。
       - name: Build CoPartnerKit
-        run: swift build --package-path packages/CoPartnerKit
+        run: |
+          set -o pipefail
+          swift build --package-path packages/CoPartnerKit 2>&1 | tee /tmp/swift-build.log || {
+            grep -E "error:" /tmp/swift-build.log | head -40 | sed 's/^/::error::/'
+            exit 1
+          }
       # 失敗訊息另外用 ::error:: 印一次，讓它變成 check annotation。
       # 原因很實際：完整的 job log 要從 blob storage 下載，而不是每個看 PR 的人
       # （或每個環境）都拿得到；annotation 直接顯示在 PR 上，也讀得到 API。
@@ -51,8 +59,11 @@ jobs:
       - name: Type-check XPC probe script
         run: swiftc -typecheck scripts/xpc-probe.swift
 
+      # 同樣把錯誤印成 annotation。xcodebuild 的輸出特別長，
+      # 沒有這一步就只剩「exit code 65」——那個數字本身不說明任何事。
       - name: Build app (no signing)
         run: |
+          set -o pipefail
           cd apps/CoPartner
           xcodebuild \
             -project CoPartner.xcodeproj \
@@ -62,4 +73,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            build
+            build 2>&1 | tee /tmp/xcodebuild.log || {
+              grep -E "error:" /tmp/xcodebuild.log | head -40 | sed 's/^/::error::/'
+              exit 1
+            }

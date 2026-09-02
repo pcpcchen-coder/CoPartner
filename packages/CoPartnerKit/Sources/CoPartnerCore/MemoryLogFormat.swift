@@ -53,12 +53,17 @@ public enum MemoryLogFormat {
         return header + "\n" + body.suffix(limit).joined(separator: "\n") + "\n"
     }
 
-    private static let formatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        f.timeZone = .current
-        return f
-    }()
-
-    public static func timestamp(_ date: Date) -> String { formatter.string(from: date) }
+    /// 每次都新建一個 formatter，不共用一份。
+    ///
+    /// 兩個理由。其一是 Swift 6 嚴格並行：`ISO8601DateFormatter` 不是 `Sendable`，
+    /// 放成 `static let` 直接編不過（這一行原本就是這樣掛掉的）。其二更根本——
+    /// 共用一份可變的 formatter 本來就是經典的資料競爭來源，而繞過檢查
+    /// （`nonisolated(unsafe)`）換到的只是「省下一次建構」。
+    /// 這個函式最頻繁也就每 15 秒被呼叫一次，那點成本量不出來。
+    public static func timestamp(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = .current
+        return formatter.string(from: date)
+    }
 }
