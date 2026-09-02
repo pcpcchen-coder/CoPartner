@@ -20,10 +20,13 @@ CoPartner 由三個核心理念組成：
 
 ```
 CoPartner/
-├── docs/                 設計與架構文件（單一事實來源）
-│   ├── design/           V1 / V2 / V2.1 完整設計文件
-│   ├── architecture/     架構總覽、程序拓樸、資料流
+├── docs/                 設計與架構文件（單一事實來源，索引見 docs/README.md）
+│   ├── project-mindmap.md  📊 心智圖與進度全景（視覺入口）
+│   ├── planning/         實作 backlog、真機 runbook、交接包、版本演化、簡報素材
+│   ├── design/           V1 / V2 / V2.1 完整設計 + 沙箱威脅模型
+│   ├── architecture/     架構總覽、程序拓樸、資料流（Mermaid）
 │   ├── adr/              架構決策紀錄 (Architecture Decision Records)
+│   ├── assets/diagrams/  簡報用圖檔（SVG + PNG）
 │   └── privacy/          資料分類與 PII 政策
 ├── apps/CoPartner/       macOS app（SwiftUI menu bar，XcodeGen project.yml）
 ├── packages/CoPartnerKit Swift Package（多 target 函式庫，app 與測試共用）
@@ -56,6 +59,9 @@ CoPartner/
 
 進度的單一事實來源是 [`docs/planning/implementation-backlog.md`](docs/planning/implementation-backlog.md)；
 真機驗收清單見 [`docs/planning/realmachine-runbook.md`](docs/planning/realmachine-runbook.md)。
+
+📊 **一頁看完全貌**：[`docs/project-mindmap.md`](docs/project-mindmap.md)——心智圖、進度地圖、
+資料流、安全邊界、版本階梯，圖檔另有 SVG／PNG 匯出於 [`docs/assets/diagrams/`](docs/assets/diagrams/)。
 
 ### 自己驗安全邊界
 
@@ -102,6 +108,9 @@ cd infra/litellm && docker compose up -d              # 選用（雲端接手才
 | [`docs/design/v1_full-design.md`](docs/design/v1_full-design.md) | V1：完整系統設計（定頻擷取基線、平台 API、混合模型、路線圖） |
 | [`docs/design/v2_smart-capture-engine.md`](docs/design/v2_smart-capture-engine.md) | V2：智慧擷取引擎（foveated / dirty-region / tile） |
 | [`docs/design/v2.1_action-script-narrator.md`](docs/design/v2.1_action-script-narrator.md) | V2.1：操作劇本敘事與雲端交棒機制 |
+| [`docs/design/sandbox-threat-model.md`](docs/design/sandbox-threat-model.md) | 沙箱威脅模型：信任邊界 B0–B4、威脅 T1–T10、可測不變式 I1–I10 |
+| [`docs/project-mindmap.md`](docs/project-mindmap.md) | 📊 心智圖與進度全景（視覺入口）|
+| [`docs/README.md`](docs/README.md) | 全部文件索引與維護規則 |
 
 ## 隱私與合規
 
