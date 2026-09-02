@@ -165,15 +165,16 @@ final class AppCoordinator: ObservableObject {
     /// 而記憶體那時還在往下掉——軌跡自己就顯示過 `閒置 145→65`，一段自己掉了 80 MB。
     /// 拿沒落定的數字去比「底線有沒有疊高」，比的是雜訊。
     ///
-    /// **60 秒還不夠。** 第一份真實日誌顯示 60 秒那一筆是 124.6 MB，
-    /// 25 秒後卻已經掉到 108.9——落定點還在後面。所以改成取一條衰減曲線
-    /// （60 秒 / 5 分鐘 / 15 分鐘），讓「掉到哪裡不再掉」自己浮出來。
+    /// **落定比想像慢得多。** 第二份日誌：停止後 1 分鐘 109.6 MB、5 分鐘 109.7 MB、
+    /// **15 分鐘 75.5 MB 而且還在掉**。也就是說先前所有「閒置底線疊高」的讀數
+    /// （92／136／109／157）全都取得太早——那時記憶體根本還沒開始掉。
+    /// 所以曲線再拉長到 30 分鐘與 60 分鐘，讓「掉到哪裡不再掉」自己浮出來。
     ///
     /// 這**不是定時器**：一次停止只排這一串，而且下一次狀態切換就整個取消。
     private func scheduleSettleSample() {
         memorySettleTask?.cancel()
         memorySettleTask = Task { [weak self] in
-            for seconds in [60, 240, 600] {          // 累計 60s / 5min / 15min
+            for seconds in [60, 240, 600, 900, 1800] {   // 累計 1 / 5 / 15 / 30 / 60 分
                 try? await Task.sleep(for: .seconds(seconds))
                 guard !Task.isCancelled else { return }
                 self?.sampleMemory(source: .settle)
@@ -939,9 +940,15 @@ final class AppCoordinator: ObservableObject {
 
     /// 消費 CaptureEngine 的 dirty-tile 事件流 → 更新選單擷取摘要（協調邏輯；CaptureActivity 已測）。
     /// 真擷取來源 SCKFrameProducer（SCStream + Metal）於 step 18 真機接上，屆時由此方法點亮。
+    /// ⚠️ 這個消費者是 `@MainActor` 的，所以**每個事件都要跳一次 MainActor**，
+    /// 而 MainActor 同時還在跑 UI、OCR、敘事。產生端（幀處理）不會等它。
+    /// 事件串流因此在 step 53.7 改成有界（`.bufferingNewest`）——在那之前它是無上限的，
+    /// 而真機日誌顯示觀察中記憶體以約 +100 MB/小時線性成長、跟時間走不跟 step 走，
+    /// 這條串流是最符合的解釋。
     func consumeCaptureEvents(_ events: AsyncStream<TileEvent>) {
         captureActivity = CaptureActivity()
         captureTask?.cancel()
+        let engine = captureEngine
         captureTask = Task { [weak self] in
             var lastPush = Date.distantPast
             for await event in events {
@@ -949,6 +956,9 @@ final class AppCoordinator: ObservableObject {
                 self.captureActivity.record(event)
                 let now = Date()
                 if now.timeIntervalSince(lastPush) >= 0.25 {   // 選單摘要最多 ~4Hz，避免每 tile 都刷 UI
+                    // 顯示的次數取自**產生端**：消費端塞車時，收到的數量會靜默變小，
+                    // 而「塞車」正是這個數字最該說出來的時候。
+                    self.captureActivity.producedEvents = await engine?.producedEvents ?? 0
                     self.captureSummary = self.captureActivity.summary
                     lastPush = now
                 }

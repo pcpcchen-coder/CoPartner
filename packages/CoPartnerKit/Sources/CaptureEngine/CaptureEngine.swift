@@ -32,10 +32,33 @@ public actor CaptureEngine {
     /// 更新 per-app override（如把某 app 標為 neverDynamic）。
     public func setOverrides(_ overrides: CaptureOverrides) { self.overrides = overrides }
 
+    /// 事件串流的緩衝上限。
+    ///
+    /// **原本沒有指定，也就是無上限**——而同一條管線上游的 `SCKFrameProducer` 卻明確用了
+    /// `.bufferingNewest(2)`。同一條管線兩種策略，看起來是疏漏而非取捨，而它從
+    /// step 53.7 的記憶體診斷第一天就被列為嫌疑。
+    ///
+    /// 真機日誌把它變成主要嫌疑：觀察中記憶體以約 +100 MB/小時線性成長，**跟時間走、
+    /// 不跟 step 走**，而這條串流唯一的消費者是 `AppCoordinator` 裡一個 `@MainActor`
+    /// 的計數器——每個事件都要跳一次 MainActor，而 MainActor 同時還在跑 UI、OCR、敘事。
+    /// 產生端（幀處理）不會等消費端，於是跟不上的部分就堆在這個無上限的緩衝裡。
+    /// 一次真機工作階段曾累積 143515 個事件。
+    ///
+    /// 選 `.bufferingNewest`：舊的 tile 事件對唯一的消費者（一個計數器 + 最後一個 tile）
+    /// 沒有價值，新的才有。丟掉的數量會**顯示在選單上**（`CaptureActivity.droppedEvents`）
+    /// ——靜默丟事件會讓「消費端塞車」這個訊號消失，而那正是要找的東西。
+    private static let eventBufferLimit = 64
+
+    /// 引擎**產生**的事件總數（丟棄之前）。畫面上顯示的次數要用這個，
+    /// 不是消費端收到的數量——否則塞車時那個數字會靜默變小。
+    public private(set) var producedEvents = 0
+
     /// 開始消費幀來源，回傳 dirty-tile 事件串流。stop() 或來源結束時串流 finish。
     public func start(from producer: FrameProducer) -> AsyncStream<TileEvent> {
         stopInternal()                       // 重入保護：先收掉上一輪
-        let (stream, continuation) = AsyncStream<TileEvent>.makeStream()
+        producedEvents = 0
+        let (stream, continuation) = AsyncStream<TileEvent>.makeStream(
+            bufferingPolicy: .bufferingNewest(Self.eventBufferLimit))
         self.continuation = continuation
         self.previousHashes = nil
         task = Task { [weak self] in
@@ -72,6 +95,7 @@ public actor CaptureEngine {
                                        periodic: periodic && allowDynamic, hasAXText: false)
             tileStates[tile] = machine
             let dhash = frame.hashes.indices.contains(index) ? frame.hashes[index] : 0
+            producedEvents += 1              // 在 yield **之前**加：緩衝丟棄不該讓計數失真
             continuation?.yield(TileEvent(tileX: tile.x, tileY: tile.y, state: state,
                                           dhash: dhash, timestamp: frame.timestamp))
         }
