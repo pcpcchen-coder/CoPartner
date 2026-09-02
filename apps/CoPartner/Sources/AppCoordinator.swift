@@ -107,6 +107,9 @@ final class AppCoordinator: ObservableObject {
     // 等於在被觀察的對象裡加一個新的觀察者。改成每次打開選單取一個樣：
     // 背景成本恰好是零，而使用者本來就會不時打開選單看一眼。
     @Published private(set) var memorySummary: String = "記憶體：尚無取樣"
+    /// 階段軌跡。單獨一行是因為它回答的是**另一個問題**：
+    /// 摘要說「現在這一段有沒有在漲」，軌跡說「閒置的底線會不會一輪比一輪高」。
+    @Published private(set) var memoryTrail: String = "階段：尚無取樣"
     private var memoryLog = MemorySampleLog()
 
     init() { registerHotkeys() }
@@ -122,6 +125,7 @@ final class AppCoordinator: ObservableObject {
         }
         memoryLog.record(MemorySample(at: Date(), footprintMB: mb, regime: memoryRegimeLabel))
         memorySummary = memoryLog.summary
+        memoryTrail = memoryLog.regimeTrail()
     }
 
     /// 取樣當下的狀態。斜率不跨越它——閒置與觀察中的工作集差一個數量級，
