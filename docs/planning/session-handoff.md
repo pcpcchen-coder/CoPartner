@@ -558,6 +558,67 @@ CI 測得到：profile 字串的產生（規則順序、跳脫、最後一條規
 
 疊高（30 → 92 → 150 → …）＝ 真的在漏；穩定（30 → 92 → 92 → …）＝ 快取。
 
+##### 第四輪（第二次開關觀察）：**ratchet 確認**
+
+兩次「已停止觀察」當下的讀數可以直接比：
+
+| 輪次 | 停止後 | 該輪峰值 | 當時「記憶 N 筆」 |
+|---|---|---|---|
+| 初始閒置 | 30 MB | 30 MB | — |
+| 第 1 輪 | **92 MB** | 162 MB | 32 |
+| 第 2 輪 | **136 MB** | 181 MB | 41 |
+
+閒置底線 30 → 92 → 136，每輪往上疊約 44 MB。**這是 ratchet，不是快取。**
+
+⚠️ **先前的判斷要更正**：§7.6.6 第二輪之後寫的「兩條曲線的形狀都不像洩漏、
+在拿到 Activity Monitor 之前不應該改任何程式碼」是建立在只有一輪資料上的。
+兩輪之後形狀反過來了。
+
+##### 找到的具體機制候選（尚未證實）
+
+`FoundationModelsNarrator.narrate` **每產生一個 step 就建一個新的
+`LanguageModelSession`**，`warmUp` 也另外建一個用完就丟：
+
+```swift
+public func narrate(_ lines: [String]) async -> ActionStep? {
+    let session = LanguageModelSession(instructions: Self.instructions)   // ← 每個 step 一個
+    ...
+}
+public func warmUp() async {
+    let session = LanguageModelSession(instructions: Self.instructions)   // ← 建了就丟
+    session.prewarm()
+}
+```
+
+而同一個檔案自己的註解寫的是相反的意圖：
+
+> narrator 因此與「現在在哪個 app」無關，**可以長期存活一份**，
+> prewarm 的效果才不會被每次重建丟掉。
+
+**narrator 確實長期存活，但它裡面的 session 每次呼叫都重建**——註解描述的意圖在下一層
+被推翻了。這與 `AppCoordinator` 那段「階梯只建一次」的註解是同一種落差。
+3B 模型的一個 session 帶 KV cache，量級正好在幾 MB。
+
+##### 兩個假設都符合現有資料，一個開關就能分辨
+
+| 假設 | 預測 |
+|---|---|
+| **每個 step 一個 session** | 成長跟著 **step 數**走（32→41 筆 ＝ +44 MB，約 5 MB/step）|
+| **每輪 pipeline 沒放乾淨** | 成長跟著 **開關次數**走 |
+
+兩者在現有的兩個點上無法區分（step 數與開關次數同時增加）。
+
+**分辨方法：關掉 Apple Intelligence 再跑一輪。** 敘事會自動降級成規則式
+（M4 已驗過這個切換不中斷），完全不會建立任何 `LanguageModelSession`，
+但 pipeline 的開關照舊。
+
+- ratchet 消失 → 是 session，修 `FoundationModelsNarrator`
+- ratchet 照舊 → 是 pipeline，往 `CaptureEngine` / `SCStream` 查
+
+⚠️ **在分辨出來之前不要改 `FoundationModelsNarrator`。** 改成重用 session 會帶來
+另一個問題（`LanguageModelSession` 會累積 transcript，最後撞上 context 上限），
+那是一個需要設計的取捨——不該為了一個還沒證實的假設去付。
+
 ##### 那個告警到底是什麼？三個還沒排除的可能
 
 1. **告警發生在觀察中**，而回報時記成了閒置。閒置這條現在已清，
