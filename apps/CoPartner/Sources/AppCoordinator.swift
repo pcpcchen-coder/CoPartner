@@ -110,7 +110,14 @@ final class AppCoordinator: ObservableObject {
     /// 階段軌跡。單獨一行是因為它回答的是**另一個問題**：
     /// 摘要說「現在這一段有沒有在漲」，軌跡說「閒置的底線會不會一輪比一輪高」。
     @Published private(set) var memoryTrail: String = "階段：尚無取樣"
-    private var memoryLog = MemorySampleLog()
+    /// 環狀緩衝只餵選單那兩行；**完整曲線在檔案裡**。容量給大一點是因為
+    /// 觀察中會定期取樣，容量太小會讓軌跡的早期階段被擠掉（檔案不受影響）。
+    private var memoryLog = MemorySampleLog(capacity: 2000)
+    private lazy var memoryLogWriter = MemoryLogWriter(directory: Self.diagnosticsDirectory())
+    /// 停止觀察後隔一段時間再取一次的那一筆。**不是定時器**——一次停止只排一次。
+    private var memorySettleTask: Task<Void, Never>?
+    /// 觀察中的取樣時間戳，用來節流（敘事迴圈每秒跑一次，不必每秒都取樣）。
+    private var lastTickSampleAt = Date.distantPast
 
     init() { registerHotkeys() }
 
@@ -118,15 +125,58 @@ final class AppCoordinator: ObservableObject {
     ///
     /// 切換**前後都要取**：前面那筆是舊階段的最後一點，後面那筆是新階段的起點。
     /// 只取一次的話，新階段永遠要等到下一次開選單才有第二個點，斜率一直是「待累積」。
-    func sampleMemory() {
+    func sampleMemory(source: MemoryLogFormat.Source = .menu) {
         guard let mb = MemoryFootprint.currentMB() else {
             memorySummary = "記憶體：問不到（task_info 失敗）"
             return
         }
-        memoryLog.record(MemorySample(at: Date(), footprintMB: mb, regime: memoryRegimeLabel))
+        let now = Date()
+        let regime = memoryRegimeLabel
+        memoryLog.record(MemorySample(at: now, footprintMB: mb, regime: regime))
         memorySummary = memoryLog.summary
         memoryTrail = memoryLog.regimeTrail()
+        // **每一筆都落檔**，包含被環狀緩衝擠掉的。選單那兩行是給人看的摘要，
+        // 檔案才是資料——先前每一輪診斷都靠人截圖念數字，又慢又有損。
+        memoryLogWriter.append(at: now, footprintMB: mb, regime: regime,
+                               steps: l1Steps.count, source: source)
     }
+
+    /// 觀察中的取樣。**搭既有的敘事迴圈，不另外喚醒任何東西**——
+    /// 那個迴圈本來就每秒跑一次，這裡只是每 15 秒順手記一筆。
+    private func sampleMemoryDuringObservation() {
+        let now = Date()
+        guard now.timeIntervalSince(lastTickSampleAt) >= 15 else { return }
+        lastTickSampleAt = now
+        sampleMemory(source: .tick)
+    }
+
+    /// 停止觀察後隔 60 秒再取一次。
+    ///
+    /// 存在的理由是先前每一輪診斷共同的瑕疵：閒置讀數都是停止後**幾秒內**取的，
+    /// 而記憶體那時還在往下掉——軌跡自己就顯示過 `閒置 145→65`，一段自己掉了 80 MB。
+    /// 拿沒落定的數字去比「底線有沒有疊高」，比的是雜訊。
+    ///
+    /// 這**不是定時器**：一次停止只排一次，而且下一次狀態切換就取消。
+    private func scheduleSettleSample() {
+        memorySettleTask?.cancel()
+        memorySettleTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(60))
+            guard !Task.isCancelled else { return }
+            self?.sampleMemory(source: .settle)
+        }
+    }
+
+    /// 診斷檔案的位置。與沙箱工作目錄分開——那裡是**沙箱內唯一可寫的地方**，
+    /// 診斷日誌沒有理由讓沙箱裡的命令讀得到。
+    private static func diagnosticsDirectory() -> String {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory())
+        return base.appendingPathComponent("CoPartner/Diagnostics", isDirectory: true).path
+    }
+
+    /// 診斷日誌的完整路徑（選單顯示用，方便把檔案撈出來）。
+    var memoryLogPath: String { memoryLogWriter.path }
 
     /// 取樣當下的狀態。斜率不跨越它——閒置與觀察中的工作集差一個數量級，
     /// 接成一條線取斜率得到的是「階段落差 ÷ 總時間」，不是成長率。
@@ -152,8 +202,12 @@ final class AppCoordinator: ObservableObject {
     }
 
     func toggleObserving() {
-        sampleMemory()                    // 舊階段的最後一點
-        defer { sampleMemory() }          // 新階段的起點（mode 改完之後才跑）
+        memorySettleTask?.cancel()                       // 上一次停止排的落定取樣已無意義
+        sampleMemory(source: .transition)                // 舊階段的最後一點
+        defer {
+            sampleMemory(source: .transition)            // 新階段的起點（mode 改完之後才跑）
+            if session.mode == .idle { scheduleSettleSample() }
+        }
         if session.mode == .idle {
             session.toggleObserve()   // → observing
             startPipeline()
@@ -668,6 +722,7 @@ final class AppCoordinator: ObservableObject {
             await LocalNarrationEnvironment.prewarm()
             while !Task.isCancelled {
                 guard let self, self.session.mode != .idle else { return }
+                self.sampleMemoryDuringObservation()   // 搭這個迴圈，不另外喚醒
                 await self.narrationTick()
                 try? await Task.sleep(for: .seconds(1))
             }
