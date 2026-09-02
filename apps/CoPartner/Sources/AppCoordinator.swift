@@ -111,15 +111,27 @@ final class AppCoordinator: ObservableObject {
 
     init() { registerHotkeys() }
 
-    /// 取一個記憶體樣本。由選單出現時呼叫，以及開始／停止觀察時各取一次
-    /// （那兩個時間點是曲線上最重要的兩個標記：閒置與觀察中的斜率能不能分開）。
+    /// 取一個記憶體樣本。由選單出現時呼叫，以及狀態切換前後各取一次。
+    ///
+    /// 切換**前後都要取**：前面那筆是舊階段的最後一點，後面那筆是新階段的起點。
+    /// 只取一次的話，新階段永遠要等到下一次開選單才有第二個點，斜率一直是「待累積」。
     func sampleMemory() {
         guard let mb = MemoryFootprint.currentMB() else {
             memorySummary = "記憶體：問不到（task_info 失敗）"
             return
         }
-        memoryLog.record(MemorySample(at: Date(), footprintMB: mb))
+        memoryLog.record(MemorySample(at: Date(), footprintMB: mb, regime: memoryRegimeLabel))
         memorySummary = memoryLog.summary
+    }
+
+    /// 取樣當下的狀態。斜率不跨越它——閒置與觀察中的工作集差一個數量級，
+    /// 接成一條線取斜率得到的是「階段落差 ÷ 總時間」，不是成長率。
+    private var memoryRegimeLabel: String {
+        switch session.mode {
+        case .idle: return "閒置"
+        case .observing: return "觀察中"
+        case .intervening: return "接手中"
+        }
     }
 
     /// ⌃⌥⌘O 切換觀察、⌃⌥⌘. 緊急停止（全域熱鍵；實際觸發需真機驗收）。
@@ -136,7 +148,8 @@ final class AppCoordinator: ObservableObject {
     }
 
     func toggleObserving() {
-        sampleMemory()                    // 曲線上的標記：這一刻之前是閒置，之後是觀察中
+        sampleMemory()                    // 舊階段的最後一點
+        defer { sampleMemory() }          // 新階段的起點（mode 改完之後才跑）
         if session.mode == .idle {
             session.toggleObserve()   // → observing
             startPipeline()

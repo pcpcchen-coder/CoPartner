@@ -14,7 +14,18 @@ final class MemorySampleLogTests: XCTestCase {
                      capacity: Int = 200) -> MemorySampleLog {
         var l = MemorySampleLog(capacity: capacity)
         for p in points {
-            l.record(MemorySample(at: t0.addingTimeInterval(p.minutes * 60), footprintMB: p.mb))
+            l.record(MemorySample(at: t0.addingTimeInterval(p.minutes * 60),
+                                  footprintMB: p.mb, regime: "閒置"))
+        }
+        return l
+    }
+
+    /// 帶狀態的版本：`(分鐘, MB, 狀態)`。
+    private func log(_ points: [(minutes: Double, mb: Double, regime: String)]) -> MemorySampleLog {
+        var l = MemorySampleLog()
+        for p in points {
+            l.record(MemorySample(at: t0.addingTimeInterval(p.minutes * 60),
+                                  footprintMB: p.mb, regime: p.regime))
         }
         return l
     }
@@ -121,5 +132,68 @@ final class MemorySampleLogTests: XCTestCase {
         l.record(MemorySample(at: t0.addingTimeInterval(3600), footprintMB: 160))
         XCTAssertEqual(l.samples.count, 2)
         XCTAssertEqual(try XCTUnwrap(l.growthMBPerHour), 60, accuracy: 0.001)
+    }
+
+    // MARK: - 狀態分段（真機第二輪資料逼出來的）
+
+    /// **真機序列重演。** 閒置 43 分鐘停在 30 MB，按下「開始觀察」之後衝到 162 MB，
+    /// 再回落到 130 MB。首末斜率會報成「+144 MB/小時」——但那不是速率，
+    /// 那是一個**階段落差**：閒置與觀察中是兩個不同的工作集。
+    func testSlopeDoesNotCrossRegimeBoundary() throws {
+        let l = log([(0, 26, "閒置"), (30, 30, "閒置"), (43, 30, "閒置"),
+                     (43, 30, "觀察中"), (60, 162, "觀察中"), (86, 130, "觀察中")])
+        // 觀察中這一段是 30 → 130 MB／43 分鐘 ≈ +140 MB/小時。
+        // 若跨越邊界，(0,26) → (86,130) 只會算出約 +73——一個誰都解讀不了的數字。
+        XCTAssertEqual(try XCTUnwrap(l.growthMBPerHour), 100 / (43.0 / 60), accuracy: 5,
+                       "本階段斜率只能從觀察中的第一筆算起")
+        XCTAssertTrue(l.summary.contains("觀察中"), l.summary)
+        XCTAssertFalse(l.summary.contains("起始 26"), "26 MB 是上一個階段的事：\(l.summary)")
+    }
+
+    /// 上去又下來 ≠ 無上限成長。近期斜率必須看得出它在回收。
+    func testPeakThenReclaimShowsNegativeRecentSlope() throws {
+        let l = log([(43, 30, "觀察中"), (60, 162, "觀察中"), (86, 130, "觀察中")])
+        XCTAssertLessThan(try XCTUnwrap(l.recentGrowthMBPerHour(window: 2)), 0,
+                          "162 → 130 是在回收，不是在漲")
+        XCTAssertEqual(l.peakMB, 162)
+    }
+
+    /// 本階段峰值不可被上一個階段的峰值汙染。
+    func testPeakIsPerRegimeButAllTimePeakSurvives() {
+        let l = log([(0, 500, "觀察中"), (10, 500, "觀察中"),
+                     (10, 40, "閒置"), (70, 42, "閒置")])
+        XCTAssertEqual(l.peakMB, 42, "本階段（閒置）的峰值")
+        XCTAssertEqual(l.allTimePeakMB, 500, "全期峰值仍查得到")
+    }
+
+    /// 切回原本的狀態算**新的一段**——中間隔了另一個狀態，工作集早就不同了。
+    func testReturningToAPreviousRegimeStartsAFreshSegment() {
+        let l = log([(0, 26, "閒置"), (30, 30, "閒置"),
+                     (30, 30, "觀察中"), (60, 160, "觀察中"),
+                     (60, 60, "閒置"), (120, 62, "閒置")])
+        XCTAssertEqual(l.currentRegimeSamples.count, 2)
+        XCTAssertEqual(l.currentRegimeSamples.first?.footprintMB, 60)
+    }
+
+    // MARK: - 去重
+
+    /// 狀態切換前後各取一次，而切換路徑可能疊在一起（`toggleObserving` 內部又呼叫
+    /// `stopAll`），同一個瞬間會冒出好幾筆一模一樣的點。它們不帶資訊，
+    /// 只會讓「幾個樣本」這個數字騙人。
+    func testSameInstantSameRegimeIsDeduplicated() {
+        var l = MemorySampleLog()
+        XCTAssertTrue(l.record(MemorySample(at: t0, footprintMB: 30, regime: "閒置")))
+        XCTAssertFalse(l.record(MemorySample(at: t0, footprintMB: 30, regime: "閒置")))
+        XCTAssertFalse(l.record(MemorySample(at: t0.addingTimeInterval(0.5),
+                                             footprintMB: 31, regime: "閒置")))
+        XCTAssertEqual(l.samples.count, 1)
+    }
+
+    /// 但**狀態不同就一定要留**——那正是階段邊界，丟掉它新階段就沒有起點了。
+    func testRegimeChangeAtSameInstantIsKept() {
+        var l = MemorySampleLog()
+        XCTAssertTrue(l.record(MemorySample(at: t0, footprintMB: 30, regime: "閒置")))
+        XCTAssertTrue(l.record(MemorySample(at: t0, footprintMB: 30, regime: "觀察中")))
+        XCTAssertEqual(l.samples.count, 2)
     }
 }
