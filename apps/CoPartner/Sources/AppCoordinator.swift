@@ -118,6 +118,8 @@ final class AppCoordinator: ObservableObject {
     private var memorySettleTask: Task<Void, Never>?
     /// 觀察中的取樣時間戳，用來節流（敘事迴圈每秒跑一次，不必每秒都取樣）。
     private var lastTickSampleAt = Date.distantPast
+    /// 這一輪觀察是什麼時候開始的——頭一分鐘要用比較密的取樣間隔。
+    private var observationStartedAt = Date.distantPast
 
     init() { registerHotkeys() }
 
@@ -137,32 +139,45 @@ final class AppCoordinator: ObservableObject {
         memoryTrail = memoryLog.regimeTrail()
         // **每一筆都落檔**，包含被環狀緩衝擠掉的。選單那兩行是給人看的摘要，
         // 檔案才是資料——先前每一輪診斷都靠人截圖念數字，又慢又有損。
-        memoryLogWriter.append(at: now, footprintMB: mb, regime: regime,
-                               steps: l1Steps.count, source: source)
+        memoryLogWriter.append(
+            at: now, footprintMB: mb, regime: regime, steps: l1Steps.count, source: source,
+            model: MemoryLogFormat.ModelState(
+                available: LocalNarrationEnvironment.availability.canUseFoundationModels))
     }
 
     /// 觀察中的取樣。**搭既有的敘事迴圈，不另外喚醒任何東西**——
-    /// 那個迴圈本來就每秒跑一次，這裡只是每 15 秒順手記一筆。
+    /// 那個迴圈本來就每秒跑一次，這裡只是順手記一筆。
+    ///
+    /// 開始觀察的頭一分鐘改用 3 秒間隔：第一份真實日誌顯示**開始觀察的頭 15 秒就漲了
+    /// 78 MB**（兩輪都是，+78.1 與 +73.0），而 15 秒的取樣間隔只能告訴我們「漲了」，
+    /// 看不出那是一次大配置還是一連串小配置——那兩件事要查的地方完全不同。
     private func sampleMemoryDuringObservation() {
         let now = Date()
-        guard now.timeIntervalSince(lastTickSampleAt) >= 15 else { return }
+        let sinceStart = now.timeIntervalSince(observationStartedAt)
+        guard now.timeIntervalSince(lastTickSampleAt) >= (sinceStart < 60 ? 3 : 15) else { return }
         lastTickSampleAt = now
         sampleMemory(source: .tick)
     }
 
-    /// 停止觀察後隔 60 秒再取一次。
+    /// 停止觀察後在 60 秒 / 5 分鐘 / 15 分鐘各再取一次。
     ///
     /// 存在的理由是先前每一輪診斷共同的瑕疵：閒置讀數都是停止後**幾秒內**取的，
     /// 而記憶體那時還在往下掉——軌跡自己就顯示過 `閒置 145→65`，一段自己掉了 80 MB。
     /// 拿沒落定的數字去比「底線有沒有疊高」，比的是雜訊。
     ///
-    /// 這**不是定時器**：一次停止只排一次，而且下一次狀態切換就取消。
+    /// **60 秒還不夠。** 第一份真實日誌顯示 60 秒那一筆是 124.6 MB，
+    /// 25 秒後卻已經掉到 108.9——落定點還在後面。所以改成取一條衰減曲線
+    /// （60 秒 / 5 分鐘 / 15 分鐘），讓「掉到哪裡不再掉」自己浮出來。
+    ///
+    /// 這**不是定時器**：一次停止只排這一串，而且下一次狀態切換就整個取消。
     private func scheduleSettleSample() {
         memorySettleTask?.cancel()
         memorySettleTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(60))
-            guard !Task.isCancelled else { return }
-            self?.sampleMemory(source: .settle)
+            for seconds in [60, 240, 600] {          // 累計 60s / 5min / 15min
+                try? await Task.sleep(for: .seconds(seconds))
+                guard !Task.isCancelled else { return }
+                self?.sampleMemory(source: .settle)
+            }
         }
     }
 
@@ -205,6 +220,7 @@ final class AppCoordinator: ObservableObject {
         memorySettleTask?.cancel()                       // 上一次停止排的落定取樣已無意義
         sampleMemory(source: .transition)                // 舊階段的最後一點
         defer {
+            if session.mode != .idle { observationStartedAt = Date() }
             sampleMemory(source: .transition)            // 新階段的起點（mode 改完之後才跑）
             if session.mode == .idle { scheduleSettleSample() }
         }

@@ -25,10 +25,10 @@ final class MemoryLogWriter {
         }
     }
 
-    func append(at: Date, footprintMB: Double, regime: String,
-                steps: Int, source: MemoryLogFormat.Source) {
-        let line = MemoryLogFormat.line(at: at, footprintMB: footprintMB,
-                                        regime: regime, steps: steps, source: source) + "\n"
+    func append(at: Date, footprintMB: Double, regime: String, steps: Int,
+                source: MemoryLogFormat.Source, model: MemoryLogFormat.ModelState) {
+        let line = MemoryLogFormat.line(at: at, footprintMB: footprintMB, regime: regime,
+                                        steps: steps, source: source, model: model) + "\n"
         guard let data = line.data(using: .utf8) else { return }
         if let handle = try? FileHandle(forWritingTo: url) {
             defer { try? handle.close() }
