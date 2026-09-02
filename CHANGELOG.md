@@ -42,6 +42,12 @@
   但前置的執行端根本還不存在。
 
 ### Fixed
+- **記憶體：觀察中的線性成長**（真機 +151 MB/小時 → +7 MB/小時）。成因是
+  `CaptureEngine` 的 `AsyncStream<TileEvent>` 沒有指定 buffering policy（無上限），
+  而它唯一的消費者是一個 `@MainActor` 計數器——每個事件都要跳一次 MainActor，
+  產生端不會等它。同一條管線上游的 `SCKFrameProducer` 早就用了 `.bufferingNewest(2)`。
+  改成 `.bufferingNewest(64)`，並把丟棄數顯示在選單上（靜默丟事件會讓「消費端塞車」
+  這個訊號消失，而那正是診斷要找的東西）。
 - `FocusChangeTracker` 四類同源 bug：拿欄位內容 / 會變的標題 / 「讀不到」/
   兩個不同來源的欄位當視窗身分。四條回歸測試釘住。
 - `SbplProfileBuilder` 路徑未跳脫（安全設定裡的注入面）、未解符號連結
