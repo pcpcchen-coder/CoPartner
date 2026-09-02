@@ -100,6 +100,9 @@ final class AppCoordinator: ObservableObject {
     // 執行端 XPC（step 53.1）：主 app ↔ service 的連線。
     // service 目前**沒有執行能力**，回覆一律是「收到但沒做」→ 轉成 throw，不假裝成功。
     private let xpcPerformer = XPCActionPerformer()
+    /// UI 動作（點按／輸入／捲動）的執行端。**在主程序內**——它們天生就在使用者權限內，
+    /// 沒有沙箱可以圍（威脅模型 R2），放進 XPC service 只會製造「看起來被隔離了」的假象。
+    private let uiPerformer = UIActionPerformer()
     @Published private(set) var xpcSummary: String = "執行端：未檢測"
 
     // 記憶體診斷（handoff §7.6.6）：真機上**沒開觀察**、只是讓 app 開著就會跳告警。
@@ -293,13 +296,21 @@ final class AppCoordinator: ObservableObject {
                 root: Self.sandboxWorkspaceRoot(),
                 deniedSubpaths: Self.secretSubpaths(),
                 closedRoots: [NSHomeDirectory()])
+            let ui = uiPerformer
             actionExecutor = ActionExecutor(
                 clock: handoffGeneration,
                 policy: .from(contract: cleanEnvelope.takeover),
                 allowlist: Self.defaultPathAllowlist(),
+                // **分流點**：UI 動作走主程序（沒有沙箱，R2），其餘走 XPC + sbpl。
+                // 判斷用 `UIActionGate.isUIAction` 這個純值函式，不在這裡自己列一次
+                // kind 清單——列兩份遲早會分岔，而分岔的後果是某個動作走錯路徑。
                 performer: { action in
-                    try await performer.perform(action, generation: generation,
-                                                workspace: workspace)
+                    if UIActionGate.isUIAction(action.kind) {
+                        try await ui.perform(action)
+                    } else {
+                        try await performer.perform(action, generation: generation,
+                                                    workspace: workspace)
+                    }
                 })
             let router = cloudRouter
             handoffTask = Task { [weak self] in
@@ -479,6 +490,27 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
+    /// UI 乾跑（step 53.6-B 除錯入口）。**不會送出任何事件。**
+    ///
+    /// UI 動作最危險的地方不是被拒絕，是**成功地點錯地方**——座標算錯不報錯、
+    /// 不留紀錄，游標只是落在別處。所以在真的能動之前，先把「會落在哪裡、
+    /// 那裡有什麼」印出來。報告裡的「AXButton『刪除』」那一行是唯一能在事前
+    /// 看出差別的東西。
+    ///
+    /// 送的是螢幕正中央——一個不需要猜、每台機器都成立的參考點。
+    func runUIDryRun() {
+        guard let geometry = ScreenGeometryProvider.mainDisplay() else {
+            xpcSummary = "UI 乾跑：讀不到顯示器幾何"
+            return
+        }
+        let centre = ProposedAction(
+            kind: .click(x: Int(geometry.imagePixelSize.width / 2),
+                         y: Int(geometry.imagePixelSize.height / 2)),
+            rationale: "（乾跑）螢幕正中央")
+        let quit = ProposedAction(kind: .keypress("cmd+q"), rationale: "（乾跑）危險組合鍵")
+        xpcSummary = uiPerformer.dryRun(centre) + "\n—\n" + uiPerformer.dryRun(quit)
+    }
+
     /// 送一個**合成提議**走完整條接手鏈（step 53.5 驗收用）。
     ///
     /// ⚠️ **這不是繞過確認閘門。** 它走的是與真提議**完全相同**的路徑：
@@ -623,7 +655,9 @@ final class AppCoordinator: ObservableObject {
             case .xpcUnavailable(let detail):
                 reason = "XPC 連線問題：\(detail)"
             case .notSandboxable(let summary):
-                reason = "UI 類動作不走沙箱路徑，主程序內執行端待接（\(summary)）"
+                reason = "UI 類動作不走沙箱路徑（\(summary)）"
+            case .uiActionRefused(let why):
+                reason = "UI 執行端拒絕：\(why)"
             default:
                 reason = String(describing: error)
             }
