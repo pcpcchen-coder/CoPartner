@@ -196,4 +196,52 @@ final class MemorySampleLogTests: XCTestCase {
         XCTAssertTrue(l.record(MemorySample(at: t0, footprintMB: 30, regime: "觀察中")))
         XCTAssertEqual(l.samples.count, 2)
     }
+
+    // MARK: - 階段軌跡（真機第三輪逼出來的）
+
+    /// **真機序列重演。** 閒置 26→30，觀察中衝到 162 再回落到 130，
+    /// 停止觀察後掉到 92——但沒回到 30。軌跡要讓這三段並排看得到。
+    func testTrailShowsEachSegmentStartEndAndPeak() {
+        let l = log([(0, 26, "閒置"), (43, 30, "閒置"),
+                     (43, 30, "觀察中"), (60, 162, "觀察中"), (86, 130, "觀察中"),
+                     (86, 130, "閒置"), (90, 92, "閒置")])
+        let trail = l.regimeTrail()
+        XCTAssertTrue(trail.contains("閒置 26→30"), trail)
+        XCTAssertTrue(trail.contains("觀察中 30→130（峰 162）"), trail)
+        XCTAssertTrue(trail.contains("閒置 130→92"), trail)
+    }
+
+    /// 峰值只在真的高過頭尾時才印——否則是重複資訊，把行擠長而已。
+    func testTrailOmitsPeakWhenItEqualsTheEndpoints() {
+        let trail = log([(0, 26, "閒置"), (43, 30, "閒置")]).regimeTrail()
+        XCTAssertEqual(trail, "階段：閒置 26→30 MB")
+    }
+
+    /// **這才是重點：閒置的底線有沒有一輪比一輪高。**
+    /// 疊高 ＝ 真的在漏；穩定 ＝ 留著不放的快取（例如載入後不卸載的本地模型）。
+    func testTrailMakesARatchetingIdleBaselineVisible() {
+        let l = log([(0, 30, "閒置"),
+                     (0, 30, "觀察中"), (20, 160, "觀察中"),
+                     (20, 92, "閒置"), (30, 92, "閒置"),
+                     (30, 92, "觀察中"), (50, 220, "觀察中"),
+                     (50, 150, "閒置"), (60, 150, "閒置")])
+        let trail = l.regimeTrail()
+        XCTAssertTrue(trail.contains("閒置 92→92"), trail)
+        XCTAssertTrue(trail.contains("閒置 150→150"), trail)   // 92 → 150：底線疊高了
+    }
+
+    /// 只留最近幾段——十輪之後那一行不能長到看不完。
+    func testTrailIsLimited() {
+        var points: [(minutes: Double, mb: Double, regime: String)] = []
+        for i in 0..<10 {
+            points.append((Double(i * 10), 30, "閒置"))
+            points.append((Double(i * 10) + 5, 100, "觀察中"))
+        }
+        let trail = log(points).regimeTrail(limit: 3)
+        XCTAssertEqual(trail.components(separatedBy: "・").count, 3, trail)
+    }
+
+    func testEmptyTrailSaysSo() {
+        XCTAssertEqual(MemorySampleLog().regimeTrail(), "階段：尚無取樣")
+    }
 }

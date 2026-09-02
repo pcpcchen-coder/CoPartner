@@ -129,6 +129,61 @@ public struct MemorySampleLog: Sendable {
         return line + String(format: "（%d 樣本／%.0f 分）", segment.count, spanMinutes)
     }
 
+    // MARK: - 階段軌跡
+
+    /// 一個完整的狀態區段。
+    public struct RegimeSegment: Sendable, Equatable {
+        public let regime: String
+        public let startMB: Double
+        public let endMB: Double
+        public let peakMB: Double
+        public let minutes: Double
+    }
+
+    /// 依狀態切成一段一段（舊→新）。
+    public var segments: [RegimeSegment] {
+        var result: [RegimeSegment] = []
+        var current: [MemorySample] = []
+        func flush() {
+            guard let head = current.first, let tail = current.last else { return }
+            result.append(RegimeSegment(
+                regime: head.regime,
+                startMB: head.footprintMB,
+                endMB: tail.footprintMB,
+                peakMB: current.map(\.footprintMB).max() ?? head.footprintMB,
+                minutes: tail.at.timeIntervalSince(head.at) / 60))
+            current = []
+        }
+        for sample in samples {
+            if let last = current.last, last.regime != sample.regime { flush() }
+            current.append(sample)
+        }
+        flush()
+        return result
+    }
+
+    /// 階段軌跡：`閒置 26→30・觀察中 30→130（峰 162）・閒置 130→92`
+    ///
+    /// 存在的理由是一個**只有跨階段才看得到的問題**：停止觀察後記憶體掉了，
+    /// 但沒掉回原本的底線。那有兩種可能——留著不放的快取（無害，例如載入後就
+    /// 不卸載的本地模型），或每跑一輪就往上疊一層（真的漏）。
+    /// 兩者的差別只在「閒置的底線會不會一輪比一輪高」，而那要把好幾段並排才看得出來。
+    /// 摘要那一行只講當下這一段，看不到這件事。
+    public func regimeTrail(limit: Int = 4) -> String {
+        let recent = segments.suffix(max(1, limit))
+        guard !recent.isEmpty else { return "階段：尚無取樣" }
+        let parts = recent.map { segment -> String in
+            var text = segment.regime.isEmpty ? "?" : segment.regime
+            text += String(format: " %.0f→%.0f", segment.startMB, segment.endMB)
+            // 峰值只在它真的高過頭尾時才印——否則是重複資訊，把行擠長而已。
+            if segment.peakMB > max(segment.startMB, segment.endMB) + 1 {
+                text += String(format: "（峰 %.0f）", segment.peakMB)
+            }
+            return text
+        }
+        return "階段：" + parts.joined(separator: "・") + " MB"
+    }
+
     /// 由後往前取到狀態改變為止。
     private var currentRegime: [MemorySample] {
         guard let current = samples.last?.regime else { return [] }

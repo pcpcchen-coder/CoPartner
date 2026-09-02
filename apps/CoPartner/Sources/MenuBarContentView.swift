@@ -70,6 +70,12 @@ struct MenuBarContentView: View {
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
+                    // 階段軌跡另外一行：它回答的是「閒置的底線會不會一輪比一輪高」，
+                    // 而那是唯一能分辨「留著不放的快取」與「真的在漏」的觀察。
+                    Text(coordinator.memoryTrail)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
                 .font(.caption2).foregroundStyle(.tertiary)
 
