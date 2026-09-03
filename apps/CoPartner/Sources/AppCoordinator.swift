@@ -497,7 +497,11 @@ final class AppCoordinator: ObservableObject {
     /// 那裡有什麼」印出來。報告裡的「AXButton『刪除』」那一行是唯一能在事前
     /// 看出差別的東西。
     ///
-    /// 送的是螢幕正中央——一個不需要猜、每台機器都成立的參考點。
+    /// 送的是螢幕正中央——一個不需要猜、每台機器都成立的參考點——外加一個危險組合鍵。
+    ///
+    /// **完整報告寫進檔案，選單只留一句判定。** 真機第一次跑時選單把報告截在第 10 行，
+    /// 而被截掉的正好是 `⌘Q` 的鍵碼與後果——最該看的那一段。shell 乾跑早就是這樣處理的
+    /// （見 `writeDryRunReport` 的註解），這裡犯的是同一個錯誤的第三次。
     func runUIDryRun() {
         guard let geometry = ScreenGeometryProvider.mainDisplay() else {
             xpcSummary = "UI 乾跑：讀不到顯示器幾何"
@@ -507,8 +511,26 @@ final class AppCoordinator: ObservableObject {
             kind: .click(x: Int(geometry.imagePixelSize.width / 2),
                          y: Int(geometry.imagePixelSize.height / 2)),
             rationale: "（乾跑）螢幕正中央")
-        let quit = ProposedAction(kind: .keypress("cmd+q"), rationale: "（乾跑）危險組合鍵")
-        xpcSummary = uiPerformer.dryRun(centre) + "\n—\n" + uiPerformer.dryRun(quit)
+        // ⌘Q 與 ⌘W：兩個「按下去就回不來」的組合鍵，而且**只差一個鍵碼**。
+        // 兩個一起跑，鍵碼表要是錯位，兩行報告會長得一模一樣。
+        let dangerous = [ProposedAction(kind: .keypress("cmd+q")),
+                         ProposedAction(kind: .keypress("cmd+w"))]
+        let report = ([centre] + dangerous)
+            .map { uiPerformer.dryRun($0) }
+            .joined(separator: "\n—\n")
+        let path = Self.writeUIDryRunReport(report)
+        xpcSummary = uiPerformer.verdict(centre) + "\n完整報告：\(path)"
+    }
+
+    /// 把 UI 乾跑報告寫成檔案。回傳路徑。
+    private static func writeUIDryRunReport(_ report: String) -> String {
+        let directory = diagnosticsDirectory()
+        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        let path = (directory as NSString).appendingPathComponent("ui-dry-run.txt")
+        let stamp = MemoryLogFormat.timestamp(Date())
+        try? "# CoPartner UI 乾跑 \(stamp)\n\n\(report)\n"
+            .write(toFile: path, atomically: true, encoding: .utf8)
+        return path
     }
 
     /// 送一個**合成提議**走完整條接手鏈（step 53.5 驗收用）。
