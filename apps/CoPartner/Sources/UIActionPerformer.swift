@@ -32,9 +32,21 @@ final class UIActionPerformer {
     /// `UIActionGate.decide` 拿它去判定，所以翻成 true 的那一刻，閘門會自動開始放行，
     /// 不需要有人記得回來改別的地方。
     ///
-    /// **翻開前的驗收**：用選單的「UI 乾跑」確認座標換算與命中的元件都正確
-    /// ——那顆按鈕不會送出任何事件（見 `dryRun`）。翻開是 step 53.6-C。
-    static let willPerformUIActions = false
+    /// **2026-09-03（step 53.6-C）：翻成 true。** 與 `ExecutorService.willExecuteActions`
+    /// 一樣單獨成為一個改動——翻開執行能力若混在一大包程式碼裡，沒有人能真的審完。
+    ///
+    /// 翻開前的真機乾跑（`Diagnostics/ui-dry-run.txt`）四項全過：
+    /// 宣告尺寸 1920×1080 px 與實際相符、螢幕中央 (960,540) 換算成全域 (960,540)、
+    /// AX 探測讀得到命中的元件、`⌘Q`→鍵碼 12 與 `⌘W`→鍵碼 13 分得開且後果都印得出來。
+    ///
+    /// 翻開的同時補上一道這一刻才需要的閘門：`TakeoverPolicyGuard` 讓
+    /// **autoBounded ＋ UI 控制權**降級為逐一確認。在只有 shell 的世界裡 autoBounded
+    /// 從來沒有自動執行過東西（shell 永遠不是 low），而 `.click` 是 low——
+    /// 一次點擊就可能按到「刪除」，而 UI 這一側沒有沙箱兜底。
+    ///
+    /// **出事時的第一動作**：把這一行翻回 `false`。`UIActionGate` 會自動開始拒絕，
+    /// 不需要記得改別的地方。
+    static let willPerformUIActions = true
 
     /// 事件來源。用 `.combinedSessionState`：`.hidSystemState` 會忽略其他程序注入的
     /// 修飾鍵狀態，導致組合鍵在某些情境下只按到主鍵。
