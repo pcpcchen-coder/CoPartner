@@ -26,7 +26,7 @@ CoPartner/
 │   ├── design/           V1 / V2 / V2.1 完整設計 + 沙箱威脅模型
 │   ├── architecture/     架構總覽、程序拓樸、資料流（Mermaid）
 │   ├── adr/              架構決策紀錄 (Architecture Decision Records)
-│   ├── assets/diagrams/  簡報用圖檔（SVG + PNG）
+│   ├── assets/           簡報素材：deck/（.pptx）、panorama.html、diagrams/
 │   └── privacy/          資料分類與 PII 政策
 ├── apps/CoPartner/       macOS app（SwiftUI menu bar，XcodeGen project.yml）
 ├── packages/CoPartnerKit Swift Package（多 target 函式庫，app 與測試共用）
@@ -61,7 +61,10 @@ CoPartner/
 真機驗收清單見 [`docs/planning/realmachine-runbook.md`](docs/planning/realmachine-runbook.md)。
 
 📊 **一頁看完全貌**：[`docs/project-mindmap.md`](docs/project-mindmap.md)——心智圖、進度地圖、
-資料流、安全邊界、版本階梯，圖檔另有 SVG／PNG 匯出於 [`docs/assets/diagrams/`](docs/assets/diagrams/)。
+資料流、安全邊界、版本階梯。簡報素材有三種形式：
+[`docs/assets/deck/`](docs/assets/deck/)（20 頁 .pptx，附講稿）、
+[`docs/assets/panorama.html`](docs/assets/panorama.html)（單頁視覺版）、
+[`docs/assets/diagrams/`](docs/assets/diagrams/)（圖檔 SVG／PNG）。
 
 ### 自己驗安全邊界
 
