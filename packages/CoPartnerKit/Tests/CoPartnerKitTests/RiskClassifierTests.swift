@@ -67,7 +67,7 @@ final class RiskClassifierTests: XCTestCase {
         XCTAssertEqual(classifier.classify(ProposedAction(kind: .click(x: 1, y: 2))), .low)
         XCTAssertEqual(classifier.classify(ProposedAction(kind: .screenshot)), .low)
         XCTAssertEqual(classifier.classify(ProposedAction(kind: .typeText("hello"))), .low)
-        XCTAssertEqual(classifier.classify(ProposedAction(kind: .scroll(dx: 0, dy: 5))), .low)
+        XCTAssertEqual(classifier.classify(ProposedAction(kind: .scroll(x: 1, y: 2, dx: 0, dy: 5))), .low)
         XCTAssertEqual(classifier.classify(ProposedAction(kind: .keypress("cmd+s"))), .medium)  // chord 保守
         XCTAssertEqual(classifier.classify(ProposedAction(kind: .readFile(path: "/tmp/a.txt"))), .low)
         XCTAssertEqual(classifier.classify(ProposedAction(kind: .writeFile(path: "/tmp/a.txt", contents: "x"))), .medium)

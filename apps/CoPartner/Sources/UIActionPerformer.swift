@@ -70,7 +70,8 @@ final class UIActionPerformer {
         case let .click(x, y):      try click(x: x, y: y, source: source)
         case let .typeText(text):   try type(text, source: source)
         case let .keypress(raw):    try press(raw, source: source)
-        case let .scroll(dx, dy):   try scroll(dx: dx, dy: dy, source: source)
+        case let .scroll(x, y, dx, dy):
+            try scroll(x: x, y: y, dx: dx, dy: dy, source: source)
         // 刻意窮舉、不用 default：日後 Kind 加了新的 UI 動作，這裡會編譯失敗而不是
         // 靜默地什麼都不做——後者會表現成「按了執行但沒反應」，最難查的那種。
         case .screenshot, .shell, .readFile, .writeFile, .outboundComms:
@@ -130,15 +131,32 @@ final class UIActionPerformer {
         up.post(tap: .cghidEventTap)
     }
 
-    private func scroll(dx: Int, dy: Int, source: CGEventSource) throws {
+    /// 捲動。**先把游標移到目標位置，再送捲動事件。**
+    ///
+    /// 捲動事件是送到「某個位置底下的視窗」的。只設 `event.location` 不夠可靠——
+    /// 有些 app 讀的是實際游標位置——所以先送一個 `mouseMoved` 把游標移過去，
+    /// 兩個都做才確定落在正確的視窗上。
+    ///
+    /// 真機第一次驗收就栽在這件事上：使用者按完 HUD 的「執行」，游標停在 HUD 面板上，
+    /// 捲動事件於是送給了那個不能捲的面板——畫面完全沒動，而且**沒有任何錯誤**。
+    /// 那正是這一層最典型的失敗形狀：成功地做錯事。
+    ///
+    /// 游標會移動是刻意的副作用，不是缺點：它讓「座標換算對不對」在畫面上看得見。
+    private func scroll(x: Int, y: Int, dx: Int, dy: Int, source: CGEventSource) throws {
         guard ScreenCoordinateMapper.isReasonableScroll(dx: dx, dy: dy) else {
             throw ExecutionError.uiActionRefused(
                 "捲動量超出上限（\(dx),\(dy)）——多半是單位搞錯了，該停下來問人")
+        }
+        let point = try globalPoint(x: x, y: y)
+        if let move = CGEvent(mouseEventSource: source, mouseType: .mouseMoved,
+                              mouseCursorPosition: point, mouseButton: .left) {
+            move.post(tap: .cghidEventTap)
         }
         guard let event = CGEvent(scrollWheelEvent2Source: source, units: .line,
                                   wheelCount: 2, wheel1: Int32(dy), wheel2: Int32(dx), wheel3: 0) else {
             throw ExecutionError.uiActionRefused("建立不了捲動事件")
         }
+        event.location = point
         event.post(tap: .cghidEventTap)
     }
 
@@ -204,6 +222,16 @@ final class UIActionPerformer {
             do {
                 let point = try globalPoint(x: x, y: y)
                 lines.append(String(format: "模型座標 (%d,%d) → 全域 (%.1f,%.1f)", x, y, point.x, point.y))
+                lines.append("那個位置上是：\(Self.describeElement(at: point))")
+            } catch {
+                lines.append("座標換算被拒：\(error)")
+            }
+        }
+        if case let .scroll(x, y, dx, dy) = action.kind {
+            do {
+                let point = try globalPoint(x: x, y: y)
+                lines.append(String(format: "模型座標 (%d,%d) → 全域 (%.1f,%.1f)，捲動 (%d,%d)",
+                                    x, y, point.x, point.y, dx, dy))
                 lines.append("那個位置上是：\(Self.describeElement(at: point))")
             } catch {
                 lines.append("座標換算被拒：\(error)")

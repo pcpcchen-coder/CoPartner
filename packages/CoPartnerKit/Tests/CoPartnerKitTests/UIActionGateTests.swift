@@ -17,7 +17,7 @@ final class UIActionGateTests: XCTestCase {
 
     func testUIKindsAreRecognised() {
         for kind: ProposedAction.Kind in [.screenshot, .click(x: 1, y: 2), .typeText("hi"),
-                                          .keypress("cmd+c"), .scroll(dx: 0, dy: 3)] {
+                                          .keypress("cmd+c"), .scroll(x: 1, y: 2, dx: 0, dy: 3)] {
             XCTAssertTrue(UIActionGate.isUIAction(kind), kind.summary)
         }
     }
@@ -39,7 +39,7 @@ final class UIActionGateTests: XCTestCase {
     /// 就是靜默地什麼都不做——整條鏈會顯示「已執行」而畫面上什麼都沒發生。
     func testNoAccessibilityAlwaysRefuses() {
         for kind: ProposedAction.Kind in [.click(x: 1, y: 2), .typeText("hi"),
-                                          .keypress("cmd+c"), .scroll(dx: 0, dy: 3)] {
+                                          .keypress("cmd+c"), .scroll(x: 1, y: 2, dx: 0, dy: 3)] {
             guard case .refuse(let reason) = decide(kind, trusted: false) else {
                 return XCTFail("\(kind.summary) 在沒有權限時必須拒絕")
             }
