@@ -7,8 +7,12 @@
 ### 真機里程碑
 - **M5 接手（進行中）**：computer-use 契約對齊、SSE 傳輸、接手 HUD、
   執行端 XPC 骨架與雙向 code-signing 驗證、`sandbox-exec` profile 成對驗證（8 項全綠）、
-  `posix_spawn` 真執行接線。**執行開關已翻開**（2026-08-20）——門禁清單逐項打勾後，
-  app 第一次真的會執行沙箱內的命令。🔒 剩真雲端 SSE 來源與 UI/AX 執行端（53.6）。
+  `posix_spawn` 真執行接線。
+  - **shell 執行開關已翻開**（2026-08-20）：門禁清單逐項打勾後，app 第一次真的
+    執行了沙箱內的命令（`cat` 讀回檔案內容，UUID 對得上）。
+  - **UI 執行能力已翻開**（2026-09-03）：按「UI 測試」→ HUD 人工確認 → 畫面真的捲動。
+    **這是 CoPartner 第一次動使用者的電腦。**
+  - 🔒 剩真雲端 SSE 來源。
 - **M4 本地敘事** ✅ 真機通過：FoundationModels 3B，1373–2388ms／step，
   關閉 Apple Intelligence 自動降級規則式且不中斷。
 - **M2 局部 OCR** ✅ 真機通過：改用 macOS Vision（不再依賴 sidecar），吞吐 18%（目標 ≤20%）。
@@ -36,6 +40,13 @@
 - 架構圖改用 Mermaid（`docs/architecture/`）：模組相依、程序拓樸、資料流、
   接手時序、信任邊界。純文字可 diff，GitHub 直接算圖。
 - 英文 `README.en.md`。
+- **UI 執行端（step 53.6）**：`UIActionGate`（沒有輔助使用權限一定拒絕——沒有它時
+  `CGEvent.post` 不會失敗、不會丟錯，就是靜默什麼都不做）、`VirtualKeyMap`
+  （鍵名→鍵碼，用 Carbon 具名常數；寫死數字錯一個的後果不是「按不到」是「按到別的鍵」）、
+  `ScreenCoordinateMapper`（算式裡沒有 backingScale——化成比例後縮放與 Retina 同時被約掉；
+  越界拒絕不夾邊）、`TakeoverPolicyGuard`（autoBounded ＋ UI 控制權 ⟹ 降為逐一確認）。
+  驗收入口「UI 乾跑」印出落點與**那個位置上的 AX 元件**——座標算錯不會報錯，
+  那一行是唯一能在事前看出差別的東西。
 - **執行能力（step 53.5）**：`ExecutorService.willExecuteActions` 翻成 `true`。
   能力範圍刻意遠比「能執行指令」窄——只有 `shell`、只有本地固定表裡七個唯讀工具
   （cat/ls/head/tail/wc/grep/find，**永遠不含 shell 本身**）、只能寫沙箱工作目錄、
@@ -63,6 +74,11 @@
   （開關已於 2026-08-20 翻開，原表仍寫「not yet」）。
 
 ### Fixed
+- **`scroll` 動作沒有座標**（真機第一次 UI 執行時發現）。捲動事件是送到「某個位置底下
+  的視窗」的，沒有座標就只能落在游標當下的地方；而 `ComputerUseNormalizer` 一直把真 API
+  送來的 `coordinate` 丟掉。真雲端接上後，Claude 看著截圖決定要捲哪一塊，我們會捲到
+  游標剛好停著的地方——**而且不會報錯**。`Kind.scroll` 補上座標，缺欄位一律 throw
+  而不是退回「就捲游標那裡」（那是猜，而猜出來的動作與使用者核准的不是同一件事）。
 - **記憶體：觀察中的線性成長**（真機 +151 MB/小時 → +7 MB/小時）。成因是
   `CaptureEngine` 的 `AsyncStream<TileEvent>` 沒有指定 buffering policy（無上限），
   而它唯一的消費者是一個 `@MainActor` 計數器——每個事件都要跳一次 MainActor，
