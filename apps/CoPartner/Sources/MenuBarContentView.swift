@@ -62,10 +62,11 @@ struct MenuBarContentView: View {
                     // 自檢輸出是**驗收證據**，不是狀態列裝飾——寧可佔三行也不能截斷。
                     // `fixedSize(vertical:)` 才會真的讓它長高；只給 lineLimit 的話
                     // 容器仍會把它壓成一行再加省略號（真機上就這樣吃掉了關鍵欄位兩次）。
-                    // UI 乾跑的報告有七八行（含命中的 AX 元件），而**被截掉的往往正是
-                    // 最該看的那一行**——真機上已經因為截斷吃掉關鍵欄位兩次。
+                    // 長報告一律寫檔案、選單只留一句判定與路徑（UI 乾跑的完整報告
+                    // 在真機上就被這裡截掉過，而被截掉的正是最該看的那兩行）。
+                    // 這裡因此只需容得下「判定 + 路徑」。
                     Text(coordinator.xpcSummary)
-                        .lineLimit(10)
+                        .lineLimit(6)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)      // 可複製，方便貼回報告
                     Text(coordinator.localModelSummary).lineLimit(1)

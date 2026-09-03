@@ -132,6 +132,29 @@ final class UIActionPerformer {
 
     // MARK: - 乾跑（不送任何事件）
 
+    /// 一句話判定，給選單用。完整報告在檔案裡（見 `AppCoordinator.runUIDryRun`）。
+    ///
+    /// 存在的理由很具體：真機第一次跑 UI 乾跑時，選單把報告截在第 10 行，
+    /// **而被截掉的正好是 `⌘Q` 的鍵碼與後果那兩行**——也就是最該看的那一段。
+    /// 這個專案在「報告塞進選單被截斷」上已經栽過三次，shell 乾跑早就改成寫檔案。
+    func verdict(_ action: ProposedAction) -> String {
+        let trusted = AXIsProcessTrusted()
+        guard trusted else { return "UI 乾跑：❌ 未授權輔助使用（CGEvent 會靜默失敗）" }
+        guard let geometry = ScreenGeometryProvider.mainDisplay() else {
+            return "UI 乾跑：❌ 讀不到顯示器幾何"
+        }
+        var line = String(format: "UI 乾跑：權限已授權・顯示器 %.0f×%.0f px",
+                          geometry.imagePixelSize.width, geometry.imagePixelSize.height)
+        if NSScreen.screens.count > 1 { line += "・⚠️ \(NSScreen.screens.count) 台螢幕" }
+        if case let .click(x, y) = action.kind,
+           let point = try? ScreenCoordinateMapper.globalPoint(
+            fromModelPoint: CGPoint(x: x, y: y), in: geometry) {
+            line += String(format: "・中央 (%d,%d)→(%.0f,%.0f) 命中 %@",
+                           x, y, point.x, point.y, Self.describeElement(at: point))
+        }
+        return line
+    }
+
     /// 「如果執行，游標會落在哪裡、那裡有什麼」。**這個方法裡沒有任何 `post` 呼叫。**
     ///
     /// 報告命中的 AX 元件是重點：座標算錯不會報錯，只會點到別的地方，而
@@ -140,6 +163,15 @@ final class UIActionPerformer {
         let trusted = AXIsProcessTrusted()
         var lines = ["UI 乾跑：\(action.kind.summary)",
                      "輔助使用權限：\(trusted ? "已授權" : "❌ 未授權（CGEvent 會靜默失敗）")"]
+
+        // 多螢幕是這一層的**已知風險**，而且它不會報錯：宣告給模型的尺寸取自
+        // 「目前有鍵盤焦點的那一台」，而焦點在宣告與執行之間可能已經換過。
+        // 換了之後每一次點擊都會落在錯的螢幕上，畫面上看起來只是「點錯地方」。
+        let screenCount = NSScreen.screens.count
+        if screenCount > 1 {
+            lines.append("⚠️ 接了 \(screenCount) 台螢幕——宣告尺寸取自目前有焦點的那一台，"
+                         + "焦點若在宣告與執行之間改變，座標的意義會跟著變")
+        }
 
         switch UIActionGate.decide(kind: action.kind, accessibilityTrusted: trusted,
                                    canPerform: UIActionPerformer.willPerformUIActions) {
