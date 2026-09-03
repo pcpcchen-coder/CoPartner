@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  CoPartner 進度全景 — 單頁視覺版簡報素材。
+  這份是「可離線直接開」的獨立版本；線上版是同樣的內容發佈成 Claude Artifact。
+  內容事實來源：docs/project-mindmap.md（進度數字則來自 docs/planning/implementation-backlog.md）。
+  改了心智圖之後，這頁的數字也要跟著更新——它是衍生視圖，不是事實來源。
+-->
+<title>CoPartner 進度全景</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap">
+<style>:root{color-scheme:light dark} html{-webkit-text-size-adjust:100%} img{max-width:100%} [hidden]{display:none!important}</style>
+</head>
+<body>
+<style>
+  :root{
+    --paper:#EDEFEE; --surface:#F8F9F8; --sunk:#E3E7E5;
+    --ink:#14181B; --ink-2:#3B4644; --muted:#697471; --rule:#D2D8D5; --rule-2:#BFC7C3;
+    --attn:#A9640B; --attn-soft:#F0E2C9; --attn-ink:#7A4707;
+    --done:#2F6B57; --done-soft:#D8E7E0;
+    --wait:#6E7A77; --wait-soft:#DFE4E2;
+      --shadow:0 1px 2px rgba(20,24,27,.05), 0 8px 24px -16px rgba(20,24,27,.28);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#121618; --surface:#1A2022; --sunk:#0D1113;
+      --ink:#E8EDEB; --ink-2:#C0CAC7; --muted:#8B9793; --rule:#2A3335; --rule-2:#3A4547;
+      --attn:#E0A249; --attn-soft:#3A2C14; --attn-ink:#F0C888;
+      --done:#6FBFA0; --done-soft:#17302A;
+      --wait:#8B9793; --wait-soft:#232B2D;
+        --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#121618; --surface:#1A2022; --sunk:#0D1113;
+    --ink:#E8EDEB; --ink-2:#C0CAC7; --muted:#8B9793; --rule:#2A3335; --rule-2:#3A4547;
+    --attn:#E0A249; --attn-soft:#3A2C14; --attn-ink:#F0C888;
+    --done:#6FBFA0; --done-soft:#17302A;
+    --wait:#8B9793; --wait-soft:#232B2D;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:"Noto Sans TC","PingFang TC","Hiragino Sans","Microsoft JhengHei",system-ui,sans-serif;
+    font-size:15px; line-height:1.75; margin:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px; margin:0 auto; padding:0 28px 96px}
+  .spine{max-width:70ch}
+
+  h1,h2,h3{font-family:"Noto Serif TC","Songti TC",Georgia,serif; text-wrap:balance; margin:0}
+  h1{font-size:clamp(30px,4.4vw,46px); font-weight:700; line-height:1.22; letter-spacing:-.01em}
+  h2{font-size:clamp(21px,2.5vw,27px); font-weight:700; line-height:1.35}
+  h3{font-size:17px; font-weight:600; line-height:1.45}
+  p{margin:0}
+
+  .eyebrow{
+    font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; font-weight:600;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--attn);
+  }
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums}
+  code{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.88em;
+    background:var(--sunk); padding:.1em .38em; border-radius:3px; color:var(--ink-2)}
+
+  /* ---------- masthead ---------- */
+  header.mast{border-bottom:1px solid var(--rule); margin-bottom:0}
+  .mast-in{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:40px; align-items:end;
+    padding:56px 0 30px}
+  .mast-meta{display:flex; flex-direction:column; gap:8px; align-items:flex-end;
+    font-size:12px; color:var(--muted); text-align:right}
+  .lede{font-size:17px; line-height:1.7; color:var(--ink-2); margin-top:16px; max-width:60ch}
+  .fovea{display:block}
+
+  /* ---------- status band ---------- */
+  .band{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    border-bottom:1px solid var(--rule)}
+  .stat{padding:26px 26px; padding-left:0; border-right:1px solid var(--rule)}
+  .stat:last-child{border-right:none}
+  .stat .n{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums;
+    font-size:33px; font-weight:600; line-height:1.1; letter-spacing:-.02em; display:block}
+  .stat .k{font-size:12.5px; color:var(--muted); margin-top:7px; display:block}
+  .stat .n em{font-style:normal; font-size:17px; color:var(--muted)}
+
+  /* ---------- gates strip ---------- */
+  .gates{display:flex; flex-wrap:wrap; gap:0; border-bottom:1px solid var(--rule)}
+  .gate{flex:1 1 116px; padding:18px 18px 20px 0; border-right:1px solid var(--rule);
+    display:flex; flex-direction:column; gap:6px; min-width:0}
+  .gate+.gate{padding-left:18px}
+  .gate:last-child{border-right:none}
+  .gate .id{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:12px; font-weight:600;
+    letter-spacing:.06em; color:var(--muted)}
+  .gate .nm{font-size:13.5px; font-weight:500; line-height:1.4}
+  .gate .st{font-size:11.5px; font-family:"IBM Plex Mono",ui-monospace,monospace;
+    padding:2px 7px; border-radius:2px; align-self:flex-start; margin-top:2px}
+  .gate.d .st{background:var(--done-soft); color:var(--done)}
+  .gate.p .st{background:var(--attn-soft); color:var(--attn-ink)}
+  .gate.w .st{background:var(--wait-soft); color:var(--wait)}
+  .gate.p{background:linear-gradient(180deg,transparent 0%,var(--attn-soft) 420%)}
+  .gate .num{font-size:11.5px; color:var(--muted); font-family:"IBM Plex Mono",ui-monospace,monospace}
+
+  /* ---------- sections ---------- */
+  section{padding-top:56px}
+  .sec-head{display:flex; flex-direction:column; gap:9px; margin-bottom:24px}
+  .sec-head p{color:var(--ink-2); max-width:68ch}
+
+  /* ---------- idea panels ---------- */
+  .ideas{display:grid; grid-template-columns:repeat(auto-fit,minmax(255px,1fr)); gap:1px;
+    background:var(--rule); border:1px solid var(--rule)}
+  .idea{background:var(--surface); padding:24px 22px; display:flex; flex-direction:column; gap:10px}
+  .idea .t{font-family:"Noto Serif TC",serif; font-size:19px; font-weight:700}
+  .idea .en{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--muted)}
+  .idea .d{font-size:14px; color:var(--ink-2); line-height:1.7}
+  .idea .m{margin-top:auto; padding-top:14px; border-top:1px dashed var(--rule-2);
+    font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:12.5px; color:var(--attn-ink);
+    font-variant-numeric:tabular-nums}
+
+  /* ---------- phase rows ---------- */
+  .phases{display:flex; flex-direction:column}
+  .ph{display:grid; grid-template-columns:200px minmax(0,1fr) 84px; gap:20px; align-items:center;
+    padding:14px 0; border-bottom:1px solid var(--rule)}
+  .ph:first-child{border-top:1px solid var(--rule)}
+  .ph .lbl{display:flex; flex-direction:column; gap:1px}
+  .ph .lbl b{font-size:14.5px; font-weight:500}
+  .ph .lbl span{font-size:11.5px; color:var(--muted); font-family:"IBM Plex Mono",ui-monospace,monospace}
+  .tiles{display:flex; gap:3px; flex-wrap:wrap}
+  .tl{width:15px; height:15px; border-radius:2px; background:var(--done)}
+  .tl.p{background:var(--attn)}
+  .tl.w{background:var(--wait-soft); border:1px solid var(--rule-2)}
+  .tl.x{background:transparent; border:1px dashed var(--rule-2)}
+  .ph .cnt{text-align:right; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:13px;
+    color:var(--muted); font-variant-numeric:tabular-nums}
+  .legend{display:flex; gap:20px; flex-wrap:wrap; margin-top:16px; font-size:12.5px; color:var(--muted)}
+  .legend i{display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:6px;
+    vertical-align:-1px}
+
+  /* ---------- remaining list ---------- */
+  .rem{margin-top:28px; border:1px solid var(--rule); background:var(--surface)}
+  .rem-h{padding:14px 20px; border-bottom:1px solid var(--rule); display:flex;
+    justify-content:space-between; align-items:baseline; gap:16px; flex-wrap:wrap}
+  .rem-h b{font-size:14px; font-weight:600}
+  .rem-h span{font-size:12.5px; color:var(--muted)}
+  .rem-l{display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}
+  .rem-i{padding:15px 20px; border-right:1px solid var(--rule); border-bottom:1px solid var(--rule);
+    display:flex; gap:12px; align-items:flex-start}
+  .rem-i .sid{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:12px; font-weight:600;
+    color:var(--attn-ink); background:var(--attn-soft); padding:2px 7px; border-radius:2px;
+    white-space:nowrap; margin-top:2px}
+  .rem-i .sid.q{color:var(--wait); background:var(--wait-soft)}
+  .rem-i p{font-size:13.5px; line-height:1.6; color:var(--ink-2)}
+
+  /* ---------- gate ribbon ---------- */
+  .ribbon{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:1px;
+    background:var(--rule); border:1px solid var(--rule)}
+  .rg{background:var(--surface); padding:20px; display:flex; flex-direction:column; gap:8px}
+  .rg .no{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:22px; font-weight:600;
+    color:var(--attn); line-height:1}
+  .rg b{font-size:14.5px; font-weight:600}
+  .rg p{font-size:13px; color:var(--ink-2); line-height:1.65}
+
+  /* ---------- allow / deny ---------- */
+  .ad{display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--rule);
+    border:1px solid var(--rule)}
+  .ad>div{background:var(--surface); padding:22px}
+  .ad h3{margin-bottom:12px; display:flex; align-items:center; gap:9px}
+  .ad h3 i{width:9px; height:9px; border-radius:50%; display:inline-block}
+  .ad ul{margin:0; padding-left:18px; display:flex; flex-direction:column; gap:7px}
+  .ad li{font-size:13.5px; color:var(--ink-2); line-height:1.6}
+
+  /* ---------- principles ---------- */
+  .prin{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:26px 34px}
+  .pr{display:grid; grid-template-columns:26px minmax(0,1fr); gap:14px}
+  .pr .k{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:12px; font-weight:600;
+    color:var(--attn); padding-top:3px}
+  .pr b{font-size:15px; font-weight:600; display:block; margin-bottom:5px}
+  .pr p{font-size:13.5px; color:var(--ink-2); line-height:1.7}
+
+  /* ---------- bug list ---------- */
+  .bugs{display:flex; flex-direction:column; border-top:1px solid var(--rule)}
+  .bug{display:grid; grid-template-columns:minmax(0,1fr); gap:5px; padding:16px 0;
+    border-bottom:1px solid var(--rule)}
+  .bug .h{display:flex; gap:12px; align-items:baseline; flex-wrap:wrap}
+  .bug .h b{font-size:15px; font-weight:600}
+  .bug .h em{font-style:normal; font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:11.5px; color:var(--muted)}
+  .bug p{font-size:13.5px; color:var(--ink-2); line-height:1.7}
+  .bug .fix{color:var(--done); font-weight:500}
+
+  /* ---------- memory callout ---------- */
+  .memo{border-left:3px solid var(--attn); background:var(--surface); padding:24px 26px;
+    display:flex; flex-direction:column; gap:16px}
+  .memo .num{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;
+    font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums}
+  .memo .num .a{font-size:27px; font-weight:600; color:var(--muted); text-decoration:line-through;
+    text-decoration-thickness:2px}
+  .memo .num .arw{font-size:19px; color:var(--muted)}
+  .memo .num .b{font-size:33px; font-weight:600; color:var(--done)}
+  .memo ol{margin:0; padding-left:20px; display:flex; flex-direction:column; gap:8px}
+  .memo li{font-size:13.5px; color:var(--ink-2); line-height:1.65}
+  .memo .kick{font-family:"Noto Serif TC",serif; font-size:17px; font-weight:600; line-height:1.6}
+
+  /* ---------- versions ---------- */
+  .vers{display:flex; flex-direction:column; border-top:1px solid var(--rule)}
+  .ver{display:grid; grid-template-columns:118px minmax(0,1fr) 140px 92px; gap:20px;
+    padding:16px 0; border-bottom:1px solid var(--rule); align-items:baseline}
+  .ver .vn{font-family:"Noto Serif TC",serif; font-size:17px; font-weight:700}
+  .ver .vn span{display:block; font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:11px; font-weight:400; color:var(--muted); letter-spacing:.08em; margin-top:2px}
+  .ver .vd{font-size:13.5px; color:var(--ink-2); line-height:1.6}
+  .ver .vt{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:12.5px; color:var(--muted)}
+  .ver .vp{display:flex; align-items:center; gap:9px; justify-content:flex-end}
+  .ver .vp .bar{width:56px; height:6px; background:var(--sunk); border-radius:3px; overflow:hidden}
+  .ver .vp .bar i{display:block; height:100%; background:var(--attn)}
+  .ver .vp .pc{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:12px; color:var(--muted);
+    font-variant-numeric:tabular-nums}
+  .ver.cur{background:linear-gradient(90deg,var(--attn-soft),transparent 62%)}
+
+  /* ---------- risks ---------- */
+  .risks{display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:1px;
+    background:var(--rule); border:1px solid var(--rule)}
+  .rk{background:var(--surface); padding:18px 20px; display:flex; flex-direction:column; gap:6px}
+  .rk b{font-size:14px; font-weight:600}
+  .rk p{font-size:13px; color:var(--ink-2); line-height:1.65}
+
+  /* ---------- numbers table ---------- */
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--rule)}
+  table{border-collapse:collapse; width:100%; min-width:520px; background:var(--surface)}
+  th,td{text-align:left; padding:10px 16px; border-bottom:1px solid var(--rule); font-size:13.5px}
+  th{font-size:11.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted);
+    font-weight:600; font-family:"IBM Plex Mono",ui-monospace,monospace; background:var(--sunk)}
+  td:first-child{font-family:"IBM Plex Mono",ui-monospace,monospace; font-weight:600;
+    font-variant-numeric:tabular-nums; white-space:nowrap; color:var(--attn-ink)}
+  tr:last-child td{border-bottom:none}
+
+  footer{margin-top:64px; padding-top:26px; border-top:1px solid var(--rule);
+    display:flex; justify-content:space-between; gap:24px; flex-wrap:wrap;
+    font-size:12.5px; color:var(--muted)}
+  footer .mono{font-size:12px}
+
+  @media (max-width:760px){
+    .mast-in{grid-template-columns:1fr; gap:24px}
+    .mast-meta{align-items:flex-start; text-align:left}
+    .ph{grid-template-columns:1fr; gap:8px}
+    .ph .cnt{text-align:left}
+    .ad{grid-template-columns:1fr}
+    .ver{grid-template-columns:1fr; gap:6px}
+    .ver .vp{justify-content:flex-start}
+    .stat{border-right:none; border-bottom:1px solid var(--rule); padding-right:0}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="mast-in">
+    <div>
+      <p class="eyebrow">V1 · 桌面 ambient 助理</p>
+      <h1>CoPartner 進度全景</h1>
+      <p class="lede">一個在 macOS 上持續看著你操作、把行為寫成人看得懂的「操作劇本」、按下熱鍵就交給雲端 Claude 續做的助理。<br>它已經不是骨架——每天開著在用，而且從三週前開始，會真的動手。</p>
+    </div>
+    <div class="mast-meta">
+      <svg class="fovea" width="132" height="92" viewBox="0 0 132 92" role="img" aria-label="foveated 擷取示意：中央高解析、周邊低解析">
+        <g fill="none" stroke="var(--rule-2)" stroke-width="1">
+          <rect x="1.5" y="1.5" width="129" height="89"></rect>
+        </g>
+        <g fill="var(--sunk)">
+          <rect x="6" y="6" width="26" height="18"></rect><rect x="36" y="6" width="26" height="18"></rect>
+          <rect x="96" y="6" width="30" height="18"></rect>
+          <rect x="6" y="28" width="26" height="18"></rect><rect x="6" y="50" width="26" height="18"></rect>
+          <rect x="96" y="50" width="30" height="18"></rect><rect x="6" y="72" width="26" height="14"></rect>
+          <rect x="36" y="72" width="26" height="14"></rect><rect x="96" y="72" width="30" height="14"></rect>
+        </g>
+        <g fill="var(--attn-soft)" stroke="var(--attn)" stroke-width="1">
+          <rect x="66" y="6.5" width="26" height="17"></rect>
+          <rect x="36" y="28.5" width="26" height="17"></rect>
+          <rect x="96" y="28.5" width="29" height="17"></rect>
+          <rect x="36" y="50.5" width="26" height="17"></rect>
+          <rect x="66" y="72.5" width="26" height="13"></rect>
+        </g>
+        <rect x="66" y="28" width="26" height="18" fill="var(--attn)"></rect>
+        <rect x="66" y="50" width="26" height="18" fill="var(--attn)" opacity=".72"></rect>
+      </svg>
+      <span class="mono">main @ a6d5dfd · 2026-09-02</span>
+      <span>foveated 擷取：亮的是你在看的，暗的是周邊</span>
+    </div>
+  </div>
+</header>
+
+<div class="band">
+  <div class="stat"><span class="n">60<em> / 66</em></span><span class="k">步級進度 · 91%</span></div>
+  <div class="stat"><span class="n">42</span><span class="k">PR 已合併進 main</span></div>
+  <div class="stat"><span class="n">595</span><span class="k">XCTest 案例</span></div>
+  <div class="stat"><span class="n">8,606</span><span class="k">Swift 原始碼行數</span></div>
+  <div class="stat"><span class="n">4<em> / 8</em></span><span class="k">里程碑真機通過</span></div>
+</div>
+
+<div class="gates">
+  <div class="gate d"><span class="id">M0</span><span class="nm">擷取引擎原型</span><span class="st">✓ 真機</span><span class="num">idle CPU 9%</span></div>
+  <div class="gate w"><span class="id">M1</span><span class="nm">冷熱狀態機</span><span class="st">待驗收</span><span class="num">前置 23.5 延後</span></div>
+  <div class="gate d"><span class="id">M2</span><span class="nm">局部 OCR</span><span class="st">✓ 真機</span><span class="num">吞吐 18%</span></div>
+  <div class="gate d"><span class="id">M2.5</span><span class="nm">L0 操作劇本</span><span class="st">✓ 真機</span><span class="num">時間機器</span></div>
+  <div class="gate w"><span class="id">M3</span><span class="nm">記憶系統</span><span class="st">待驗收</span><span class="num">8hr ≤ 400MB</span></div>
+  <div class="gate d"><span class="id">M4</span><span class="nm">本地 L1／L2 敘事</span><span class="st">✓ 真機</span><span class="num">1373–2388ms</span></div>
+  <div class="gate p"><span class="id">M5</span><span class="nm">雲端交棒 + 執行</span><span class="st">▸ 進行中</span><span class="num">執行端已建成</span></div>
+  <div class="gate w"><span class="id">M6</span><span class="nm">隱私 + 黑名單</span><span class="st">待驗收</span><span class="num">密碼欄 100% 遮</span></div>
+</div>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">三大理念</p>
+    <h2>省、清、快</h2>
+    <p>省是省 CPU，清是給人看，快是省你的嘴——每一項都已經有真機數字，不是設計文件裡的願望。</p>
+  </div>
+  <div class="ideas">
+    <div class="idea">
+      <span class="en">Smart Capture Engine</span>
+      <span class="t">看得省</span>
+      <p class="d">不做定頻全畫面截圖。滑鼠與焦點區高解析高頻、周邊低解析低頻（借人眼中央窩），只對「變動的 tile」細看（借 KVM-over-IP／VNC 的增量更新）。<code>dirtyRects</code> 當主訊號、Metal per-tile dHash 當 ground truth——不信任單一來源。影片區自動標 DYNAMIC 並跳過 OCR。</p>
+      <p class="m">idle CPU 9% ／ operating 25%</p>
+    </div>
+    <div class="idea">
+      <span class="en">Action Script Narrator</span>
+      <span class="t">記得清</span>
+      <p class="d">截圖是單一瞬間，劇本是因果史——交棒要的是後者。三層滾動彙總：L0 模板（零模型、完全確定性）→ L1 本地 FoundationModels 3B → L2 段落摘要。階梯會回報自己用了哪一層，關掉 Apple Intelligence 就掉回規則式，不中斷。</p>
+      <p class="m">L1 延遲 1373–2388ms</p>
+    </div>
+    <div class="idea">
+      <span class="en">Cloud Takeover</span>
+      <span class="t">交棒快</span>
+      <p class="d">按 <code>⌃⌥⌘Space</code>，把因果史加焦點小圖交給 Claude computer-use，由它續寫你沒做完的 open loop。回來的每個動作都是<strong>不可信提議</strong>，要過四道閘才可能被執行。中止鍵 <code>⌃⌥⌘.</code> 作廢整個世代的授權。</p>
+      <p class="m">執行端已建成 · 開關已翻開</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Phase A — G</p>
+    <h2>進度地圖</h2>
+    <p>原 58 步 TDD backlog（含 10.5／23.5 共 60 列），其中 step 53「M5 真機驗收」做下去才發現前置的執行端根本還不存在，展開成 53.1–53.7——所以總數是 66。</p>
+  </div>
+  <div class="phases">
+    <div class="ph">
+      <span class="lbl"><b>A 可跑骨架</b><span>step 1–10.5 · 操作時間機器</span></span>
+      <span class="tiles"><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i></span>
+      <span class="cnt">11 / 11</span>
+    </div>
+    <div class="ph">
+      <span class="lbl"><b>B 智慧擷取引擎</b><span>step 11–24 · tile 與注意力</span></span>
+      <span class="tiles"><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl x"></i><i class="tl w"></i></span>
+      <span class="cnt">13 / 15</span>
+    </div>
+    <div class="ph">
+      <span class="lbl"><b>C 局部 OCR</b><span>step 25–29 · Vision ROI</span></span>
+      <span class="tiles"><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i></span>
+      <span class="cnt">5 / 5</span>
+    </div>
+    <div class="ph">
+      <span class="lbl"><b>D 記憶系統</b><span>step 30–36 · sqlite-vec 三層</span></span>
+      <span class="tiles"><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl w"></i></span>
+      <span class="cnt">6 / 7</span>
+    </div>
+    <div class="ph">
+      <span class="lbl"><b>E 本地推理敘事</b><span>step 37–42 · FoundationModels</span></span>
+      <span class="tiles"><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i></span>
+      <span class="cnt">6 / 6</span>
+    </div>
+    <div class="ph">
+      <span class="lbl"><b>F 雲端交棒</b><span>step 43–53.7 · 閘門與沙箱</span></span>
+      <span class="tiles"><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl p"></i><i class="tl p"></i></span>
+      <span class="cnt">15 / 17</span>
+    </div>
+    <div class="ph">
+      <span class="lbl"><b>G 隱私 + 黑名單</b><span>step 54–58 · 縱深五層</span></span>
+      <span class="tiles"><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl w"></i></span>
+      <span class="cnt">4 / 5</span>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--done)"></i>完成（CI 綠或真機通過）</span>
+    <span><i style="background:var(--attn)"></i>進行中</span>
+    <span><i style="background:var(--wait-soft); border:1px solid var(--rule-2)"></i>待真機驗收</span>
+    <span><i style="border:1px dashed var(--rule-2)"></i>刻意延後</span>
+  </div>
+
+  <div class="rem">
+    <div class="rem-h">
+      <b>剩下的六項——全部只有真 Mac 能驗</b>
+      <span>沒有任何「CI 能驗但還沒寫」的邏輯欠著</span>
+    </div>
+    <div class="rem-l">
+      <div class="rem-i"><span class="sid q">23.5</span><p>擷取 CPU 優化：只 hash dirty tile、async GPU、自適應幀率。已評估過，刻意排在後面。</p></div>
+      <div class="rem-i"><span class="sid">24</span><p>M1 驗收：播 1080p 影片，CPU 不超 baseline，影片區正確標 DYNAMIC。</p></div>
+      <div class="rem-i"><span class="sid">36</span><p>M3 驗收：真 <code>vec0</code> 載入 + 跑 8 小時，磁碟量 ≤ ~400MB，語意檢索可用。</p></div>
+      <div class="rem-i"><span class="sid">53.5</span><p>第一次真執行的回報。開關已翻開，DoD 是「stdout 裡有那串隨機標記」，還沒回報過。</p></div>
+      <div class="rem-i"><span class="sid">53.6-C</span><p>翻開 <code>willPerformUIActions</code>：讓它能動指標與鍵盤。單獨一個改動。</p></div>
+      <div class="rem-i"><span class="sid">58</span><p>M6 驗收：密碼欄 100% 遮、黑名單 app 0 frame、PIPL 最終隱私稽核。</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">交棒鏈</p>
+    <h2>四道閘</h2>
+    <p>模型回來的每個動作都是不可信提議。防線不靠 prompt——螢幕上出現的任何指令都可能是別人放的，所以防線必須在模型之外。四道閘任何一道都能單獨擋下來。</p>
+  </div>
+  <div class="ribbon">
+    <div class="rg"><span class="no">01</span><b>出境閘門 EgressGate</b><p>逐欄位掃描信封並遮罩；PIPL 命中就<strong>整包拒出</strong>，呼叫端只准走本地階，不 fallback 雲端。</p></div>
+    <div class="rg"><span class="no">02</span><b>Gateway 預算熔斷</b><p>LiteLLM 設 <code>max_budget</code>；路由不變式由 pytest 解析 config 斷言，不靠人記得。</p></div>
+    <div class="rg"><span class="no">03</span><b>風險分級 + 人工確認</b><p>與模型推理無關的本地規則判 low／medium／high；high 在任何政策下都必須人按。危險指令保守偏殺——誤殺只是多按一次。</p></div>
+    <div class="rg"><span class="no">04</span><b>沙箱執行</b><p>XPC service（雙向 code-signing 驗證）→ <code>sandbox-exec</code> sbpl → <code>posix_spawn</code> argv 直呼。全程沒有一個 shell。</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">2026-08-20 · step 53.5</p>
+    <h2>翻開執行開關那天</h2>
+    <p>翻開的那一行<strong>單獨成立一個 PR</strong>——理由很簡單：翻開執行能力若混在一大包程式碼裡，沒有人（包括作者）能真的審完。翻回 <code>false</code> 是出事時的第一個動作，只需改一行。</p>
+  </div>
+  <div class="ad">
+    <div>
+      <h3><i style="background:var(--done)"></i>允許</h3>
+      <ul>
+        <li>只有 <code>shell</code> 一種動作</li>
+        <li>只有固定表裡<strong>七個唯讀工具</strong>：<code>cat</code> <code>ls</code> <code>head</code> <code>tail</code> <code>wc</code> <code>grep</code> <code>find</code></li>
+        <li>只能寫沙箱工作目錄</li>
+        <li>每個動作仍過本地風險分級 + HUD 人工確認</li>
+      </ul>
+    </div>
+    <div>
+      <h3><i style="background:var(--attn)"></i>拒絕</h3>
+      <ul>
+        <li><strong>永遠不含 shell 本身</strong></li>
+        <li>網路全斷、家目錄關閉、秘密路徑另外 deny</li>
+        <li>檔案動作明確拒絕；UI 執行端<strong>刻意不支援截圖</strong>（截圖該由擷取管線產生並經出境閘門，偷截一張等於靜默拿掉整個出境設計）</li>
+        <li>模型解析不出的組合鍵一律 high——不知道它會做什麼，更該問人</li>
+      </ul>
+    </div>
+  </div>
+  <div class="spine" style="margin-top:22px">
+    <p style="font-size:14px; color:var(--ink-2)">第一次真執行刻意用<strong>本地合成提議</strong>，走完全相同的路徑（風險分級 → HUD → token → 全部閘門 → XPC → sbpl）。它不繞過任何閘門，只是把提議來源從雲端換成本地，讓第一次真執行發生在完全受控的情況下。<br><br>驗收判定是「stdout 裡有那串隨機標記」，<strong>不是 <code>didExecute == true</code></strong>——沙箱擋掉讀取時 <code>cat</code> 照樣會結束、<code>didExecute</code> 照樣為真，stdout 卻是空的。</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">方法論</p>
+    <h2>沒有 Mac，怎麼寫 macOS app</h2>
+    <p>開發代理跑在 Linux 容器，沒有 Mac、沒有 GPU、沒有螢幕、沒有權限、沒有 Apple Intelligence。這六條原則是被逼出來的，但逼出來的結果是每個平台依賴都變成一個明確的注入點。</p>
+  </div>
+  <div class="prin">
+    <div class="pr"><span class="k">01</span><div><b>可注入後端</b><p>平台重活（Metal／SCK／vec0／FoundationModels／computer-use／XPC）全藏在 protocol 後，CI 用假後端驗邏輯。真後端標 🔒。</p></div></div>
+    <div class="pr"><span class="k">02</span><div><b>誠實佔位</b><p>沒接線的真後端一律 <code>throw .notWired</code>，絕不靜默假成功。假成功會讓「還沒接」這個訊號永遠消失。</p></div></div>
+    <div class="pr"><span class="k">03</span><div><b>安全不變式寫進型別</b><p><code>ApprovalToken</code> 的 init 是 <code>internal</code>，繞過閘門的呼叫路徑在編譯層面不存在；而且它<strong>不過 XPC 線</strong>——跨程序的值可以偽造。</p></div></div>
+    <div class="pr"><span class="k">04</span><div><b>先讓 endpoint 無害，再讓它有能力</b><p>XPC service 先做成沒有執行能力的骨架，驗簽補上後才翻開開關。安全性靠「根本沒有那個能力」，而非靠檢查。</p></div></div>
+    <div class="pr"><span class="k">05</span><div><b>build 綠 ≠ 真的編到了</b><p><code>canImport</code> 為 false 時整檔靜默略過、build 照樣綠。在 <code>#if</code>／<code>#else</code> 兩側各放一個 <code>#warning</code>，看到黃字才算數。</p></div></div>
+    <div class="pr"><span class="k">06</span><div><b>驗證方式比被驗的東西重要</b><p>沙箱只測「擋得住」會得到假通過——deny-default 下什麼都跑不起來。改成成對驗證：負向結果<strong>依賴</strong>正向基準，基準沒過就標「無效」而非「通過」。</p></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">真機 dogfood</p>
+    <h2>CI 永遠測不到的那種 bug</h2>
+    <p>每一個都是綠燈狀態下藏著的。第一個尤其可怕：邏輯正確、測試也過——錯在真機餵給它的資料。</p>
+  </div>
+  <div class="bugs">
+    <div class="bug">
+      <div class="h"><b>FOCUS 狂刷</b><em>M2 · 同源共四類</em></div>
+      <p>終端機每輸出一個字就被判定換視窗，同一秒噴十幾行。根因是焦點追蹤誤用 AX <code>value</code>（欄位<strong>內容</strong>）當視窗識別。後來又抓到同源的另外三類：會變的標題、「讀不到」、兩個不同來源的欄位當身分。<span class="fix">四條回歸測試釘住。</span></p>
+    </div>
+    <div class="bug">
+      <div class="h"><b>OCR 截整螢幕</b><em>M2</em></div>
+      <p>混入選單列和其他 app 的文字，吞吐等同沒優化。<span class="fix">改依 AX 焦點框裁切 → 像素吞吐降到 18%。</span></p>
+    </div>
+    <div class="bug">
+      <div class="h"><b>Vision bbox 用左下原點</b><em>M2</em></div>
+      <p>與螢幕座標慣例相反，沿用會讓摘要上下顛倒。<span class="fix">型別強迫呼叫端明講慣例，不讓人猜。</span></p>
+    </div>
+    <div class="bug">
+      <div class="h"><b>稽核不誠實</b><em>M5</em></div>
+      <p>被閘門擋下的動作原本留下<strong>零痕跡</strong>；執行未成功時原本記成已執行。<span class="fix">改成 attempt／executed／notExecuted／blocked 四態。</span></p>
+    </div>
+    <div class="bug">
+      <div class="h"><b>sbpl 路徑陷阱</b><em>M5 · 安全設定裡的注入面</em></div>
+      <p>給 <code>/tmp/x</code> 的規則對 <code>/private/tmp/x</code> <strong>永遠不匹配</strong>，而 profile 看起來完全正常。<span class="fix">先 realpath，並補上路徑跳脫。</span></p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">step 53.7 · 七輪</p>
+    <h2>一場推翻了自己三次的記憶體診斷</h2>
+    <p>症狀：<strong>沒開觀察</strong>、只是讓 app 開著就會跳系統記憶體告警。這一句話就排除了原本兩個主要嫌疑——它們都只在觀察開始後才存在。</p>
+  </div>
+  <div class="memo">
+    <div class="num">
+      <span class="a">+151 MB/小時</span><span class="arw">→</span><span class="b">+7 MB/小時</span>
+    </div>
+    <div>
+      <p style="font-size:14px; color:var(--ink-2); line-height:1.75">成因：<code>AsyncStream&lt;TileEvent&gt;</code> 沒指定 buffering policy（無上限），而它唯一的消費者是一個 <code>@MainActor</code> 計數器——每個事件都要跳一次 MainActor，產生端不會等它。同一條管線上游的 <code>SCKFrameProducer</code> 早就用了 <code>.bufferingNewest(2)</code>。改成 <code>.bufferingNewest(64)</code> 後，出現了修正前完全沒有的 8 分鐘完全持平區段。</p>
+    </div>
+    <div>
+      <p style="font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-family:'IBM Plex Mono',monospace; margin-bottom:9px">診斷過程推翻的三個中途結論</p>
+      <ol>
+        <li>「持續成長」——一次性暖機被<strong>整體斜率</strong>攤成了成長率。</li>
+        <li>「還是在成長」——<strong>階段落差</strong>被攤成了成長率；斜率不該跨越狀態邊界。</li>
+        <li>「ratchet 確認：停止後不回落」——<strong>量測時機</strong>造成的假象。停止後 1–5 分鐘記憶體根本還沒開始掉，真正的落定點在 30 分鐘。</li>
+      </ol>
+    </div>
+    <p class="kick">每一次都是同一種錯誤：一個看起來像資料的猜測，比「不知道」更糟。</p>
+    <p style="font-size:13px; color:var(--muted); line-height:1.7">附帶設計：<strong>刻意不用定時器取樣</strong>。要量的正是閒置路徑，在上面裝一個定時醒來的東西，等於在被觀察的對象裡加一個新的觀察者。改成每次打開選單取一個樣，背景成本恰好是零。</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">V1 → V4</p>
+    <h2>版本階梯</h2>
+    <p>貫穿每一版的架構是 Hub-and-Satellites：Mac mini M4 永遠是中樞（儲存、推理、閘道、執行都在這），手機手錶眼鏡都是衛星（感測器加介面，不存資料、不做重推理）。這讓「本地優先、敏感不出境」的承諾在每一版都成立。</p>
+  </div>
+  <div class="vers">
+    <div class="ver cur">
+      <span class="vn">CoPartner<span>V1 · 現行</span></span>
+      <span class="vd">桌面 ambient 助理：看螢幕、寫劇本、熱鍵交棒 Claude 接手</span>
+      <span class="vt">→ 2026-12</span>
+      <span class="vp"><span class="bar"><i style="width:0"></i></span><span class="pc">0%</span></span>
+    </div>
+    <div class="ver">
+      <span class="vn">Listen<span>V2 · 36 steps</span></span>
+      <span class="vd">加耳朵與嘴巴：全日音訊 → 生活劇本；Telegram 閘道讓互動隨身；語音交棒</span>
+      <span class="vt">2027-01 → 05</span>
+      <span class="vp"><span class="bar"><i style="width:30%"></i></span><span class="pc">30%</span></span>
+    </div>
+    <div class="ver">
+      <span class="vn">Agent<span>V3 · 22 steps</span></span>
+      <span class="vd">加手腳與主動性：技能引擎、heartbeat 主動巡檢、手機／手錶衛星、信任階梯</span>
+      <span class="vt">2027-06 → 11</span>
+      <span class="vp"><span class="bar"><i style="width:70%"></i></span><span class="pc">70%</span></span>
+    </div>
+    <div class="ver">
+      <span class="vn">Omni<span>V4 · 硬體依賴</span></span>
+      <span class="vd">穿戴優先最終形態：眼鏡、墜飾、耳機；即時耳語協助、完整主人模型</span>
+      <span class="vt">2028+</span>
+      <span class="vp"><span class="bar"><i style="width:100%"></i></span><span class="pc">100%</span></span>
+    </div>
+  </div>
+  <p style="font-size:12.5px; color:var(--muted); margin-top:12px">右欄是「跳出電腦的程度」——V1 完全活在 Mac 裡，V4 完全不需要坐在電腦前。</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">誠實清單</p>
+    <h2>已知的風險與缺陷</h2>
+    <p>列出來不是為了免責，是因為知道哪裡不確定本身就是進度。前兩條特別值得看——它們是寫在設計文件裡、後來被真機推翻的假設。</p>
+  </div>
+  <div class="risks">
+    <div class="rk"><b>XPC 買到的不是權限降級</b><p>原本假設 service 跑在低權 <code>_ambient</code> user——做不到。內嵌 XPC service 必然與主 app 同 uid（實測 euid 501）。買到的是<strong>程序隔離</strong>，真正的圍籬來自 sbpl。記為殘餘風險 R5。</p></div>
+    <div class="rk"><b>L1 會編故事</b><p>終端機標題 <code>CoPartner — -zsh — 100×34</code> 被 3B 腦補成「與 CoPartner 進行<strong>視訊會議</strong>」——日誌裡沒有任何視訊訊號。指令已明寫禁止臆測，3B 壓不住。這是 L1 品質調校，與 M5 是兩條線。</p></div>
+    <div class="rk"><b>真 vec0 磁碟量未驗</b><p>盲寫風險低（sqlite-vec C API 穩定），但要裝 sqlite-vec 並跑滿 8 小時才知道磁碟量。step 36 專門驗這件事。</p></div>
+    <div class="rk"><b>擷取仍是固定 2fps、每幀 hash 全螢幕</b><p>DYNAMIC 狀態機已測但還沒真正拿來降頻。step 23.5 的優化已排——是刻意延後，不是遺漏。</p></div>
+    <div class="rk"><b>同 app 內換視窗仍記 FOCUS</b><p>這條路徑只有 CI 測試蓋到，dogfood 沒驗到（那次全程沒在同 app 內換視窗）。下次開兩個終端機視窗切一下就能補驗。</p></div>
+    <div class="rk"><b>單人開發、V2+V3 合計約一年</b><p>緩解方式是每一版都設計成「該版結束即有完整可用產品」，不是半成品接力——V1 停下來也是一台可用的操作時間機器。</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">附錄</p>
+    <h2>可直接引用的數字</h2>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>數字</th><th>意義</th><th>出處</th></tr></thead>
+      <tbody>
+        <tr><td>60 / 66</td><td>步級完成度（91%）</td><td>implementation-backlog 進度總覽</td></tr>
+        <tr><td>42</td><td>已合併進 <code>main</code> 的 PR 數</td><td>git log</td></tr>
+        <tr><td>595</td><td>Swift XCTest 案例數</td><td>測試比 0.72</td></tr>
+        <tr><td>8,606 / 6,161</td><td>原始碼 ／ 測試行數</td><td>100 檔 ／ 72 檔</td></tr>
+        <tr><td>9% / 25%</td><td>擷取 idle ／ operating CPU</td><td>step 18 真機實測</td></tr>
+        <tr><td>18%</td><td>OCR 像素吞吐（目標 ≤20%）</td><td>step 29 真機實測</td></tr>
+        <tr><td>1373–2388 ms</td><td>L1 本地敘事延遲</td><td>step 42 真機實測</td></tr>
+        <tr><td>2659 → 1373 ms</td><td>一輪延遲優化的壓縮成果</td><td>commit 6588d1f</td></tr>
+        <tr><td>+151 → +7 MB/hr</td><td>記憶體洩漏修復前後</td><td>step 53.7 · PR #40／#41</td></tr>
+        <tr><td>7 / 7</td><td>sandbox profile 成對驗證全綠（0 失敗、0 無效）</td><td>scripts/sandbox-verify.sh</td></tr>
+        <tr><td>7 / 7</td><td>FoundationModels API 簽章探針一次全過</td><td>step 42</td></tr>
+        <tr><td>7</td><td>翻開執行能力後允許的工具數（唯讀，不含 shell 本身）</td><td>step 53.5</td></tr>
+        <tr><td>I1 – I10</td><td>可測安全不變式條數</td><td>sandbox-threat-model.md</td></tr>
+        <tr><td>58 + 36 + 22</td><td>V1 ／ V2 ／ V3 的 step 數</td><td>backlog + evolution plan</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <span>心智圖與圖檔素材：<code>docs/project-mindmap.md</code> · <code>docs/assets/diagrams/</code>（SVG + 2x PNG）<br>投影片大綱與講稿：<code>docs/planning/ppt-material.md</code></span>
+  <span class="mono">進度事實來源 docs/planning/implementation-backlog.md<br>main @ a6d5dfd · 2026-09-02</span>
+</footer>
+
+</div>
+</body>
+</html>

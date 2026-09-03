@@ -3,6 +3,7 @@
 > 給你做 PPT 用的。每頁都有：**一句話標題 → 版面建議 → 板書內容 → 講稿**。
 > 數字全部來自 repo 實測與 `implementation-backlog.md`，不是估的。最後同步：2026-09-02（`main` @ `a6d5dfd`）。
 > 十張圖已匯出好放在 [`docs/assets/diagrams/`](../assets/diagrams/)（SVG + 2x PNG），直接拖進投影片即可。
+> 不想做投影片、只想投一頁的話：[`docs/assets/panorama.html`](../assets/panorama.html) 是把下面這些內容排成一頁的視覺版，瀏覽器打開就能投。
 
 ---
 
@@ -404,7 +405,17 @@ M6 隱私黑名單 ⬜ 待驗收
 | **B0–B4 / T1–T10 / R1–R6** | 信任邊界 ／ 威脅 ／ 殘餘風險條數 | `sandbox-threat-model.md` |
 | **58 + 36 + 22** | V1 ／ V2 ／ V3 的 step 數 | backlog + evolution plan |
 
-## 附錄 B — 圖表清單
+## 附錄 B — 單頁視覺版
+
+[`docs/assets/panorama.html`](../assets/panorama.html)——把本文件的內容排成一頁，單一檔案、無需建置、淺色深色自動跟隨系統。用途：
+
+- **直接投影**：不做投影片時的最省事選項，捲動即是講稿順序。
+- **截圖來源**：里程碑燈號列、Phase A–G tile 進度圖、四道閘、允許／拒絕對照表都是排好版的，截下來就能貼。
+- **對外分享**：另有一份內容相同的線上版（Claude Artifact），可直接給連結。
+
+裡面的數字是硬寫的——改進度時要跟著改，它是衍生視圖不是事實來源。
+
+## 附錄 C — 圖表清單
 
 **十張圖都已匯出**，SVG + 2x PNG 放在 [`docs/assets/diagrams/`](../assets/diagrams/)（清單與長寬比見該目錄 README）。
 
@@ -424,7 +435,7 @@ M6 隱私黑名單 ⬜ 待驗收
 **要改圖**：事實來源是 `project-mindmap.md` 的 Mermaid 區塊，改完重新匯出——
 複製區塊內容 → 貼到 [mermaid.live](https://mermaid.live) → Actions → SVG／PNG。深色簡報先切 `dark` theme。
 
-## 附錄 C — Q&A 預備
+## 附錄 D — Q&A 預備
 
 | 可能被問 | 怎麼答 |
 |---|---|

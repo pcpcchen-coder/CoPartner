@@ -36,4 +36,5 @@ mmdc -i 圖.mmd -o 圖.svg               # 向量
 mmdc -i 圖.mmd -o 圖.png -s 2 -b white # 2x PNG
 ```
 
-搭配講稿與投影片大綱見 [`docs/planning/ppt-material.md`](../../planning/ppt-material.md)。
+搭配講稿與投影片大綱見 [`docs/planning/ppt-material.md`](../../planning/ppt-material.md)；
+把這些內容排成一頁的視覺版見 [`docs/assets/panorama.html`](../panorama.html)。

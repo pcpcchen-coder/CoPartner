@@ -23,6 +23,10 @@
 - **`docs/planning/ppt-material.md`**：簡報素材——20 頁投影片大綱，每頁含版面建議／
   板書內容／講稿，另附場合裁切（5/15/30 分鐘）、可引用數字表、Q&A 預備。
 - **`docs/assets/diagrams/`**：十張圖的 SVG + 2x PNG 匯出，供 PowerPoint / Keynote 直用。
+- **`docs/assets/panorama.html`**：單頁視覺版全景——里程碑燈號、Phase A–G tile 進度圖、
+  交棒四道閘、翻開執行能力後的允許／拒絕對照、工程方法論、真機教訓、記憶體診斷、
+  版本階梯、誠實風險清單、數字附錄。單一檔案、無需建置、淺色深色自動跟隨系統，
+  瀏覽器直接開即可投影或截圖。同樣內容另發佈了一份線上版。
 - 安全邊界的**可執行驗證**：`scripts/sandbox-verify.sh`（沙箱成對測試，
   負向結果依賴正向基準，測不出東西時報「無效」而非「通過」）、
   `scripts/xpc-probe.swift`（從外部程序實測拒絕路徑）。
