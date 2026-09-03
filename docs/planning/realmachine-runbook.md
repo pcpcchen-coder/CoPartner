@@ -2,6 +2,10 @@
 
 > backlog 1–57 的 **CI 可測部分全部完成、三 job 綠**。剩下的都是「只有真硬體能驗」的驗收：
 > `24 / 29 / 36 / 42 / 53 / 58`（＋延後的擷取 CPU 優化 `23.5`）。
+>
+> **戰績（2026-09-02）**：`29` ✅ 通過（吞吐 18%）、`42` ✅ 通過（1373–2388ms）、
+> `53` 🔄 進行中（53.1／53.2／53.3／53.7 已真機通過；53.5 開關已翻開、第一次真執行的回報待補；53.6-C 待翻開）；
+> `24 / 36 / 58` ⬜ 待做。視覺化全景見 [`docs/project-mindmap.md`](../project-mindmap.md)。
 > 我（開發代理）跑在 Linux 容器、無 Mac / GPU / 螢幕 / 權限 / Apple Intelligence / 雲端金鑰，**無法代跑**。
 > CI 只保證「編譯 + 純邏輯測試」；行為、效能、真 API 相容性要你在 Mac 上驗。
 >
@@ -9,7 +13,7 @@
 > ②**你在 Mac 上跑**的步驟 → ③**回報**（你貼結果，我據此修 + 標 ✅）。
 > 一次做一個里程碑即可，順序建議照下面（B→C→D→E→F→G 對應 M1→M6）。
 >
-> 每次開工前先： `cd <repo> && git pull origin claude/loving-darwin-Ka636 && ./scripts/bootstrap.sh && open apps/CoPartner/CoPartner.xcodeproj`
+> 每次開工前先： `cd <repo> && git pull origin main && ./scripts/bootstrap.sh && open apps/CoPartner/CoPartner.xcodeproj`
 > （有新檔一定要重跑 bootstrap 讓 xcodegen 重生專案。）
 
 ---
@@ -161,6 +165,8 @@ MainActor，UI 不凍結（真機截圖印證劇本持續即時更新）。`infe
 | 53.1 XPC 骨架 | 選單「XPC 自檢」 | ✅ service pid ≠ app pid、`會執行動作 否` |
 | 53.2 呼叫者驗證 | 「XPC 自檢」＋ `xpc-probe` | ✅ `驗呼叫者 已啟用・驗 service 通過`；外部程序定址不到 |
 | 53.3 sandbox profile | `./scripts/sandbox-verify.sh` | ✅ 7 項全綠、0 失敗、0 無效 |
+| 53.4 `posix_spawn` 執行端 | CI（A 純值層）＋ 程式碼已接線（B）| ✅ A ・ B 由 53.5 翻開 |
+| 53.7 記憶體診斷 | 選單取樣 + `MemoryLogWriter` 落檔，七輪收斂 | ✅ 定位並修復：**+151 → +7 MB/小時** |
 
 ### 三個不需要 Xcode 的驗收指令
 
@@ -173,16 +179,24 @@ codesign -dv --verbose=4 "$(ls -d ~/Library/Developer/Xcode/DerivedData/CoPartne
 第三行是簽章檢查：`.xpc` 的 `TeamIdentifier` 必須與 app 相同。
 若是 `not set`，`驗呼叫者` 會停在「未啟用」——巢狀程式碼沒跟外層同一身分簽。
 
-### 🔒 還沒做的（53.4-B 起）
+### 🔒 還沒做的
 
-1. **第一次真的執行**（53.5 翻開開關後）：在工作目錄內跑一個無害命令，
-   確認 HUD 顯示「已執行」、稽核出現 `attempt` + `executed` 兩筆。
+> **開關已於 2026-08-20 翻開**（PR #30，53.5）。以下第 1 項就是它的驗收，做完回報即可標 ✅。
+> 另外 53.6-B（UI 動作接線）已合併並通過真機乾跑，但 `willPerformUIActions` **仍為 `false`**——
+> 翻開它是獨立的 53.6-C。
+
+1. **第一次真的執行**（53.5 的驗收）：選單「執行測試」→ HUD 出現本地風險判定 → 按執行。
+   **判定條件是 stdout 裡有那串隨機標記，不是 `didExecute == true`**——沙箱擋掉讀取時
+   `cat` 照樣會結束、`didExecute` 照樣為真，stdout 卻是空的。稽核應出現 `attempt` + `executed` 兩筆。
 2. **危險指令被攔**：提議 `rm -rf` → HUD 顯示紅色高風險 + 本地原因，且**不可**自動核准。
 3. **kill-switch 全鏈**：接手到一半按 ⌃⌥⌘. → 串流斷、HUD 進 aborted、後續 token 全失效。
 4. **越界寫入被 deny**：讓沙箱內動作寫工作目錄外 → 應失敗（`sandbox-verify.sh` 已驗過規則本身，
    這裡驗的是**真的接上執行端之後**仍然成立）。
 5. **LiteLLM 預算熔斷**：`max_budget: 5` 跑到超額一次。
 6. **接手品質**：留個 open loop → 熱鍵 → Claude 應**接續**而不是貼一堆說明文字。
+   （前置：真雲端 SSE 來源尚未接上，目前串流解析鏈是用假來源驗的。）
+7. **UI 動作乾跑對照**（53.6-C 翻開前）：選單「UI 乾跑」→ 核對宣告尺寸／實際尺寸／全域原點／
+   換算後的落點，以及**那個位置上的 AX 元件**。座標算錯不會報錯，那一行是唯一能事前看出差別的東西。
 
 ### 更正的三個假設（原文有誤，別再照著做）
 
