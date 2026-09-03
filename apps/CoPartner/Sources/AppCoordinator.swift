@@ -276,11 +276,19 @@ final class AppCoordinator: ObservableObject {
             takeoverSummary = "接手：PIPL 封鎖（\(reason)）— 僅本地處理，不出境"
         case .allow(let cleanEnvelope):
             session.beginIntervention()
-            var model = TakeoverSessionModel(policy: cleanEnvelope.takeover.policy,
+            // 政策可能被降級：autoBounded ＋ UI 控制權 ⟹ 逐一確認（見 `TakeoverPolicyGuard`）。
+            // 降級**一定要說出來**——使用者以為開了 autoBounded 卻每個動作都被問，
+            // 沒有解釋的話那看起來像 bug 而不是保護。
+            let contract = cleanEnvelope.takeover
+            let effectivePolicy = TakeoverPolicyGuard.effectivePolicy(
+                declared: contract.policy, allowedTools: contract.allowedTools)
+            var model = TakeoverSessionModel(policy: effectivePolicy,
                                              generationClock: handoffGeneration)
             model.begin()
             takeoverModel = model
-            takeoverSummary = "接手：交棒中…"
+            let downgrade = TakeoverPolicyGuard.downgradeReason(
+                declared: contract.policy, allowedTools: contract.allowedTools)
+            takeoverSummary = downgrade.map { "接手：交棒中…（政策降級：\($0)）" } ?? "接手：交棒中…"
             // executor 依**這次的 contract** 建：allowedTools 是 per-handoff 的值（T4）。
             // 共用同一個世代時鐘 → Stop 一撥，在途 token 全部作廢（I7 單一權威）。
             // performer 接上 XPC（step 53.1）。service 尚無執行能力 → 回「收到但沒做」，
@@ -520,6 +528,46 @@ final class AppCoordinator: ObservableObject {
             .joined(separator: "\n—\n")
         let path = Self.writeUIDryRunReport(report)
         xpcSummary = uiPerformer.verdict(centre) + "\n完整報告：\(path)"
+    }
+
+    /// 送一個**本地合成的 UI 提議**走完整條接手鏈（step 53.6-C 驗收用）。
+    ///
+    /// ⚠️ **這不是繞過確認閘門**——與 `runExecutionSmokeTest` 同一條路徑，
+    /// 差別只在動作是 UI 而不是 shell，因此走主程序的 `UIActionPerformer` 而非 XPC。
+    ///
+    /// **第一個真的 UI 動作刻意選捲動**，不是點按也不是輸入：
+    /// - 捲動看得見（畫面會動），所以「有沒有真的發生」不需要靠猜
+    /// - 捲動可逆（捲回去就好），而點按可能按到「刪除」、輸入會打進當下有焦點的欄位
+    /// - 捲動不需要座標換算就能觀察到效果，因此它驗的是「事件真的送得出去」這件事本身
+    ///
+    /// 事件送到**游標所在位置**，所以按下「執行」之前先把游標移到一個可捲動的地方。
+    func runUISmokeTest() {
+        guard takeoverModel == nil, pendingDecision == nil else {
+            takeoverSummary = "接手：進行中，測試已略過（避免蓋掉真提議）"
+            return
+        }
+        let ui = uiPerformer
+        session.beginIntervention()
+        var model = TakeoverSessionModel(policy: .confirmEach, generationClock: handoffGeneration)
+        model.begin()
+        takeoverModel = model
+        actionExecutor = ActionExecutor(
+            clock: handoffGeneration,
+            policy: SandboxPolicy(allowedTools: ["computer"]),
+            allowlist: Self.defaultPathAllowlist(),
+            performer: { action in try await ui.perform(action) })
+
+        let proposal = ProposedAction(
+            kind: .scroll(dx: 0, dy: -3),
+            rationale: "（本地合成提議，非雲端）往下捲三行，驗證 UI 事件真的送得出去。")
+        takeoverSummary = "接手：UI 測試已送出——把游標移到可捲動的地方再按執行"
+        handoffTask = Task { [weak self] in
+            guard let self else { return }
+            _ = await self.handle(proposal: proposal)
+            self.hudPanel.hide()
+            self.takeoverModel = nil
+            self.session.endIntervention()
+        }
     }
 
     /// 把 UI 乾跑報告寫成檔案。回傳路徑。
