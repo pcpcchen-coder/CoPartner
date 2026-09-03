@@ -23,6 +23,9 @@
 - **`docs/planning/ppt-material.md`**：簡報素材——20 頁投影片大綱，每頁含版面建議／
   板書內容／講稿，另附場合裁切（5/15/30 分鐘）、可引用數字表、Q&A 預備。
 - **`docs/assets/diagrams/`**：十張圖的 SVG + 2x PNG 匯出，供 PowerPoint / Keynote 直用。
+- **`docs/assets/deck/`**：依 `ppt-material.md` 大綱做出的 **20 頁 .pptx**（16:9，每頁附講者備忘稿），
+  含產生器 `gen.js`——deck 不手改，改產生器後重跑。關鍵視覺原生繪製（foveation 場、
+  66 格 tile 進度陣列、版本階梯），不貼縮小後看不清的心智圖 PNG。
 - **`docs/assets/panorama.html`**：單頁視覺版全景——里程碑燈號、Phase A–G tile 進度圖、
   交棒四道閘、翻開執行能力後的允許／拒絕對照、工程方法論、真機教訓、記憶體診斷、
   版本階梯、誠實風險清單、數字附錄。單一檔案、無需建置、淺色深色自動跟隨系統，

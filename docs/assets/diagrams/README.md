@@ -37,4 +37,5 @@ mmdc -i 圖.mmd -o 圖.png -s 2 -b white # 2x PNG
 ```
 
 搭配講稿與投影片大綱見 [`docs/planning/ppt-material.md`](../../planning/ppt-material.md)；
-把這些內容排成一頁的視覺版見 [`docs/assets/panorama.html`](../panorama.html)。
+把這些內容排成一頁的視覺版見 [`docs/assets/panorama.html`](../panorama.html)；
+做好的 20 頁簡報檔見 [`docs/assets/deck/`](../deck/)（它的關鍵視覺是原生畫的，沒有貼這裡的 PNG）。

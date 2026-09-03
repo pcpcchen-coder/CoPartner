@@ -4,6 +4,8 @@
 > 數字全部來自 repo 實測與 `implementation-backlog.md`，不是估的。最後同步：2026-09-02（`main` @ `a6d5dfd`）。
 > 十張圖已匯出好放在 [`docs/assets/diagrams/`](../assets/diagrams/)（SVG + 2x PNG），直接拖進投影片即可。
 > 不想做投影片、只想投一頁的話：[`docs/assets/panorama.html`](../assets/panorama.html) 是把下面這些內容排成一頁的視覺版，瀏覽器打開就能投。
+>
+> 📊 **這份大綱已經做成 .pptx 了**：[`docs/assets/deck/`](../assets/deck/)——20 頁、16:9、每頁的講稿都填進「備忘稿」窗格。下面的內容是它的來源，要改版面改 `deck/gen.js`。
 
 ---
 
@@ -405,7 +407,17 @@ M6 隱私黑名單 ⬜ 待驗收
 | **B0–B4 / T1–T10 / R1–R6** | 信任邊界 ／ 威脅 ／ 殘餘風險條數 | `sandbox-threat-model.md` |
 | **58 + 36 + 22** | V1 ／ V2 ／ V3 的 step 數 | backlog + evolution plan |
 
-## 附錄 B — 單頁視覺版
+## 附錄 B — 成品在哪
+
+| 形式 | 路徑 | 適合 |
+|---|---|---|
+| **.pptx** | [`docs/assets/deck/`](../assets/deck/) | 要投影片、要改版面、要用簡報者檢視看講稿 |
+| **單頁 HTML** | [`docs/assets/panorama.html`](../assets/panorama.html) | 不做投影片、直接投一頁；也是截圖來源 |
+| **圖檔** | [`docs/assets/diagrams/`](../assets/diagrams/) | 自己排版時拖進去用（SVG + 2x PNG）|
+
+三者的數字都是硬寫的衍生視圖，事實來源是 `implementation-backlog.md`。改進度時三處一起更新。
+
+## 附錄 C — 單頁視覺版
 
 [`docs/assets/panorama.html`](../assets/panorama.html)——把本文件的內容排成一頁，單一檔案、無需建置、淺色深色自動跟隨系統。用途：
 
@@ -415,7 +427,7 @@ M6 隱私黑名單 ⬜ 待驗收
 
 裡面的數字是硬寫的——改進度時要跟著改，它是衍生視圖不是事實來源。
 
-## 附錄 C — 圖表清單
+## 附錄 D — 圖表清單
 
 **十張圖都已匯出**，SVG + 2x PNG 放在 [`docs/assets/diagrams/`](../assets/diagrams/)（清單與長寬比見該目錄 README）。
 
@@ -435,7 +447,7 @@ M6 隱私黑名單 ⬜ 待驗收
 **要改圖**：事實來源是 `project-mindmap.md` 的 Mermaid 區塊，改完重新匯出——
 複製區塊內容 → 貼到 [mermaid.live](https://mermaid.live) → Actions → SVG／PNG。深色簡報先切 `dark` theme。
 
-## 附錄 D — Q&A 預備
+## 附錄 E — Q&A 預備
 
 | 可能被問 | 怎麼答 |
 |---|---|
