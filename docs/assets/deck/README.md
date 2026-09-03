@@ -28,14 +28,14 @@ npm install pptxgenjs
 node gen.js "CoPartner-進度全景.pptx"
 ```
 
-進度數字**硬寫在 `gen.js` 裡**（搜尋 `60 / 66`、`phases`、`ms` 三個陣列），與 `panorama.html` 一樣是衍生視圖——
+進度數字**硬寫在 `gen.js` 裡**（搜尋 `62`、`94%`、`phases`、`ms`、`stats` 幾個地方），與 `panorama.html` 一樣是衍生視圖——
 事實來源仍是 [`docs/planning/implementation-backlog.md`](../../planning/implementation-backlog.md)。改進度時三處要一起更新。
 
 ### 視覺設計
 
 沿用 `panorama.html` 那套：冷灰綠底 + 磷光琥珀重點色（琥珀＝「注意力」，呼應擷取引擎最亮的那塊 tile），
 綠色只當語意色（完成）。母題是**小方磚**，從封面的 foveation 場、進度頁的 66 格 tile 陣列到清單前的小方點都在重複。
-深色頁只有三張（封面／翻開執行開關／收尾），形成三明治結構。
+深色頁只有三張（封面／兩次「第一次」／收尾），形成三明治結構。
 
 關鍵視覺都是**原生畫的**，不是貼 `../diagrams/` 的 PNG——心智圖縮到投影片尺寸會看不清：
 

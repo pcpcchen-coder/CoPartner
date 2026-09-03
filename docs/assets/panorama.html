@@ -263,7 +263,7 @@
     <div>
       <p class="eyebrow">V1 · 桌面 ambient 助理</p>
       <h1>CoPartner 進度全景</h1>
-      <p class="lede">一個在 macOS 上持續看著你操作、把行為寫成人看得懂的「操作劇本」、按下熱鍵就交給雲端 Claude 續做的助理。<br>它已經不是骨架——每天開著在用，而且從三週前開始，會真的動手。</p>
+      <p class="lede">一個在 macOS 上持續看著你操作、把行為寫成人看得懂的「操作劇本」、按下熱鍵就交給雲端 Claude 續做的助理。<br>它已經不是骨架——每天開著在用，而且已經會真的動手：執行命令與操作 UI 都已真機驗過。</p>
     </div>
     <div class="mast-meta">
       <svg class="fovea" width="132" height="92" viewBox="0 0 132 92" role="img" aria-label="foveated 擷取示意：中央高解析、周邊低解析">
@@ -294,8 +294,8 @@
 </header>
 
 <div class="band">
-  <div class="stat"><span class="n">60<em> / 66</em></span><span class="k">步級進度 · 91%</span></div>
-  <div class="stat"><span class="n">42</span><span class="k">PR 已合併進 main</span></div>
+  <div class="stat"><span class="n">62<em> / 66</em></span><span class="k">步級進度 · 94%</span></div>
+  <div class="stat"><span class="n">50</span><span class="k">PR 已合併進 main</span></div>
   <div class="stat"><span class="n">595</span><span class="k">XCTest 案例</span></div>
   <div class="stat"><span class="n">8,606</span><span class="k">Swift 原始碼行數</span></div>
   <div class="stat"><span class="n">4<em> / 8</em></span><span class="k">里程碑真機通過</span></div>
@@ -308,7 +308,7 @@
   <div class="gate d"><span class="id">M2.5</span><span class="nm">L0 操作劇本</span><span class="st">✓ 真機</span><span class="num">時間機器</span></div>
   <div class="gate w"><span class="id">M3</span><span class="nm">記憶系統</span><span class="st">待驗收</span><span class="num">8hr ≤ 400MB</span></div>
   <div class="gate d"><span class="id">M4</span><span class="nm">本地 L1／L2 敘事</span><span class="st">✓ 真機</span><span class="num">1373–2388ms</span></div>
-  <div class="gate p"><span class="id">M5</span><span class="nm">雲端交棒 + 執行</span><span class="st">▸ 進行中</span><span class="num">執行端已建成</span></div>
+  <div class="gate p"><span class="id">M5</span><span class="nm">雲端交棒 + 執行</span><span class="st">▸ 進行中</span><span class="num">執行端全通過</span></div>
   <div class="gate w"><span class="id">M6</span><span class="nm">隱私 + 黑名單</span><span class="st">待驗收</span><span class="num">密碼欄 100% 遮</span></div>
 </div>
 
@@ -335,7 +335,7 @@
       <span class="en">Cloud Takeover</span>
       <span class="t">交棒快</span>
       <p class="d">按 <code>⌃⌥⌘Space</code>，把因果史加焦點小圖交給 Claude computer-use，由它續寫你沒做完的 open loop。回來的每個動作都是<strong>不可信提議</strong>，要過四道閘才可能被執行。中止鍵 <code>⌃⌥⌘.</code> 作廢整個世代的授權。</p>
-      <p class="m">執行端已建成 · 開關已翻開</p>
+      <p class="m">兩種執行能力都已真機驗過</p>
     </div>
   </div>
 </section>
@@ -374,8 +374,8 @@
     </div>
     <div class="ph">
       <span class="lbl"><b>F 雲端交棒</b><span>step 43–53.7 · 閘門與沙箱</span></span>
-      <span class="tiles"><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl p"></i><i class="tl p"></i></span>
-      <span class="cnt">15 / 17</span>
+      <span class="tiles"><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i><i class="tl"></i></span>
+      <span class="cnt">17 / 17</span>
     </div>
     <div class="ph">
       <span class="lbl"><b>G 隱私 + 黑名單</b><span>step 54–58 · 縱深五層</span></span>
@@ -392,15 +392,13 @@
 
   <div class="rem">
     <div class="rem-h">
-      <b>剩下的六項——全部只有真 Mac 能驗</b>
+      <b>剩下的四項——全部只有真 Mac 能驗</b>
       <span>沒有任何「CI 能驗但還沒寫」的邏輯欠著</span>
     </div>
     <div class="rem-l">
       <div class="rem-i"><span class="sid q">23.5</span><p>擷取 CPU 優化：只 hash dirty tile、async GPU、自適應幀率。已評估過，刻意排在後面。</p></div>
       <div class="rem-i"><span class="sid">24</span><p>M1 驗收：播 1080p 影片，CPU 不超 baseline，影片區正確標 DYNAMIC。</p></div>
       <div class="rem-i"><span class="sid">36</span><p>M3 驗收：真 <code>vec0</code> 載入 + 跑 8 小時，磁碟量 ≤ ~400MB，語意檢索可用。</p></div>
-      <div class="rem-i"><span class="sid">53.5</span><p>第一次真執行的回報。開關已翻開，DoD 是「stdout 裡有那串隨機標記」，還沒回報過。</p></div>
-      <div class="rem-i"><span class="sid">53.6-C</span><p>翻開 <code>willPerformUIActions</code>：讓它能動指標與鍵盤。單獨一個改動。</p></div>
       <div class="rem-i"><span class="sid">58</span><p>M6 驗收：密碼欄 100% 遮、黑名單 app 0 frame、PIPL 最終隱私稽核。</p></div>
     </div>
   </div>
@@ -422,9 +420,9 @@
 
 <section>
   <div class="sec-head">
-    <p class="eyebrow">2026-08-20 · step 53.5</p>
-    <h2>翻開執行開關那天</h2>
-    <p>翻開的那一行<strong>單獨成立一個 PR</strong>——理由很簡單：翻開執行能力若混在一大包程式碼裡，沒有人（包括作者）能真的審完。翻回 <code>false</code> 是出事時的第一個動作，只需改一行。</p>
+    <p class="eyebrow">2026-08-20 · 2026-09-03 · step 53.5 / 53.6-C</p>
+    <h2>兩次「第一次」</h2>
+    <p><strong>8 / 20 第一次真的執行命令</strong>（<code>cat</code> 讀回檔案，stdout 帶回對得上的 UUID）；<strong>9 / 3 第一次真的動使用者的電腦</strong>（HUD 確認後畫面捲動）。兩次翻開能力的那一行都<strong>單獨成立一個 PR</strong>——理由很簡單：翻開執行能力若混在一大包程式碼裡，沒有人（包括作者）能真的審完。翻回 <code>false</code> 是出事時的第一個動作，只需改一行。</p>
   </div>
   <div class="ad">
     <div>
@@ -434,6 +432,7 @@
         <li>只有固定表裡<strong>七個唯讀工具</strong>：<code>cat</code> <code>ls</code> <code>head</code> <code>tail</code> <code>wc</code> <code>grep</code> <code>find</code></li>
         <li>只能寫沙箱工作目錄</li>
         <li>每個動作仍過本地風險分級 + HUD 人工確認</li>
+        <li>UI 動作（點按／輸入／捲動）走主程序，沒有沙箱可圍——防線只有風險分級、confirm-each 與 undo</li>
       </ul>
     </div>
     <div>
@@ -583,8 +582,8 @@
     <table>
       <thead><tr><th>數字</th><th>意義</th><th>出處</th></tr></thead>
       <tbody>
-        <tr><td>60 / 66</td><td>步級完成度（91%）</td><td>implementation-backlog 進度總覽</td></tr>
-        <tr><td>42</td><td>已合併進 <code>main</code> 的 PR 數</td><td>git log</td></tr>
+        <tr><td>62 / 66</td><td>步級完成度（94%）</td><td>implementation-backlog 進度總覽</td></tr>
+        <tr><td>50</td><td>已合併進 <code>main</code> 的 PR 數</td><td>git log</td></tr>
         <tr><td>595</td><td>Swift XCTest 案例數</td><td>測試比 0.72</td></tr>
         <tr><td>8,606 / 6,161</td><td>原始碼 ／ 測試行數</td><td>100 檔 ／ 72 檔</td></tr>
         <tr><td>9% / 25%</td><td>擷取 idle ／ operating CPU</td><td>step 18 真機實測</td></tr>
@@ -592,7 +591,7 @@
         <tr><td>1373–2388 ms</td><td>L1 本地敘事延遲</td><td>step 42 真機實測</td></tr>
         <tr><td>2659 → 1373 ms</td><td>一輪延遲優化的壓縮成果</td><td>commit 6588d1f</td></tr>
         <tr><td>+151 → +7 MB/hr</td><td>記憶體洩漏修復前後</td><td>step 53.7 · PR #40／#41</td></tr>
-        <tr><td>7 / 7</td><td>sandbox profile 成對驗證全綠（0 失敗、0 無效）</td><td>scripts/sandbox-verify.sh</td></tr>
+        <tr><td>8 / 8</td><td>sandbox profile 成對驗證全綠（0 失敗、0 無效）——2 條正向基準 + 6 條負向</td><td>scripts/sandbox-verify.sh</td></tr>
         <tr><td>7 / 7</td><td>FoundationModels API 簽章探針一次全過</td><td>step 42</td></tr>
         <tr><td>7</td><td>翻開執行能力後允許的工具數（唯讀，不含 shell 本身）</td><td>step 53.5</td></tr>
         <tr><td>I1 – I10</td><td>可測安全不變式條數</td><td>sandbox-threat-model.md</td></tr>
