@@ -78,7 +78,14 @@ public enum ComputerUseNormalizer {
                 throw ComputerUseNormalizeError.malformedField("scroll_amount")
             }
             let (dx, dy) = try scrollDelta(direction: direction, amount: amount)
-            return ["action": "scroll", "dx": String(dx), "dy": String(dy)]
+            // 捲動也要座標。原本這裡把 `coordinate` 丟掉，事件因此落在游標當下的位置
+            // ——**而那在自動化情境下是不可預測的**：模型是看著截圖決定要捲哪一塊，
+            // 游標卻可能停在完全無關的地方。真機第一次驗收就栽在這裡。
+            // 缺欄位一律 throw，不退回「就捲游標那裡」——那是猜，而猜出來的動作
+            // 與使用者在 HUD 上核准的不是同一件事。
+            let (x, y) = try coordinate(input)
+            return ["action": "scroll", "x": String(x), "y": String(y),
+                    "dx": String(dx), "dy": String(dy)]
 
         default:
             // 含 computer_20251124 的 zoom、以及 right_click / double_click / drag /

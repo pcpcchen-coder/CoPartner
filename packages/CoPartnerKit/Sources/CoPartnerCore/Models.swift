@@ -131,7 +131,10 @@ public struct ProposedAction: Sendable, Equatable, Identifiable {
         case click(x: Int, y: Int)
         case typeText(String)
         case keypress(String)                              // 如 "cmd+s"
-        case scroll(dx: Int, dy: Int)
+        /// 捲動。**帶座標**——捲動事件是送到「某個位置底下的視窗」，沒有座標就只能
+        /// 落在游標當下所在的地方，而那在自動化情境下是不可預測的
+        /// （真機第一次驗收就栽在這裡：使用者按完 HUD 的「執行」，游標正好在 HUD 上）。
+        case scroll(x: Int, y: Int, dx: Int, dy: Int)
         case shell(argv: [String])                         // 無整串命令字串（I4）
         case readFile(path: String)
         case writeFile(path: String, contents: String)
@@ -155,7 +158,7 @@ extension ProposedAction.Kind {
         case let .click(x, y): return "click(\(x),\(y))"
         case let .typeText(t): return "type(\(t.count) chars)"
         case let .keypress(k): return "key(\(k))"
-        case let .scroll(dx, dy): return "scroll(\(dx),\(dy))"
+        case let .scroll(x, y, dx, dy): return "scroll(@\(x),\(y) \(dx),\(dy))"
         case let .shell(argv): return "shell(\(argv.joined(separator: " ")))"
         case let .readFile(p): return "readFile(\(p))"
         case let .writeFile(p, _): return "writeFile(\(p))"

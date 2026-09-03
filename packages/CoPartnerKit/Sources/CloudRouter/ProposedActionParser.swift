@@ -32,7 +32,8 @@ public enum ProposedActionParser {
         case "left_click", "click": return .click(x: try requireInt(input, "x"), y: try requireInt(input, "y"))
         case "type": return .typeText(try require(input, "text"))
         case "key": return .keypress(try require(input, "text"))
-        case "scroll": return .scroll(dx: try requireInt(input, "dx"), dy: try requireInt(input, "dy"))
+        case "scroll": return .scroll(x: try requireInt(input, "x"), y: try requireInt(input, "y"),
+                                      dx: try requireInt(input, "dx"), dy: try requireInt(input, "dy"))
         case let other: throw ProposedActionParseError.unknownAction(other)
         }
     }

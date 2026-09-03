@@ -54,6 +54,32 @@ final class ComputerUseNormalizerTests: XCTestCase {
             let out = try ComputerUseNormalizer.normalizeComputer(input)
             XCTAssertEqual(out["dx"], dx, "direction=\(dir)")
             XCTAssertEqual(out["dy"], dy, "direction=\(dir)")
+            // 座標**不可以被丟掉**——見 `testScrollCoordinateIsCarriedThrough`。
+            XCTAssertEqual(out["x"], "500", "direction=\(dir)")
+            XCTAssertEqual(out["y"], "400", "direction=\(dir)")
+        }
+    }
+
+    /// 🔑 **這條是真機第一次 UI 驗收失敗換來的。**
+    ///
+    /// 原本 scroll 的正規化只取 `scroll_direction` / `scroll_amount`，把 `coordinate` 丟掉。
+    /// 少了座標，捲動事件只能落在**游標當下所在的位置**——而模型是看著截圖決定要捲哪一塊，
+    /// 游標可能停在完全無關的地方。真機上的表現是：畫面完全沒動，而且沒有任何錯誤。
+    func testScrollCoordinateIsCarriedThrough() throws {
+        let input: [String: Any] = ["action": "scroll", "coordinate": [640, 360],
+                                    "scroll_direction": "down", "scroll_amount": 2]
+        let out = try ComputerUseNormalizer.normalizeComputer(input)
+        XCTAssertEqual(out["x"], "640")
+        XCTAssertEqual(out["y"], "360")
+    }
+
+    /// 缺座標時**拒絕，不退回「就捲游標那裡」**——那是猜，而猜出來的動作與使用者
+    /// 在 HUD 上核准的不是同一件事（原則同檔頭：看不懂就 throw，絕不猜）。
+    func testScrollWithoutCoordinateThrows() {
+        let input: [String: Any] = ["action": "scroll",
+                                    "scroll_direction": "down", "scroll_amount": 2]
+        XCTAssertThrowsError(try ComputerUseNormalizer.normalizeComputer(input)) { error in
+            XCTAssertEqual(error as? ComputerUseNormalizeError, .malformedField("coordinate"))
         }
     }
 
@@ -160,6 +186,6 @@ final class ComputerUseNormalizerTests: XCTestCase {
                                   "scroll_direction": "down", "scroll_amount": 4]
         let normalized = try ComputerUseNormalizer.normalize(toolName: "computer", input: raw)
         let action = try ProposedActionParser.parse(toolName: "computer", input: normalized)
-        XCTAssertEqual(action.kind, .scroll(dx: 0, dy: 4))
+        XCTAssertEqual(action.kind, .scroll(x: 10, y: 20, dx: 0, dy: 4))
     }
 }

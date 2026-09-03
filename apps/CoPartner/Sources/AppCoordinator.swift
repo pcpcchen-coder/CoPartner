@@ -523,7 +523,11 @@ final class AppCoordinator: ObservableObject {
         // 兩個一起跑，鍵碼表要是錯位，兩行報告會長得一模一樣。
         let dangerous = [ProposedAction(kind: .keypress("cmd+q")),
                          ProposedAction(kind: .keypress("cmd+w"))]
-        let report = ([centre] + dangerous)
+        // 捲動也一起乾跑：它與點按走同一套座標換算，而「UI 測試」送的就是它。
+        let scroll = ProposedAction(
+            kind: .scroll(x: Int(geometry.imagePixelSize.width / 2),
+                          y: Int(geometry.imagePixelSize.height / 2), dx: 0, dy: -3))
+        let report = ([centre, scroll] + dangerous)
             .map { uiPerformer.dryRun($0) }
             .joined(separator: "\n—\n")
         let path = Self.writeUIDryRunReport(report)
@@ -540,7 +544,11 @@ final class AppCoordinator: ObservableObject {
     /// - 捲動可逆（捲回去就好），而點按可能按到「刪除」、輸入會打進當下有焦點的欄位
     /// - 捲動不需要座標換算就能觀察到效果，因此它驗的是「事件真的送得出去」這件事本身
     ///
-    /// 事件送到**游標所在位置**，所以按下「執行」之前先把游標移到一個可捲動的地方。
+    /// **捲動送到指定座標，不是游標所在位置。** 第一次真機驗收就是栽在這裡：
+    /// 使用者按完 HUD 的「執行」，游標停在 HUD 面板上，捲動事件送給了那個不能捲的面板
+    /// ——畫面完全沒動，而且沒有任何錯誤。修法見 `UIActionPerformer.scroll`。
+    ///
+    /// 測試送的是螢幕正中央，所以**把一個可捲動的視窗放在螢幕中央**再按執行。
     func runUISmokeTest() {
         guard takeoverModel == nil, pendingDecision == nil else {
             takeoverSummary = "接手：進行中，測試已略過（避免蓋掉真提議）"
@@ -557,10 +565,17 @@ final class AppCoordinator: ObservableObject {
             allowlist: Self.defaultPathAllowlist(),
             performer: { action in try await ui.perform(action) })
 
+        guard let geometry = ScreenGeometryProvider.mainDisplay() else {
+            takeoverSummary = "接手：UI 測試——讀不到顯示器幾何"
+            session.endIntervention()
+            takeoverModel = nil
+            return
+        }
         let proposal = ProposedAction(
-            kind: .scroll(dx: 0, dy: -3),
-            rationale: "（本地合成提議，非雲端）往下捲三行，驗證 UI 事件真的送得出去。")
-        takeoverSummary = "接手：UI 測試已送出——把游標移到可捲動的地方再按執行"
+            kind: .scroll(x: Int(geometry.imagePixelSize.width / 2),
+                          y: Int(geometry.imagePixelSize.height / 2), dx: 0, dy: -3),
+            rationale: "（本地合成提議，非雲端）在螢幕正中央往下捲三行，驗證 UI 事件真的送得出去。")
+        takeoverSummary = "接手：UI 測試已送出——把可捲動的視窗放在螢幕中央再按執行"
         handoffTask = Task { [weak self] in
             guard let self else { return }
             _ = await self.handle(proposal: proposal)

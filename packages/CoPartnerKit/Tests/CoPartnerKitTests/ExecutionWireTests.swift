@@ -63,7 +63,7 @@ final class ExecutionWireTests: XCTestCase {
     func testUIActionsAreRejectedNotSilentlyDropped() {
         let uiKinds: [ProposedAction.Kind] = [
             .screenshot, .click(x: 1, y: 2), .typeText("hi"),
-            .keypress("cmd+s"), .scroll(dx: 0, dy: 3),
+            .keypress("cmd+s"), .scroll(x: 5, y: 6, dx: 0, dy: 3),
             .outboundComms(kind: "email", target: "a@b.c"),
         ]
         for kind in uiKinds {
