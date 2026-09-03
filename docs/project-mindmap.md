@@ -16,6 +16,7 @@
 
 > 🖼️ **做簡報的話**：本文件所有圖表已匯出成 SVG／PNG 放在 [`docs/assets/diagrams/`](assets/diagrams/)，
 > 搭配 [`docs/planning/ppt-material.md`](planning/ppt-material.md) 的投影片大綱與講稿即可直接開工。
+> 想直接投影或截圖的話，[`docs/assets/panorama.html`](assets/panorama.html) 是同樣內容的**單頁視覺版**，瀏覽器打開就能用。
 
 ---
 
@@ -487,8 +488,9 @@ mindmap
       0007 本地優先分層推理
     privacy
       data-classification.md 資料分類矩陣
-    assets/diagrams
-      八張圖的 SVG 與 PNG 匯出
+    assets 簡報素材
+      panorama.html 單頁視覺版全景
+      diagrams 十張圖的 SVG 與 PNG
 ```
 
 ---
@@ -500,4 +502,4 @@ mindmap
 1. 先改 `docs/planning/implementation-backlog.md` 的**進度總覽表 + 該 step 詳細章節**（兩處都要——過去多次只改一處造成漂移）。
 2. 真機驗收結果同步進 `docs/planning/realmachine-runbook.md` 的對應里程碑節，脈絡進 `session-handoff.md`。
 3. 里程碑翻牌時，回來更新本文件的 §1／§4／§9，以及 `README.md`／`README.en.md`／`CHANGELOG.md`。
-4. 圖改了要重新匯出 `docs/assets/diagrams/`（方法見該目錄 README）。
+4. 圖改了要重新匯出 `docs/assets/diagrams/`（方法見該目錄 README）；`docs/assets/panorama.html` 裡的數字是硬寫的，一併更新。

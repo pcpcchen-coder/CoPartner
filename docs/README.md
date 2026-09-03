@@ -11,6 +11,7 @@
 | 我要在 Mac 上驗收，怎麼跑 | [`planning/realmachine-runbook.md`](planning/realmachine-runbook.md) — 六個 🔒 里程碑逐步清單 |
 | 換個 session 接手，要交接什麼 | [`planning/session-handoff.md`](planning/session-handoff.md) — 可獨立運作的交接包 |
 | 要做簡報，素材在哪 | [`planning/ppt-material.md`](planning/ppt-material.md) — 投影片大綱、關鍵數字、講稿；圖檔在 [`assets/diagrams/`](assets/diagrams/) |
+| 想直接投影 / 截圖一頁看完 | [`assets/panorama.html`](assets/panorama.html) — 單頁視覺版全景，用瀏覽器打開即可 |
 | 系統怎麼運作的 | [`architecture/overview.md`](architecture/overview.md) → [`design/`](design/) |
 | 安全邊界是什麼、怎麼驗 | [`design/sandbox-threat-model.md`](design/sandbox-threat-model.md) — 不變式 I1–I10；驗證指令見 repo 根 `README.md` |
 | 為什麼這樣設計 | [`adr/`](adr/) — 七則架構決策紀錄 |
@@ -61,9 +62,14 @@
 
 - [`data-classification.md`](privacy/data-classification.md) — 資料分類矩陣：絕不出本機／遮罩後可上雲／可上雲
 
-### `assets/diagrams/` — 簡報圖檔素材
+### `assets/` — 簡報素材
 
-十張從心智圖匯出的圖，SVG（PowerPoint／Figma）+ 2x PNG（Keynote／Google Slides）兩版。清單與重新產生方式見 [`assets/diagrams/README.md`](assets/diagrams/README.md)。
+| 檔案 | 內容 |
+|---|---|
+| [`assets/panorama.html`](assets/panorama.html) | **單頁視覺版全景**——里程碑燈號、Phase A–G 進度地圖、四道閘、方法論、真機教訓、版本階梯、誠實風險清單、數字附錄。單一檔案、無需建置，瀏覽器直接開；淺色／深色自動跟隨系統。適合直接投影或截圖進投影片 |
+| [`assets/diagrams/`](assets/diagrams/) | 十張從心智圖匯出的圖，SVG（PowerPoint／Figma）+ 2x PNG（Keynote／Google Slides）兩版。清單與重新產生方式見 [`assets/diagrams/README.md`](assets/diagrams/README.md) |
+
+`panorama.html` 也發佈了一份線上版（Claude Artifact），內容相同；repo 這份多了完整的 HTML 文件骨架，所以能離線直接開。
 
 ### 根目錄
 
@@ -74,6 +80,6 @@
 
 1. **進度只有一個事實來源**：`planning/implementation-backlog.md`。改進度時**進度總覽表與該 step 詳細章節兩處都要改**——過去多次只改一處造成漂移（例：step 42 已真機通過但表格停在 ⬜）。
 2. **真機結果進 runbook**，脈絡與過程紀錄進 `session-handoff.md`。
-3. **衍生視圖最後同步**：`project-mindmap.md`、根目錄 `README.md`／`README.en.md`、`CHANGELOG.md`、`planning/ppt-material.md`。
+3. **衍生視圖最後同步**：`project-mindmap.md`、`assets/panorama.html`（裡面的數字是硬寫的，改進度時要一起改）、根目錄 `README.md`／`README.en.md`、`CHANGELOG.md`、`planning/ppt-material.md`。
 4. **圖改了要重新匯出** `assets/diagrams/`（方法見該目錄 README）。
 5. **架構決策先寫 ADR**：影響架構的變更，PR 應附對應 ADR（見 ADR-0001）。
