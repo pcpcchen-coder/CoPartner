@@ -1,5 +1,6 @@
 import AppKit
 import ActionExecutor
+import CoPartnerCore
 // 🔒 真機膠水：主顯示器的幾何。CI 只保證編譯。
 //
 // ## 為什麼這裡只有一個函式
@@ -28,13 +29,19 @@ enum ScreenGeometryProvider {
         let originGlobal = CGPoint(x: screen.frame.origin.x,
                                    y: primary.frame.maxY - screen.frame.maxY)
         let scale = screen.backingScaleFactor
+        let native = CGSize(width: sizePoints.width * scale, height: sizePoints.height * scale)
+        // ⚠️ `imagePixelSize` 是「**我們送給模型的圖有多大**」，不是螢幕原生像素。
+        // 送出去的圖會被縮到 `ScreenshotScalePolicy.targetSize`，而宣告給模型的
+        // `display_width_px/height_px` 與這裡的換算基準都必須用同一個數字——
+        // 三者任一錯開，每個座標都會偏掉，而且不會報錯（見該型別的說明）。
+        guard let target = ScreenshotScalePolicy.targetSize(nativePixels: native) else { return nil }
         return ScreenshotGeometry(
-            imagePixelSize: CGSize(width: sizePoints.width * scale,
-                                   height: sizePoints.height * scale),
+            imagePixelSize: target,
             display: DisplayGeometry(globalOriginPoints: originGlobal, sizePoints: sizePoints))
     }
 
-    /// 給 `HandoffRequestBuilder` 用的宣告尺寸。**與換算用的幾何同源**（見型別註解）。
+    /// 給 `HandoffRequestBuilder` 用的宣告尺寸。**與送出去的圖、與換算用的幾何同源**
+    /// ——三者都取自 `mainDisplay()` 的 `imagePixelSize`，沒有分岔的機會。
     static func declaredDisplayPixels() -> (width: Int, height: Int)? {
         guard let geometry = mainDisplay() else { return nil }
         return (Int(geometry.imagePixelSize.width.rounded()),
