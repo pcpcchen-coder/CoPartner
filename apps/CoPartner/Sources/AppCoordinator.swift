@@ -626,7 +626,7 @@ final class AppCoordinator: ObservableObject {
     private func performScreenshotDryRun() async {
         let front = NSWorkspace.shared.frontmostApplication
         let appName = front?.localizedName ?? "?"
-        refreshSensitiveMaskNow()          // 用之前先看一眼，別依賴觀察迴圈有沒有跑過
+        let focused = refreshSensitiveMaskNow()   // 用之前先看一眼，別依賴觀察迴圈有沒有跑過
         let (grid, tiles) = sensitiveMaskSnapshot
         let fraction = ScreenshotRedaction.maskedFraction(for: tiles, in: grid)
         let rects = ScreenshotRedaction.normalizedRects(for: tiles, in: grid)
@@ -643,7 +643,12 @@ final class AppCoordinator: ObservableObject {
                      gridUsable
                         ? String(format: "敏感 tile：%d／%d（%.1f%%）",
                                  tiles.count, grid.cols * grid.rows, fraction * 100)
-                        : "⚠️ 遮罩格線建不起來（讀不到主顯示器）——無法判斷畫面是否敏感"]
+                        : "⚠️ 遮罩格線建不起來（讀不到主顯示器）——無法判斷畫面是否敏感",
+                     // ⚠️ **報告一定要說出「我們看到了什麼」，不能只說結論。**
+                     // 真機第一次拿到圖時密碼欄沒被遮，而報告只寫「敏感 tile：0」——
+                     // 那句話同時符合「畫面上沒有密碼欄」與「有但我們沒認出來」，
+                     // 而這兩件事要修的東西完全不同。
+                     Self.describeFocusForReport(focused, frontmostApp: appName)]
 
         guard case .send(let redact) = decision else {
             if case .withhold(let reason) = decision { lines.append("決定：不送（\(reason)）") }
@@ -677,6 +682,33 @@ final class AppCoordinator: ObservableObject {
                                             named: "screenshot-dry-run.txt")
             xpcSummary = "截圖乾跑：失敗（\(error)）\n報告：\(path)"
         }
+    }
+
+    /// 焦點元件在報告上長什麼樣。**這一行是診斷的重點**：
+    /// 「沒有偵測到密碼欄」有兩種完全不同的成因——畫面上真的沒有，或者有但 AX 沒把它
+    /// 標成 `AXSecureTextField`（瀏覽器的網頁欄位常是後者）。少了 role/subrole，
+    /// 這兩件事在報告上長得一模一樣。
+    ///
+    /// ⚠️ **絕對不印 `element.value`。** 焦點在密碼欄時 value 就是密碼本身，
+    /// 而這份報告會被寫成一個純文字檔留在磁碟上。診斷要的是「它是什麼」，不是「裡面裝什麼」。
+    private static func describeFocusForReport(_ element: AXFocusedElement?,
+                                               frontmostApp: String) -> String {
+        guard let element else {
+            return "焦點：讀不到（AX 沒回傳焦點元件——沒有輔助使用權限，或最前景 app 不吐 AX）"
+        }
+        let secure = InputEventTranslator.isSecure(role: element.role, subrole: element.subrole)
+        // 焦點的擁有者要跟最前景 app 對帳。兩邊是獨立來源，對不上時代表我們看的
+        // 根本不是使用者正在看的那個視窗（例如焦點跑到自動填入的浮層上）——
+        // 那種情況下「沒偵測到密碼欄」是必然的，而原因跟 AX 標不標 subrole 無關。
+        let owner = element.windowTitle.map { "「\($0)」" } ?? "（無視窗標題）"
+        return String(format: "焦點：role=%@ subrole=%@ 視窗=%@ pid=%@ frame=(%.0f,%.0f %.0f×%.0f) → %@",
+                      element.role, element.subrole ?? "nil",
+                      owner,
+                      element.ownerPID.map { "\($0)" } ?? "?",
+                      element.frame.minX, element.frame.minY,
+                      element.frame.width, element.frame.height,
+                      secure ? "判定為密碼欄（會遮）" : "**不算密碼欄（不會遮）**")
+            + "\n最前景 app=\(frontmostApp)（與上面的視窗對不上時，表示焦點不在使用者看的那個視窗）"
     }
 
     /// 把乾跑的圖寫成檔案。**存在診斷目錄、不是沙箱工作目錄**——
@@ -1194,8 +1226,11 @@ final class AppCoordinator: ObservableObject {
     ///
     /// ⚠️ 已知限制：只認**目前有焦點**的密碼欄。畫面上有密碼欄但焦點不在它身上時
     /// 不會被遮——那要 AX 全樹掃描，成本與時機都不同，留待之後。
-    func refreshSensitiveMaskNow() {
-        updateSensitiveMask(with: axProvider.focusedElement())
+    @discardableResult
+    func refreshSensitiveMaskNow() -> AXFocusedElement? {
+        let element = axProvider.focusedElement()
+        updateSensitiveMask(with: element)
+        return element
     }
 
     /// 輸入事件 → 焦點更新 + TYPE/PASTE/SCROLL 劇本事件（純翻譯在 InputEventTranslator）。
