@@ -17,8 +17,15 @@ struct MenuBarContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // MARK: 按鈕區（最上方，永遠可見）
-            HStack(spacing: 8) {
+            // MARK: 按鈕區（最上方，永遠可見，放不下就換行）
+            //
+            // ⚠️ **不要再靠加寬面板來塞按鈕。** 這裡原本是單一 HStack，每加一顆除錯按鈕
+            // 就把 `.frame(width:)` 調大一次（760 → 840 → 920 → 1000 → 1080），
+            // 而那正是真機上「面板左半邊落在螢幕外、按鈕看不見又移不動」的成因：
+            // `MenuBarExtra` 的面板錨定在選單列圖示底下，圖示偏右時加寬只會往螢幕外長。
+            // 「寧可留寬」修的是「按鈕被擠到下面」，卻換來「按鈕被推到螢幕外」。
+            // 現在寬度固定、按鈕自己換行（`WrappingButtonRow`），再加幾顆都不必動版面。
+            WrappingButtonRow(horizontalSpacing: 8, verticalSpacing: 6) {
                 Button(coordinator.isIdle ? "開始觀察" : "停止觀察") {
                     coordinator.toggleObserving()
                 }
@@ -48,7 +55,8 @@ struct MenuBarContentView: View {
                 Button("UI 測試") { coordinator.runUISmokeTest() }
                     .tint(.orange)
                 SettingsLink { Text("熱鍵…") }
-                Spacer()
+                // Spacer 拿掉了：換行版面裡它會吃掉一整列。
+                // 緊急停止靠**顏色**辨識，不靠位置——位置在換行後本來就不穩定。
                 Button("緊急停止") { coordinator.stopAll() }
                     .foregroundStyle(.red)
                 Button("結束") { NSApplication.shared.terminate(nil) }
@@ -159,8 +167,10 @@ struct MenuBarContentView: View {
             .padding(.top, 10)
             .padding(.bottom, 14)
         }
-        // 1080：又多一顆按鈕（截圖乾跑）。按鈕被擠出畫面真機上重演過兩次，寧可先留寬。
-        .frame(width: 1080)
+        // 760 並且**不再隨按鈕數成長**——按鈕改成自動換行（見上方註解）。
+        // 這個寬度要能塞進「選單列圖示到螢幕左緣」的距離，而那取決於圖示在哪，
+        // 我們控制不了；所以取一個保守值，讓版面的變數只剩高度。
+        .frame(width: 760)
         // 打開選單 ＝ 取一個記憶體樣本。用 onAppear 而不是定時器：見 AppCoordinator。
         .onAppear { coordinator.sampleMemory() }
     }
