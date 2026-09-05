@@ -48,8 +48,11 @@ final class ScreenshotScalePolicyTests: XCTestCase {
 
     /// 退化尺寸回 nil，**不給預設值**——填錯不會報錯，只會讓每個座標都偏掉。
     func testDegenerateSizesReturnNil() {
+        // 型別要寫出來：`.nan` 會在 CGFloat / Double / Int 三個 init 之間 ambiguous。
+        // 這是同一個錯誤的第二次（第一次在 ScreenCoordinateMapperTests），
+        // 而 `swift build` 看不到它——它不編譯測試 target。
         for size in [CGSize(width: 0, height: 0), CGSize(width: 1920, height: 0),
-                     CGSize(width: .nan, height: 1080), CGSize(width: -100, height: 100)] {
+                     CGSize(width: CGFloat.nan, height: 1080), CGSize(width: -100, height: 100)] {
             XCTAssertNil(ScreenshotScalePolicy.targetSize(nativePixels: size), "\(size)")
         }
     }
