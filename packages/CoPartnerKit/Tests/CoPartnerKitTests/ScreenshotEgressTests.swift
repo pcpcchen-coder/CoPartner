@@ -63,9 +63,36 @@ final class ScreenshotEgressTests: XCTestCase {
     // MARK: - 政策（CloudRouter 那一半）
 
     private func decide(blacklisted: Bool = false, fraction: Double = 0,
-                        rects: [CGRect] = []) -> ScreenshotEgressPolicy.Decision {
+                        rects: [CGRect] = [],
+                        evidence: ScreenshotEgressPolicy.FocusEvidence = .usable)
+        -> ScreenshotEgressPolicy.Decision {
         ScreenshotEgressPolicy.decide(isBlacklistedApp: blacklisted, frontmostAppName: "測試 app",
-                                      maskedFraction: fraction, redactRects: rects)
+                                      maskedFraction: fraction, redactRects: rects,
+                                      focusEvidence: evidence)
+    }
+
+    // MARK: - 讀數可不可信（step 61）
+
+    /// **這一條是這組測試的核心。** 真機第一次乾跑時，敏感偵測看到的是一個容器
+    /// （CoPartner 自己的面板），什麼控制項都沒看到，於是 `maskedFraction == 0`，
+    /// 而政策把那個 0 當成「畫面很乾淨」直接放行——送出了一張沒被塗黑的登入頁。
+    ///
+    /// 「不知道」不能當成「沒有」。
+    func testUnusableEvidenceWithholdsEvenWhenFractionIsZero() {
+        guard case .withhold(let reason) =
+                decide(fraction: 0, evidence: .unusable(reason: "焦點是容器 AXWindow")) else {
+            return XCTFail("讀數不可信時，fraction 0 必須不送")
+        }
+        XCTAssertTrue(reason.contains("AXWindow"), reason)
+    }
+
+    /// 讀數不可信要**排在比例規則前面**：0 會通過比例規則，所以順序反了等於沒修。
+    func testUnusableEvidenceOutranksCleanFraction() {
+        XCTAssertEqual(decide(fraction: 0, rects: [], evidence: .usable),
+                       .send(redact: []))
+        if case .send = decide(fraction: 0, rects: [], evidence: .unusable(reason: "x")) {
+            XCTFail("不可信的讀數不能因為比例好看就放行")
+        }
     }
 
     /// **黑名單 app 沒有「遮一遮就可以送」這個選項。** 密碼管理器、銀行頁面 → 整張不送。

@@ -631,10 +631,18 @@ final class AppCoordinator: ObservableObject {
         let fraction = ScreenshotRedaction.maskedFraction(for: tiles, in: grid)
         let rects = ScreenshotRedaction.normalizedRects(for: tiles, in: grid)
         let blocked = ocrBlacklist.isBlocked(bundleID: front?.bundleIdentifier, appName: appName)
+        // 讀數可不可信要**先問**，因為不可信時 fraction 通常是 0，
+        // 而 0 在比例規則下長得跟「畫面很乾淨」一模一樣。
+        let unusable = SensitiveMaskEvidence.unusableReasons(focused: focused,
+                                                             frontmostPID: front?.processIdentifier,
+                                                             gridTileCount: grid.cols * grid.rows)
+        let evidence: ScreenshotEgressPolicy.FocusEvidence =
+            unusable.isEmpty ? .usable : .unusable(reason: unusable.joined(separator: "；"))
         let decision = ScreenshotEgressPolicy.decide(isBlacklistedApp: blocked,
                                                      frontmostAppName: appName,
                                                      maskedFraction: fraction,
-                                                     redactRects: rects)
+                                                     redactRects: rects,
+                                                     focusEvidence: evidence)
         // 格線建不起來要**單獨說**。混在「敏感區域佔 100%」裡會讓人以為畫面真的整片敏感，
         // 而實際上是「我們沒有在偵測」——那是兩件完全不同的事，第一次真機乾跑就被這句話誤導。
         let gridUsable = grid.cols * grid.rows > 0
@@ -649,6 +657,9 @@ final class AppCoordinator: ObservableObject {
                      // 那句話同時符合「畫面上沒有密碼欄」與「有但我們沒認出來」，
                      // 而這兩件事要修的東西完全不同。
                      Self.describeFocusForReport(focused, frontmostApp: appName)]
+        // 每一條都列出來，不是只列第一條。真機那次同時命中「焦點是容器」與
+        // 「擁有者對不上」，只講一條會讓下一輪修錯地方。
+        for reason in unusable { lines.append("✗ 讀數不可信：\(reason)") }
 
         guard case .send(let redact) = decision else {
             if case .withhold(let reason) = decision { lines.append("決定：不送（\(reason)）") }
@@ -701,9 +712,15 @@ final class AppCoordinator: ObservableObject {
         // 根本不是使用者正在看的那個視窗（例如焦點跑到自動填入的浮層上）——
         // 那種情況下「沒偵測到密碼欄」是必然的，而原因跟 AX 標不標 subrole 無關。
         let owner = element.windowTitle.map { "「\($0)」" } ?? "（無視窗標題）"
-        return String(format: "焦點：role=%@ subrole=%@ 視窗=%@ pid=%@ frame=(%.0f,%.0f %.0f×%.0f) → %@",
+        // pid 本身說明不了什麼——真機第一次拿到 `pid=2239` 時，是靠面板寬度 760 才猜出
+        // 那是 CoPartner 自己。把名字查出來，下一次就不用猜。
+        let ownerApp = element.ownerPID
+            .flatMap { NSRunningApplication(processIdentifier: $0)?.localizedName }
+            ?? "?"
+        return String(format: "焦點：role=%@ subrole=%@ 視窗=%@ 擁有者=%@(pid %@) frame=(%.0f,%.0f %.0f×%.0f) → %@",
                       element.role, element.subrole ?? "nil",
                       owner,
+                      ownerApp,
                       element.ownerPID.map { "\($0)" } ?? "?",
                       element.frame.minX, element.frame.minY,
                       element.frame.width, element.frame.height,
