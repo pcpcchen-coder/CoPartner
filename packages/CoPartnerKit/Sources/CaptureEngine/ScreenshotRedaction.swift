@@ -25,6 +25,27 @@ public enum ScreenshotRedaction {
         }
     }
 
+    /// 正規化矩形（**左上原點、y 向下**，影像座標）→ 目標像素矩形
+    /// （**左下原點、y 向上**，CoreGraphics bitmap context 的座標系）。
+    ///
+    /// 這一步是整條遮罩鏈裡最容易靜默出錯的地方：兩個座標系差一個 y 翻轉，
+    /// 而翻轉錯的後果是**塗黑塗到鏡像的位置**——密碼欄在畫面上半部，黑塊出現在下半部，
+    /// 該遮的地方原封不動地送出去，而圖片本身看起來完全正常（上面就是有一塊黑）。
+    ///
+    /// 所以它不寫在繪圖的膠水裡，寫在這裡並且有測試釘住「上面的要對到上面」。
+    public static func bottomLeftPixelRects(_ normalized: [CGRect],
+                                            targetSize: CGSize) -> [CGRect] {
+        let w = targetSize.width, h = targetSize.height
+        guard w > 0, h > 0, w.isFinite, h.isFinite else { return [] }
+        return normalized.map { r in
+            CGRect(x: r.minX * w,
+                   // 翻轉：正規化的 maxY（下緣）變成 CG 的 minY（下緣距離底部的高度）。
+                   y: (1 - r.maxY) * h,
+                   width: r.width * w,
+                   height: r.height * h)
+        }
+    }
+
     /// 敏感 tile 佔全畫面的比例（0…1）。格線退化時回 1——
     /// **算不出來就當成「整片敏感」**，讓下游的上限規則自動擋掉。
     /// 回 0 會讓退化的格線看起來像「完全乾淨」，那是最糟的預設值。

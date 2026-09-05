@@ -152,6 +152,48 @@ final class ScreenshotEgressTests: XCTestCase {
             return XCTFail("PIPL 命中必須整包拒出，send 決定不能蓋過硬牆")
         }
     }
+    // MARK: - y 軸翻轉（整條遮罩鏈裡最容易靜默出錯的一步）
+
+    /// 🔑 **上面的要對到上面。**
+    ///
+    /// 正規化矩形是左上原點、y 向下（影像座標）；CoreGraphics 的 bitmap context
+    /// 是左下原點、y 向上。翻轉錯的後果是**塗黑塗到鏡像的位置**——密碼欄在畫面上半部，
+    /// 黑塊出現在下半部，該遮的地方原封不動送出去，而圖片本身看起來完全正常
+    /// （上面就是有一塊黑）。
+    func testTopOfImageMapsToTopInCoreGraphicsSpace() throws {
+        let target = CGSize(width: 1000, height: 800)
+        // 畫面最上緣、高度 10% 的一條。
+        let top = CGRect(x: 0, y: 0, width: 1, height: 0.1)
+        let rect = try XCTUnwrap(
+            ScreenshotRedaction.bottomLeftPixelRects([top], targetSize: target).first)
+        XCTAssertEqual(rect.maxY, 800, accuracy: 0.001, "上緣在 CG 空間應該貼著頂端")
+        XCTAssertEqual(rect.minY, 720, accuracy: 0.001)
+        XCTAssertEqual(rect.height, 80, accuracy: 0.001)
+    }
+
+    func testBottomOfImageMapsToBottom() throws {
+        let target = CGSize(width: 1000, height: 800)
+        let bottom = CGRect(x: 0, y: 0.9, width: 1, height: 0.1)
+        let rect = try XCTUnwrap(
+            ScreenshotRedaction.bottomLeftPixelRects([bottom], targetSize: target).first)
+        XCTAssertEqual(rect.minY, 0, accuracy: 0.001, "下緣在 CG 空間應該貼著底部")
+    }
+
+    /// x 不翻轉——只有 y 要翻。兩個都翻會變成 180 度旋轉，而那在對稱版面上看起來也很正常。
+    func testHorizontalPositionIsNotFlipped() throws {
+        let target = CGSize(width: 1000, height: 800)
+        let left = CGRect(x: 0, y: 0.4, width: 0.2, height: 0.2)
+        let rect = try XCTUnwrap(
+            ScreenshotRedaction.bottomLeftPixelRects([left], targetSize: target).first)
+        XCTAssertEqual(rect.minX, 0, accuracy: 0.001)
+        XCTAssertEqual(rect.width, 200, accuracy: 0.001)
+    }
+
+    func testDegenerateTargetYieldsNoRects() {
+        XCTAssertTrue(ScreenshotRedaction.bottomLeftPixelRects(
+            [CGRect(x: 0, y: 0, width: 1, height: 1)], targetSize: .zero).isEmpty)
+    }
+
 }
 
 private struct PassThroughScrubber: PIIScrubbing {
