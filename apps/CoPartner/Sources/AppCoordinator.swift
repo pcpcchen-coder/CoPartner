@@ -133,6 +133,8 @@ final class AppCoordinator: ObservableObject {
     private lazy var memoryLogWriter = MemoryLogWriter(directory: Self.diagnosticsDirectory())
     /// 停止觀察後隔一段時間再取一次的那一筆。**不是定時器**——一次停止只排一次。
     private var memorySettleTask: Task<Void, Never>?
+    /// 截圖乾跑的延遲擷取。連按兩次時取消上一次，不然會擷取兩張互相覆蓋。
+    private var screenshotDryRunTask: Task<Void, Never>?
     /// 觀察中的取樣時間戳，用來節流（敘事迴圈每秒跑一次，不必每秒都取樣）。
     private var lastTickSampleAt = Date.distantPast
     /// 這一輪觀察是什麼時候開始的——頭一分鐘要用比較密的取樣間隔。
@@ -597,6 +599,97 @@ final class AppCoordinator: ObservableObject {
             self.takeoverModel = nil
             self.session.endIntervention()
         }
+    }
+
+    /// 截圖乾跑（step 58 驗收用）。**不會送出任何東西。**
+    ///
+    /// 擷取 → 套用遮罩 → 縮到宣告尺寸 → 存成本機檔案，讓你**親眼看到那張會被送出去的圖**。
+    /// 這是唯一有意義的驗收方式：圖沒辦法事後查，一張截圖出去之後，上面有什麼只有
+    /// 收到的人知道。所以要在出去之前看。
+    ///
+    /// ⏱ **刻意延遲 4 秒才擷取。** 打開選單會讓 CoPartner 變成最前景，而黑名單含自身
+    /// app（避錄製迴圈），立刻擷取的話決策永遠是「最前景是黑名單 app（CoPartner）」
+    /// ——量到的是選單，不是你想檢查的畫面。延遲讓你切回目標視窗，也讓你有時間把游標
+    /// 點進密碼欄，好驗證遮罩真的遮在該遮的位置。
+    /// （這與捲動那次是同一種形狀的錯誤：驗收路徑自己干擾了被驗的東西。）
+    func runScreenshotDryRun() {
+        let delay = 4
+        xpcSummary = "截圖乾跑：\(delay) 秒後擷取——請切到你要檢查的畫面（想驗密碼欄遮罩就點進密碼欄）"
+        screenshotDryRunTask?.cancel()
+        screenshotDryRunTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, !Task.isCancelled else { return }
+            await self.performScreenshotDryRun()
+        }
+    }
+
+    private func performScreenshotDryRun() async {
+        let front = NSWorkspace.shared.frontmostApplication
+        let appName = front?.localizedName ?? "?"
+        let (grid, tiles) = sensitiveMaskSnapshot
+        let fraction = ScreenshotRedaction.maskedFraction(for: tiles, in: grid)
+        let rects = ScreenshotRedaction.normalizedRects(for: tiles, in: grid)
+        let blocked = ocrBlacklist.isBlocked(bundleID: front?.bundleIdentifier, appName: appName)
+        let decision = ScreenshotEgressPolicy.decide(isBlacklistedApp: blocked,
+                                                     frontmostAppName: appName,
+                                                     maskedFraction: fraction,
+                                                     redactRects: rects)
+        var lines = ["截圖乾跑 \(MemoryLogFormat.timestamp(Date()))",
+                     "最前景：\(appName)\(blocked ? "（黑名單）" : "")",
+                     String(format: "敏感 tile：%d／%d（%.1f%%）",
+                            tiles.count, grid.cols * grid.rows, fraction * 100)]
+
+        guard case .send(let redact) = decision else {
+            if case .withhold(let reason) = decision { lines.append("決定：不送（\(reason)）") }
+            let path = Self.writeTextReport(lines.joined(separator: "\n"),
+                                            named: "screenshot-dry-run.txt")
+            xpcSummary = "截圖乾跑：不送\n\(lines.last ?? "")\n報告：\(path)"
+            return
+        }
+        guard let geometry = ScreenGeometryProvider.mainDisplay() else {
+            xpcSummary = "截圖乾跑：讀不到顯示器幾何"
+            return
+        }
+        do {
+            let encoded = try await ScreenshotEncoder.capture(targetSize: geometry.imagePixelSize,
+                                                              redact: redact,
+                                                              blacklist: ocrBlacklist)
+            lines.append(String(format: "決定：可送・尺寸 %.0f×%.0f・塗黑 %d 塊・base64 %d KB",
+                                encoded.pixelSize.width, encoded.pixelSize.height,
+                                encoded.redactedRegions, encoded.byteCount / 1024))
+            let imagePath = Self.writeDryRunImage(encoded.base64)
+            lines.append("圖：\(imagePath ?? "（寫檔失敗）")")
+            // ⚠️ 刻意**不把 base64 寫進報告**——那正是會出境的那串東西，
+            //    留在一個純文字檔裡等於自己又複製了一份。要看就看圖。
+            let reportPath = Self.writeTextReport(lines.joined(separator: "\n"),
+                                                  named: "screenshot-dry-run.txt")
+            xpcSummary = "截圖乾跑：可送・塗黑 \(encoded.redactedRegions) 塊・"
+                + "\(encoded.byteCount / 1024) KB\n圖：\(imagePath ?? "-")\n報告：\(reportPath)"
+        } catch {
+            lines.append("決定：可送，但擷取／編碼失敗（\(error)）")
+            let path = Self.writeTextReport(lines.joined(separator: "\n"),
+                                            named: "screenshot-dry-run.txt")
+            xpcSummary = "截圖乾跑：失敗（\(error)）\n報告：\(path)"
+        }
+    }
+
+    /// 把乾跑的圖寫成檔案。**存在診斷目錄、不是沙箱工作目錄**——
+    /// 沙箱裡的命令沒有理由讀得到一張可能含敏感內容的截圖。
+    private static func writeDryRunImage(_ base64: String) -> String? {
+        guard let data = Data(base64Encoded: base64) else { return nil }
+        let directory = diagnosticsDirectory()
+        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        let path = (directory as NSString).appendingPathComponent("screenshot-dry-run.jpg")
+        do { try data.write(to: URL(fileURLWithPath: path)) } catch { return nil }
+        return path
+    }
+
+    private static func writeTextReport(_ text: String, named name: String) -> String {
+        let directory = diagnosticsDirectory()
+        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        let path = (directory as NSString).appendingPathComponent(name)
+        try? (text + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+        return path
     }
 
     /// 把 UI 乾跑報告寫成檔案。回傳路徑。

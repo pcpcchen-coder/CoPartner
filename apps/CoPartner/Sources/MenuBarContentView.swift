@@ -39,6 +39,9 @@ struct MenuBarContentView: View {
                 // 除錯入口：UI 動作在真的能動之前，先看到「會落在哪裡、那裡有什麼」
                 // （step 53.6-B）。`UIActionPerformer.dryRun` 裡沒有任何 post 呼叫。
                 Button("UI 乾跑") { coordinator.runUIDryRun() }
+                // 除錯入口：在任何一張圖離開這台機器之前，**親眼看到那張圖**（step 58）。
+                // 延遲 4 秒擷取——打開選單會讓 CoPartner 變成最前景，而它自己在黑名單上。
+                Button("截圖乾跑") { coordinator.runScreenshotDryRun() }
                 // ⚠️ 這顆會**真的送出 UI 事件**（step 53.6-C 驗收用）。
                 // 送的是捲動：看得見、可逆、不需要座標就能觀察到效果。
                 // 走的路徑與真提議完全相同——風險分級、HUD 確認、token 一個不少。
@@ -156,8 +159,8 @@ struct MenuBarContentView: View {
             .padding(.top, 10)
             .padding(.bottom, 14)
         }
-        // 1000：又多一顆按鈕（UI 測試）。按鈕被擠出畫面真機上重演過兩次，寧可先留寬。
-        .frame(width: 1000)
+        // 1080：又多一顆按鈕（截圖乾跑）。按鈕被擠出畫面真機上重演過兩次，寧可先留寬。
+        .frame(width: 1080)
         // 打開選單 ＝ 取一個記憶體樣本。用 onAppear 而不是定時器：見 AppCoordinator。
         .onAppear { coordinator.sampleMemory() }
     }
