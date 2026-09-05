@@ -2,6 +2,16 @@
 
 > 完整 milestone 細節見 docs/design/v2_smart-capture-engine.md §J 與 v2.1 §7。
 
+> ## ⚠️ 範圍重畫（2026-09-05）
+>
+> **CoPartner 不再自己執行 UI 動作，也不送截圖出境。** 產品是**使用者操作習慣的萃取**——
+> 產出人類可讀、廠商中立的文字，交給任何有執行能力的代理（Claude computer-use /
+> GPT-6 Astra）使用。理由與後果見 [`adr/0008-habit-extraction-scope.md`](adr/0008-habit-extraction-scope.md)，
+> 做法見 [`design/v3_habit-extraction.md`](design/v3_habit-extraction.md)。
+>
+> **下表的 M5「動作 + 交棒」與 M6「密碼欄 100% 被遮」已失效**，保留供歷史對照。
+> 新的驗收是「留一手預測測試」的**差值**（有習慣萃取 vs 沒有），全程本機可跑。
+
 > **狀態（2026-08-19）**：M0–M4 與 M5 的大半已在真機驗過。逐 step 進度以
 > [`implementation-backlog.md`](planning/implementation-backlog.md) 為準，本表只講「里程碑層級」。
 
