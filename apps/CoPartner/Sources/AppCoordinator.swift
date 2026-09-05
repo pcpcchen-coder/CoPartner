@@ -63,6 +63,20 @@ final class AppCoordinator: ObservableObject {
     private var ocrTask: Task<Void, Never>?
     private lazy var ocrBlacklist = CaptureBlacklist(ownBundleID: Bundle.main.bundleIdentifier ?? "com.copartner.app")
 
+    // 敏感區域遮罩（step 55 的偵測端，step 58 接線）。
+    //
+    // ⚠️ **在這之前 `SensitiveTileMask` 在整個 app 裡一次都沒有被建立過。**
+    // 純值層與三個出口（OCR／持久化／熱圖）都寫好也測過了，但沒有人餵它 region，
+    // 所以 `isMasked` 永遠是 false——等於「畫面上沒有任何東西是敏感的」。
+    // 程式碼看起來有三層保護，實際上那一層從未執行。
+    //
+    // 這在只有本地處理時已經不好；要開始**送截圖出境**就完全不能接受：
+    // `maskedTiles` 空的話塗黑會塗個寂寞，而報告上仍會寫「已套用遮罩」。
+    private var sensitiveMask = SensitiveTileMask(grid: TileGrid(width: 0, height: 0))
+    /// 遮罩格線依實際螢幕像素建。螢幕換了（外接、解析度改變）就重建——
+    /// 格線與畫面對不上時，遮罩的位置會整個偏掉而且不會報錯。
+    private var sensitiveMaskGridSize: CGSize = .zero
+
     // L1 本地敘事（step 42）：L0 劇本行 → NarrationLadder → ActionStep → 熱環 + 記憶。
     // 階梯每次 rollup 重建（見 narrationTick）；模型不可用時 fm 層為 nil → 自動走規則式。
     @Published private(set) var l1Summary: String = "本地敘事：未啟用"
@@ -1029,7 +1043,44 @@ final class AppCoordinator: ObservableObject {
             let currentFeed = feed
             Task { await currentFeed.record(event) }
         }
+        updateSensitiveMask(with: element)
         return element
+    }
+
+    /// 焦點元件 → 敏感區域 → tile 遮罩（step 55 出口的資料來源）。
+    ///
+    /// 目前只認**密碼欄**（`AXSecureTextField`）——那是唯一一種系統自己標記出來、
+    /// 不需要猜的敏感輸入。啟發式（網址列樣式、OCR 正則命中）留待之後；
+    /// 少認一種的代價是漏遮，所以清單只增不減。
+    ///
+    /// 沒有焦點元件時**不清空遮罩**：`SensitiveTileMask` 本身是 sticky 的
+    /// （region 消失後續遮數秒才回收），而「AX 這一瞬間讀不到東西」與
+    /// 「密碼欄真的不見了」是兩件事——把前者當後者就是提早解除遮罩。
+    private func updateSensitiveMask(with element: AXFocusedElement?) {
+        rebuildSensitiveMaskGridIfNeeded()
+        guard let element,
+              InputEventTranslator.isSecure(role: element.role, subrole: element.subrole) else {
+            sensitiveMask.update(regions: [], at: Date())   // sticky 由 mask 自己處理
+            return
+        }
+        sensitiveMask.update(regions: [SensitiveRegion(rect: element.frame, reason: .secureField)],
+                             at: Date())
+    }
+
+    /// 格線跟著主顯示器的**點座標**尺寸走——AX 的 frame 也是點座標，兩者必須同一個空間。
+    /// 用像素會讓 Retina 上的遮罩位置差一倍，而那不會報錯，只會遮錯地方。
+    private func rebuildSensitiveMaskGridIfNeeded() {
+        guard let screen = NSScreen.main else { return }
+        let size = screen.frame.size
+        guard size != sensitiveMaskGridSize, size.width > 0, size.height > 0 else { return }
+        sensitiveMaskGridSize = size
+        sensitiveMask = SensitiveTileMask(grid: TileGrid(width: Int(size.width),
+                                                         height: Int(size.height)))
+    }
+
+    /// 目前被遮罩的 tile 與所在格線（截圖出境用）。
+    var sensitiveMaskSnapshot: (grid: TileGrid, tiles: Set<TileXY>) {
+        (sensitiveMask.grid, sensitiveMask.maskedTiles(at: Date()))
     }
 
     /// 輸入事件 → 焦點更新 + TYPE/PASTE/SCROLL 劇本事件（純翻譯在 InputEventTranslator）。
