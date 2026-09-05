@@ -626,6 +626,7 @@ final class AppCoordinator: ObservableObject {
     private func performScreenshotDryRun() async {
         let front = NSWorkspace.shared.frontmostApplication
         let appName = front?.localizedName ?? "?"
+        refreshSensitiveMaskNow()          // 用之前先看一眼，別依賴觀察迴圈有沒有跑過
         let (grid, tiles) = sensitiveMaskSnapshot
         let fraction = ScreenshotRedaction.maskedFraction(for: tiles, in: grid)
         let rects = ScreenshotRedaction.normalizedRects(for: tiles, in: grid)
@@ -634,10 +635,15 @@ final class AppCoordinator: ObservableObject {
                                                      frontmostAppName: appName,
                                                      maskedFraction: fraction,
                                                      redactRects: rects)
+        // 格線建不起來要**單獨說**。混在「敏感區域佔 100%」裡會讓人以為畫面真的整片敏感，
+        // 而實際上是「我們沒有在偵測」——那是兩件完全不同的事，第一次真機乾跑就被這句話誤導。
+        let gridUsable = grid.cols * grid.rows > 0
         var lines = ["截圖乾跑 \(MemoryLogFormat.timestamp(Date()))",
                      "最前景：\(appName)\(blocked ? "（黑名單）" : "")",
-                     String(format: "敏感 tile：%d／%d（%.1f%%）",
-                            tiles.count, grid.cols * grid.rows, fraction * 100)]
+                     gridUsable
+                        ? String(format: "敏感 tile：%d／%d（%.1f%%）",
+                                 tiles.count, grid.cols * grid.rows, fraction * 100)
+                        : "⚠️ 遮罩格線建不起來（讀不到主顯示器）——無法判斷畫面是否敏感"]
 
         guard case .send(let redact) = decision else {
             if case .withhold(let reason) = decision { lines.append("決定：不送（\(reason)）") }
@@ -1174,6 +1180,22 @@ final class AppCoordinator: ObservableObject {
     /// 目前被遮罩的 tile 與所在格線（截圖出境用）。
     var sensitiveMaskSnapshot: (grid: TileGrid, tiles: Set<TileXY>) {
         (sensitiveMask.grid, sensitiveMask.maskedTiles(at: Date()))
+    }
+
+    /// 決定要不要送圖之前，**主動取樣一次目前的焦點**。
+    ///
+    /// 不能只依賴觀察迴圈記錄下來的東西：`updateSensitiveMask` 只在 `pollFocus` 裡被呼叫，
+    /// 而 `pollFocus` 只在觀察中才跑。沒在觀察時遮罩格線根本沒建起來，於是
+    /// **「沒有偵測到敏感區」與「我們當時沒有在偵測」在資料上長得一模一樣**
+    /// ——真機第一次截圖乾跑就是這樣：`敏感 tile：0／0`。
+    ///
+    /// 那一次是安全的（退化格線讓 `maskedFraction` 回 1，政策整張擋下），但安全是靠
+    /// fail-closed 撿回來的，不是靠正確。真正的修法是**要用的時候就去看一眼**。
+    ///
+    /// ⚠️ 已知限制：只認**目前有焦點**的密碼欄。畫面上有密碼欄但焦點不在它身上時
+    /// 不會被遮——那要 AX 全樹掃描，成本與時機都不同，留待之後。
+    func refreshSensitiveMaskNow() {
+        updateSensitiveMask(with: axProvider.focusedElement())
     }
 
     /// 輸入事件 → 焦點更新 + TYPE/PASTE/SCROLL 劇本事件（純翻譯在 InputEventTranslator）。
