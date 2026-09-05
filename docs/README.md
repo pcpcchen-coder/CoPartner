@@ -15,7 +15,9 @@
 | 我要一份 PowerPoint | [`assets/deck/`](assets/deck/) — 20 頁 .pptx，每頁附講稿 |
 | 系統怎麼運作的 | [`architecture/overview.md`](architecture/overview.md) → [`design/`](design/) |
 | 安全邊界是什麼、怎麼驗 | [`design/sandbox-threat-model.md`](design/sandbox-threat-model.md) — 不變式 I1–I10；驗證指令見 repo 根 `README.md` |
-| 為什麼這樣設計 | [`adr/`](adr/) — 七則架構決策紀錄 |
+| **CoPartner 到底是什麼**（2026-09 範圍重畫） | [`adr/0008-habit-extraction-scope.md`](adr/0008-habit-extraction-scope.md) — 不做執行、不送截圖，改做操作習慣萃取 |
+| 習慣怎麼萃取、怎麼變成 prompt | [`design/v3_habit-extraction.md`](design/v3_habit-extraction.md) — 習慣格式、狀態機、prompt 渲染、**驗收測試** |
+| 為什麼這樣設計 | [`adr/`](adr/) — 八則架構決策紀錄 |
 
 ## 📁 目錄結構
 
@@ -39,6 +41,7 @@
 | [`v1_full-design.md`](design/v1_full-design.md) | V1 完整系統設計：定頻擷取基線、平台 API、混合模型、資料分類矩陣、路線圖 |
 | [`v2_smart-capture-engine.md`](design/v2_smart-capture-engine.md) | V2 智慧擷取引擎：foveation、dirty-region、tile 冷熱狀態機、多解析度金字塔 |
 | [`v2.1_action-script-narrator.md`](design/v2.1_action-script-narrator.md) | V2.1 操作劇本敘事：L0／L1／L2 三層、ContextEnvelope、takeover contract |
+| [`v3_habit-extraction.md`](design/v3_habit-extraction.md) | **V3 操作習慣萃取（現行方向）**：習慣的七種類型、成立/推翻狀態機、prompt 渲染格式、留一手預測驗收 |
 | [`sandbox-threat-model.md`](design/sandbox-threat-model.md) | 動作執行的安全設計：信任邊界 B0–B4、威脅 T1–T10、**可測不變式 I1–I10**、殘餘風險 R1–R6（R5／R6 已由真機實測解答） |
 
 ### `architecture/` — 架構速覽（皆為 Mermaid，GitHub 直接算圖）
@@ -58,6 +61,7 @@
 | [0005](adr/0005-hybrid-local-cloud-routing.md) | 混合本地／雲端路由與隱私邊界（PDPA／PIPL） |
 | [0006](adr/0006-click-driven-attention-escalation.md) | 點擊驅動的注意力升級：事件種類本身是強訊號 |
 | [0007](adr/0007-local-first-tiered-inference.md) | 本地優先的分層推理階梯與雲端升級時機 |
+| [0008](adr/0008-habit-extraction-scope.md) | **範圍重畫：CoPartner 是操作習慣的萃取，不是執行器** |
 
 ### `privacy/`
 
