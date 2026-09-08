@@ -164,7 +164,7 @@ MainActor，UI 不凍結（真機截圖印證劇本持續即時更新）。`infe
 |---|---|---|
 | 53.1 XPC 骨架 | 選單「XPC 自檢」 | ✅ service pid ≠ app pid、`會執行動作 否` |
 | 53.2 呼叫者驗證 | 「XPC 自檢」＋ `xpc-probe` | ✅ `驗呼叫者 已啟用・驗 service 通過`；外部程序定址不到 |
-| 53.3 sandbox profile | `./scripts/sandbox-verify.sh` | ✅ 7 項全綠、0 失敗、0 無效 |
+| 53.3 sandbox profile | `./scripts/sandbox-verify.sh` | ✅ 8 項全綠、0 失敗、0 無效 |
 | 53.4 `posix_spawn` 執行端 | CI（A 純值層）＋ 程式碼已接線（B）| ✅ A ・ B 由 53.5 翻開 |
 | 53.7 記憶體診斷 | 選單取樣 + `MemoryLogWriter` 落檔，七輪收斂 | ✅ 定位並修復：**+151 → +7 MB/小時** |
 

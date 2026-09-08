@@ -87,7 +87,7 @@ flowchart TD
 ## 6. sbpl profile ✅ 已真機驗證（2026-08-19，step 53.3）
 
 > 本節原為草稿方向。`scripts/sandbox-verify.sh` 的成對驗證已在真機通過
-> **7 項全綠、0 失敗、0 無效**，以下是實測後的定案內容。
+> **8 項全綠、0 失敗、0 無效**，以下是實測後的定案內容。
 > 產生器：`SbplProfileBuilder`（單一事實來源，驗證腳本呼叫 `copartner-sbpl` 取得同一份）。
 
 ### 6.1 為什麼驗證方式比 profile 內容更重要

@@ -74,7 +74,7 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
     { x:M, y:3.34, w:8.4, h:0.6, isTextBox:true, margin:0, fontFace:SANS, fontSize:14,
       color:'8B9793', lineSpacing:22 });
 
-  const stats=[['91%','V1 完成度'],['18%','OCR 像素吞吐'],['595','XCTest 案例']];
+  const stats=[['94%','V1 完成度'],['18%','OCR 像素吞吐'],['595','XCTest 案例']];
   stats.forEach((st,i)=>{
     const x = M + i*2.95;
     s.addText(st[0], { x, y:4.42, w:2.7, h:0.62, isTextBox:true, margin:0,
@@ -82,9 +82,9 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
     s.addText(st[1], { x, y:5.06, w:2.7, h:0.3, isTextBox:true, margin:0,
       fontFace:SANS, fontSize:12, color:'8B9793' });
   });
-  s.addText('main @ 14e4989  ·  2026-09-03  ·  42 個 PR 已合併', { x:M, y:6.62, w:CW, h:0.3,
+  s.addText('main @ 3f14bb6  ·  2026-09-03  ·  50 個 PR 已合併', { x:M, y:6.62, w:CW, h:0.3,
     isTextBox:true, margin:0, fontFace:MONO, fontSize:10, color:'6C7A76' });
-  n(s,'今天講一個我做了幾個月的 side project。它不是聊天機器人——它是一個看著你工作的助理。你不用跟它解釋你在幹嘛，因為它一直在旁邊看。而且從三週前開始，它會真的動手。\n\n全場只要記得這三個數字：91% 完成度、18% OCR 吞吐、595 個測試。');
+  n(s,'今天講一個我做了幾個月的 side project。它不是聊天機器人——它是一個看著你工作的助理。你不用跟它解釋你在幹嘛，因為它一直在旁邊看。而且它已經會真的動手——執行命令與操作 UI 都已經在真機上驗過。\n\n全場只要記得這三個數字：94% 完成度、18% OCR 吞吐、595 個測試。');
 }
 
 /* ============================ S2 問題 ============================ */
@@ -160,7 +160,7 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
   const items=[
     ['SMART CAPTURE ENGINE','看得省','不做定頻全畫面截圖。滑鼠與焦點區高解析高頻、周邊低解析低頻（借人眼中央窩），只對「變動的 tile」細看（借 KVM-over-IP／VNC 的增量更新）。','idle CPU  9%'],
     ['ACTION SCRIPT NARRATOR','記得清','截圖是單一瞬間，劇本是因果史。三層滾動彙總：L0 模板（零模型）→ L1 本地 3B → L2 段落摘要。階梯會回報自己用了哪一層。','L1 延遲  1373–2388ms'],
-    ['CLOUD TAKEOVER','交棒快','按 ⌃⌥⌘Space，把因果史交給 Claude computer-use 續寫你沒做完的 open loop。回來的每個動作都是不可信提議，要過四道閘。','執行端已建成 · 開關已翻開'],
+    ['CLOUD TAKEOVER','交棒快','按 ⌃⌥⌘Space，把因果史交給 Claude computer-use 續寫你沒做完的 open loop。回來的每個動作都是不可信提議，要過四道閘。','兩種執行能力都已真機驗過'],
   ];
   const cw=(CW-0.6)/3, top=2.48;
   items.forEach((it,i)=>{
@@ -300,9 +300,9 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
   const s = slide();
   eyebrow(s,'進度', M, 0.5);
   s.addText([
-    { text:'60', options:{ fontFace:SANS, fontSize:52, bold:true, color:INK }},
+    { text:'62', options:{ fontFace:SANS, fontSize:52, bold:true, color:INK }},
     { text:' / 66 ', options:{ fontFace:SANS, fontSize:26, color:MUTED }},
-    { text:'   91%', options:{ fontFace:SANS, fontSize:26, bold:true, color:ATTN }},
+    { text:'   94%', options:{ fontFace:SANS, fontSize:26, bold:true, color:ATTN }},
   ], { x:M, y:0.78, w:5.2, h:0.86, isTextBox:true, margin:0, valign:'middle' });
   s.addText('原 58 步 TDD backlog（含 10.5／23.5 共 60 列），step 53「M5 真機驗收」做下去才發現前置的執行端根本不存在，展開成 53.1–53.7——所以總數是 66。',
     { x:5.6, y:0.8, w:W-M-5.6, h:0.82, isTextBox:true, margin:0, fontFace:SANS,
@@ -312,7 +312,7 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
   const ms=[['M0','擷取引擎','d','idle CPU 9%'],['M1','冷熱狀態機','w','待驗收'],
             ['M2','局部 OCR','d','吞吐 18%'],['M2.5','L0 劇本','d','時間機器'],
             ['M3','記憶系統','w','待驗收'],['M4','本地敘事','d','1373–2388ms'],
-            ['M5','雲端交棒','p','進行中'],['M6','隱私黑名單','w','待驗收']];
+            ['M5','雲端交棒','p','執行端全通過'],['M6','隱私黑名單','w','待驗收']];
   const mw=(CW-0.49)/8, mt=1.86;
   ms.forEach((m,i)=>{
     const x=M+i*(mw+0.07);
@@ -335,7 +335,7 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
     ['C  局部 OCR','step 25–29',5,5,0,0],
     ['D  記憶系統','step 30–36',6,7,0,0],
     ['E  本地推理敘事','step 37–42',6,6,0,0],
-    ['F  雲端交棒','step 43–53.7',15,17,2,0],
+    ['F  雲端交棒','step 43–53.7',17,17,0,0],
     ['G  隱私黑名單','step 54–58',4,5,0,0],
   ];
   const pt=3.22, sz=0.15, gap=0.045;
@@ -360,11 +360,11 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
 
   card(s, M, 6.32, CW, 0.66, SUNK);
   s.addText([
-    { text:'剩下六項全部只有真 Mac 能驗：', options:{ fontFace:SANS, fontSize:12.5, bold:true, color:INK }},
-    { text:'23.5（延後）· 24（M1）· 36（M3）· 53.5（第一次真執行）· 53.6-C（UI 動作）· 58（M6）　—　沒有任何「CI 能驗但還沒寫」的邏輯欠著。',
+    { text:'剩下四項全部只有真 Mac 能驗：', options:{ fontFace:SANS, fontSize:12.5, bold:true, color:INK }},
+    { text:'23.5（延後優化）· 24（M1）· 36（M3）· 58（M6）　—　沒有任何「CI 能驗但還沒寫」的邏輯欠著。',
       options:{ fontFace:SANS, fontSize:12.5, color:INK2 }},
   ], { x:M+0.26, y:6.32, w:CW-0.52, h:0.66, isTextBox:true, margin:0, valign:'middle' });
-  n(s,'91% 這個數字要小心解讀。剩下的六項全部是要真機、真權限、真 GPU 才能驗的東西——沒有任何一行「CI 能驗但還沒寫」的邏輯欠著。\n\n綠色是完成，琥珀色是進行中，空格是待驗收。');
+  n(s,'94% 這個數字要小心解讀。剩下的四項全部是要真機、真權限、真 GPU 才能驗的東西——沒有任何一行「CI 能驗但還沒寫」的邏輯欠著。\n\n綠色是完成，琥珀色是進行中，空格是待驗收。');
 }
 
 /* ============================ S9 規模 ============================ */
@@ -441,7 +441,7 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
     s.addText(p[2],{ x:x+0.5, y:y+0.32, w:cw-0.5, h:0.92, isTextBox:true, margin:0,
       fontFace:SANS, fontSize:12, color:INK2, lineSpacing:18, valign:'top' });
   });
-  n(s,'這不是巧思，是被逼出來的。但逼出來的結果是——每一個平台依賴都變成一個明確的注入點，我永遠知道「哪裡還沒接真的」。\n\n91% 的工作是在沒有真機的情況下被驗證過的。');
+  n(s,'這不是巧思，是被逼出來的。但逼出來的結果是——每一個平台依賴都變成一個明確的注入點，我永遠知道「哪裡還沒接真的」。\n\n94% 的工作是在沒有真機的情況下被驗證過的。');
 }
 
 /* ============================ S11 安全 ============================ */
@@ -475,8 +475,8 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
 /* ============================ S12 翻開執行開關（dark）============================ */
 {
   const s = slide(true);
-  eyebrow(s,'2026-08-20  ·  STEP 53.5', M, 0.62, ATTNL);
-  s.addText('翻開執行開關那天',{ x:M, y:0.94, w:CW, h:0.8, isTextBox:true, margin:0,
+  eyebrow(s,'2026-08-20  ·  2026-09-03  ·  STEP 53.5 / 53.6-C', M, 0.62, ATTNL);
+  s.addText('兩次「第一次」',{ x:M, y:0.94, w:CW, h:0.8, isTextBox:true, margin:0,
     fontFace:SERIF, fontSize:33, bold:true, color:WHITE });
   s.addText('翻開的那一行單獨成立一個 PR。理由很簡單：翻開執行能力若混在一大包程式碼裡，沒有人（包括作者）能真的審完。',
     { x:M, y:1.74, w:11.4, h:0.5, isTextBox:true, margin:0, fontFace:SANS, fontSize:13.5,
@@ -648,7 +648,7 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
   card(s, M, 5.5, CW, 0.86, WHITE);
   s.addText([
     { text:'./scripts/sandbox-verify.sh', options:{ fontFace:MONO, fontSize:13, bold:true, color:INK }},
-    { text:'    →    7 項全綠  ·  0 失敗  ·  ', options:{ fontFace:SANS, fontSize:13, color:INK2 }},
+    { text:'    →    8 項全綠  ·  0 失敗  ·  ', options:{ fontFace:SANS, fontSize:13, color:INK2 }},
     { text:'0 無效', options:{ fontFace:SANS, fontSize:13, bold:true, color:DONE }},
   ],{ x:M+0.34, y:5.5, w:CW-0.68, h:0.86, isTextBox:true, margin:0, valign:'middle' });
   s.addText('同一個原則的另一個例子：canImport 隔離的程式碼，build 綠不代表編到了。在 #if／#else 兩側各放一個 #warning，看到黃字才算數。',
@@ -721,11 +721,13 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
   const done=[
     ['53.1','XPC 骨架 — service pid ≠ app pid，刻意無執行能力'],
     ['53.2','雙向 code-signing 驗證 — 外部程序定址不到'],
-    ['53.3','sandbox-exec profile — 成對驗證 7 項全綠'],
+    ['53.3','sandbox-exec profile — 成對驗證 8 項全綠'],
+    ['53.5','第一次真的執行命令 — stdout 帶回對得上的 UUID（8／20）'],
+    ['53.6','第一次真的動使用者的電腦 — HUD 確認後畫面捲動（9／3）'],
     ['53.7','記憶體洩漏定位並修復 — +151 → +7 MB/hr'],
   ];
   done.forEach((d,i)=>{
-    const y=top+0.8+i*0.85;
+    const y=top+0.72+i*0.58;
     s.addText(d[0],{ x:M+0.3, y, w:0.75, h:0.28, isTextBox:true, margin:0,
       fontFace:MONO, fontSize:11, bold:true, color:DONE });
     s.addText(d[1],{ x:M+1.1, y:y-0.02, w:cw-1.4, h:0.66, isTextBox:true, margin:0,
@@ -737,10 +739,9 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
   s.addText('還剩',{ x:rx+0.3, y:top+0.26, w:cw-0.6, h:0.34, isTextBox:true, margin:0,
     fontFace:SERIF, fontSize:17, bold:true, color:ATTN });
   const left=[
-    ['1','第一次真執行的回報 — 開關已翻開，等 dogfood'],
-    ['2','翻開 willPerformUIActions（UI 動作，53.6-C）'],
-    ['3','接上真雲端 SSE 來源 — 目前解析鏈用假來源驗過'],
-    ['4','對照 I1–I10 逐項勾：危險指令被攔／kill-switch 全鏈／越界寫入 deny／預算熔斷／接手品質'],
+    ['1','接上真雲端 SSE 來源 — 執行端全通了，但提議還是本地合成的；目前解析鏈用假來源驗過'],
+    ['2','對照 I1–I10 逐項勾：危險指令被攔／kill-switch 全鏈斷／越界寫入 deny／LiteLLM 預算熔斷'],
+    ['3','接手品質 — 留個 open loop 按熱鍵，Claude 應接續而不是貼一堆說明文字'],
   ];
   left.forEach((d,i)=>{
     const y=top+0.8+i*0.85;
@@ -752,7 +753,7 @@ function n(s, text){ notes.push(text); s.addNotes(text); }
   s.addText('M5 之後：M3 真 vec0（8hr 磁碟量）→ M1 擷取 CPU 優化 + 影片驗收 → M6 隱私最終審查 → V1 收官 → V2 Listen 開工。',
     { x:M, y:6.52, w:CW, h:0.4, isTextBox:true, margin:0, fontFace:SANS, fontSize:12,
       color:MUTED, valign:'top' });
-  n(s,'左邊四項都在真機上驗過了。右邊四項裡，第一項其實只差你按一次按鈕——開關 8/20 就翻開了，只是驗收回報還沒補。');
+  n(s,'左邊六項都在真機上驗過了——執行端整條鏈是通的。\n\n右邊剩的其實只有一件事的兩面：提議的來源還是本地合成的，接上真雲端之後才輪得到驗「Claude 有沒有正確續寫」。')
 }
 
 /* ============================ S19 誠實清單 ============================ */

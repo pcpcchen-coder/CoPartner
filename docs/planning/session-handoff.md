@@ -402,7 +402,7 @@ launchd 反覆重啟，而 Xcode 設定是 `param_debugger_attachToXPC = 1`，
 |---|---|---|
 | ① | XPC 骨架 | ✅ 真機通過 |
 | ② | 呼叫者 code-signing 驗證 | ✅ 實質完成（`驗 service：` 欄尚未親眼確認）|
-| ③ | sandbox-exec sbpl profile | ✅ **真機 7 項全綠**（2026-08-19）|
+| ③ | sandbox-exec sbpl profile | ✅ **真機 8 項全綠**（2026-08-19）|
 | ④ | `posix_spawn` argv 直呼（第一次真的執行）| 🔒 |
 | ⑤ | **主程序內 AX / CGEvent 執行端**（點按 / 輸入 / 捲動 / 截圖）| 🔒 |
 
@@ -449,7 +449,7 @@ CI 測得到：profile 字串的產生（規則順序、跳脫、最後一條規
 - [x] 被擋的動作留稽核（I9，PR #17）
 - [x] **`驗 service：通過` 親眼確認**（2026-08-19）：雙向驗證都成立，
       requirement 字串的 bundle id 與 Team ID 皆吻合
-- [x] sbpl profile 的正向與負向對照都通過（第 ③ 段，7 項全綠 0 失敗 0 無效）
+- [x] sbpl profile 的正向與負向對照都通過（第 ③ 段，8 項全綠 0 失敗 0 無效）
 - [x] 路徑跳脫（第 ③ 段 (c)）
 - [x] 路徑先解符號連結（真機抓到：給 `/tmp/x` 的規則對 `/private/tmp/x` 永遠不匹配）
 - [x] `scripts/xpc-probe.swift` 在驗簽啟用後重跑（2026-08-19）：結果不變，
