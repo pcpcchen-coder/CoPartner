@@ -17,7 +17,8 @@
 | 安全邊界是什麼、怎麼驗 | [`design/sandbox-threat-model.md`](design/sandbox-threat-model.md) — 不變式 I1–I10；驗證指令見 repo 根 `README.md` |
 | **CoPartner 到底是什麼**（2026-09 範圍重畫） | [`adr/0008-habit-extraction-scope.md`](adr/0008-habit-extraction-scope.md) — 不做執行、不送截圖，改做操作習慣萃取 |
 | 習慣怎麼萃取、怎麼變成 prompt | [`design/v3_habit-extraction.md`](design/v3_habit-extraction.md) — 習慣格式、狀態機、prompt 渲染、**驗收測試** |
-| 為什麼這樣設計 | [`adr/`](adr/) — 八則架構決策紀錄 |
+| 我要模擬鍵鼠操作遊戲 | [`planning/game-input-plan.md`](planning/game-input-plan.md) — GameInput 實作計畫；範圍見 [`adr/0009`](adr/0009-game-input-module-scope.md) |
+| 為什麼這樣設計 | [`adr/`](adr/) — 九則架構決策紀錄 |
 
 ## 📁 目錄結構
 
@@ -31,6 +32,7 @@
 | [`assistant-evolution-plan.md`](planning/assistant-evolution-plan.md) | V1 之後的版本階梯：V2 Listen（音訊＋訊息閘道）→ V3 Agent（技能引擎＋主動性）→ V4 Omni（穿戴） | 長期規劃 |
 | [`dev-execution-plan.md`](planning/dev-execution-plan.md) | 模型分工（哪一步用哪個模型）、時程與訂閱費用評估 | 長期規劃 |
 | [`ppt-material.md`](planning/ppt-material.md) | 簡報素材：投影片大綱、每頁要點、關鍵數字、講稿、Q&A 預備 | 衍生視圖 |
+| [`game-input-plan.md`](planning/game-input-plan.md) | GameInput（Roblox 鍵鼠模擬）實作計畫：三層驗證階梯、型別設計、G1–G6 分步 DoD | 隨開發更新 |
 | [`phase-a-review.md`](planning/phase-a-review.md) | Phase A 完成後的階段回顧 | 歷史紀錄 |
 | [`step18-dogfood.md`](planning/step18-dogfood.md) | M0 真機驗收（step 18）現場紀錄 | 歷史紀錄 |
 
@@ -62,6 +64,7 @@
 | [0006](adr/0006-click-driven-attention-escalation.md) | 點擊驅動的注意力升級：事件種類本身是強訊號 |
 | [0007](adr/0007-local-first-tiered-inference.md) | 本地優先的分層推理階梯與雲端升級時機 |
 | [0008](adr/0008-habit-extraction-scope.md) | **範圍重畫：CoPartner 是操作習慣的萃取，不是執行器** |
+| [0009](adr/0009-game-input-module-scope.md) | GameInput：獨立自用的遊戲輸入模擬模組（不是 CoPartner 的一部分） |
 
 ### `privacy/`
 
